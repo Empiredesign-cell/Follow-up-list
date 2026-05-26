@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Follow Up List & Folders</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel (Wajib untuk menerjemahkan JSX di browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @keyframes tearOff {
+            0% { transform: rotate(0deg) translateY(0) scale(1); opacity: 1; transform-origin: top left; filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)); }
+            20% { transform: rotate(-5deg) translateY(10px) scale(1.05); filter: drop-shadow(0 20px 13px rgb(0 0 0 / 0.1)); }
+            100% { transform: rotate(-35deg) translateY(800px) scale(0.9); opacity: 0; filter: drop-shadow(0 0px 0px rgb(0 0 0 / 0)); }
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .sticky-tear-animation { animation: tearOff 0.8s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; pointer-events: none; z-index: 50; }
+        .pop-in-animation { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        
+        .glass-panel { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07); transition: all 0.3s ease; }
+        .dark .glass-panel { background: rgba(31, 41, 55, 0.4); border: 1px solid rgba(75, 85, 99, 0.6); }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- KONFIGURASI FIREBASE MILIKMU ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAS_LhW8Kgxb9amoDMsHkta-rnKu5RnYZI",
+            authDomain: "follow-up-list.firebaseapp.com",
+            projectId: "follow-up-list",
+            storageBucket: "follow-up-list.firebasestorage.app",
+            messagingSenderId: "1042244485783",
+            appId: "1:1042244485783:web:a75b4e272133965de05fd2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const { useState, useEffect, useRef } = React;
+
+        // --- IKON SVG INLINE ---
+        const Icon = ({ size = 24, className = "", children }) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
+        const X = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></Icon>;
+        const Plus = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+        const Minus = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+        const RotateCcw = (p) => <Icon {...p}><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></Icon>;
+        const Trash2 = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></Icon>;
+        const Archive = (p) => <Icon {...p}><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></Icon>;
+        const ChevronLeft = (p) => <Icon {...p}><polyline points="15 18 9 12 15 6"></polyline></Icon>;
+        const ChevronRight = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6"></polyline></Icon>;
+        const Calendar = (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></Icon>;
+        const Sun = (p) => <Icon {...p}><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></Icon>;
+        const Moon = (p) => <Icon {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></Icon>;
+        const PenTool = (p) => <Icon {...p}><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></Icon>;
+        const GripVertical = (p) => <Icon {...p}><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></Icon>;
+        const Loader = (p) => <Icon className="animate-spin" {...p}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></Icon>;
+        const FolderIcon = (p) => <Icon {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></Icon>;
+        const HomeIcon = (p) => <Icon {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></Icon>;
+
+        // --- HELPERS ---
+        const getTodayKey = () => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+        const formatDateDisplay = (dateStr) => {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        };
+        const resizeImage = (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 150; 
+                        let width = img.width; let height = img.height;
+                        if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
+                        else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/png'));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
+        // --- KOMPONEN STEMPEL (Bisa digeser & ukuran diubah) ---
+        const DraggableSticker = ({ sticker, onMove, onDelete, onResize }) => {
+            const [pos, setPos] = useState({ x: sticker.x, y: sticker.y });
+            const [isDragging, setIsDragging] = useState(false);
+            const dragInfo = useRef({ startX: 0, startY: 0, origX: 0, origY: 0 });
+            const scale = sticker.scale || 1;
+
+            const handlePointerDown = (e) => {
+                e.preventDefault(); 
+                setIsDragging(true);
+                dragInfo.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+            };
+
+            useEffect(() => {
+                const handlePointerMove = (e) => {
+                    if (!isDragging) return;
+                    setPos({ x: dragInfo.current.origX + (e.clientX - dragInfo.current.startX), y: dragInfo.current.origY + (e.clientY - dragInfo.current.startY) });
+                };
+                const handlePointerUp = () => {
+                    if (isDragging) { setIsDragging(false); onMove(sticker.id, pos.x, pos.y); }
+                };
+                if (isDragging) {
+                    window.addEventListener('pointermove', handlePointerMove);
+                    window.addEventListener('pointerup', handlePointerUp);
+                }
+                return () => { window.removeEventListener('pointermove', handlePointerMove); window.removeEventListener('pointerup', handlePointerUp); };
+            }, [isDragging, pos, sticker.id, onMove]);
+
+            return (
+                <div style={{ left: pos.x, top: pos.y, position: 'absolute' }} className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center" onPointerDown={handlePointerDown}>
+                    <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1 bg-white dark:bg-gray-800 p-1.5 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 z-50" onPointerDown={(e) => e.stopPropagation()}>
+                        <button onClick={(e) => { e.stopPropagation(); onResize(sticker.id, Math.max(0.4, scale - 0.2)); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300"><Minus size={16}/></button>
+                        <button onClick={(e) => { e.stopPropagation(); onResize(sticker.id, scale + 0.2); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300"><Plus size={16}/></button>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(sticker.id); }} className="p-1 hover:bg-red-100 text-red-500 rounded-full"><X size={16} /></button>
+                    </div>
+                    <div style={{ transform: `rotate(${sticker.rotation || 0}deg)` }} className="relative flex justify-center items-center">
+                        {sticker.type === 'image' ? (
+                            <img src={sticker.content} style={{ width: `${80 * scale}px`, height: `${80 * scale}px` }} className="object-contain pointer-events-none drop-shadow-md select-none transition-all duration-200" draggable="false" />
+                        ) : (
+                            <span style={{ fontSize: `${48 * scale}px`, lineHeight: 1 }} className="pointer-events-none select-none drop-shadow-md block transition-all duration-200">{sticker.content}</span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- KOMPONEN STICKY NOTE ---
+        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
+            const [isTearing, setIsTearing] = useState(false);
+            const [content, setContent] = useState(initialText);
+            const [title, setTitle] = useState(initialTitle);
+            const noteRef = useRef(null);
+
+            useEffect(() => { setContent(initialText); }, [initialText]);
+            useEffect(() => { setTitle(initialTitle); }, [initialTitle]);
+
+            const handleTear = () => {
+                if (!title && !content) return;
+                setIsTearing(true);
+                onTear({ id, title, content, color: initialColor, tornAt: new Date().toISOString() });
+                setTimeout(() => { setContent(''); setTitle(''); setIsTearing(false); onUpdate(id, '', ''); }, 800);
+            };
+            const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
+            const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
+
+            return (
+                <div className="relative mb-6">
+                    {isTearing && (
+                        <div className={`absolute inset-0 ${initialColor} shadow-md rounded-br-3xl p-4 flex flex-col z-0 opacity-50`}>
+                            <div className="font-bold text-gray-800 mb-2">{title}</div>
+                            <div className="flex-1 border-dashed border-2 border-black/10 rounded"></div>
+                        </div>
+                    )}
+                    <div ref={noteRef} className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''}`}>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
+                        <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-400 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-500 z-20"><X size={14} /></button>
+                        <div className="flex justify-between items-center mb-2 border-b border-black/10 pb-2">
+                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-800 bg-transparent outline-none w-full placeholder-gray-500" placeholder="Judul..."/>
+                            <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-500 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-black/5"><RotateCcw size={16} /></button>
+                        </div>
+                        <textarea value={content} onChange={handleChange} className="flex-1 w-full bg-transparent outline-none resize-none text-gray-700 leading-relaxed hide-scrollbar placeholder-gray-400" placeholder="Tulis sesuatu..."/>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
+        // ==========================================
+        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
+            const todayKey = getTodayKey();
+            const [isDataReady, setIsDataReady] = useState(false);
+            
+            const [tasksHistory, setTasksHistory] = useState({ [todayKey]: [] });
+            const [viewDate, setViewDate] = useState(todayKey);
+            const [stickies, setStickies] = useState([
+                { id: 's1', color: 'bg-yellow-200', title: '', content: '' },
+                { id: 's2', color: 'bg-rose-200', title: '', content: '' }
+            ]);
+            const [archivedStickies, setArchivedStickies] = useState([]);
+            const [customStickersRepo, setCustomStickersRepo] = useState([]);
+            const [placedStickers, setPlacedStickers] = useState([]);
+            
+            const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+            const [newTaskInput, setNewTaskInput] = useState('');
+            const [draggedTaskId, setDraggedTaskId] = useState(null);
+
+            const defaultStickers = [
+                { id: 'd1', type: 'emoji', content: '❤️' }, { id: 'd2', type: 'emoji', content: '👍' },
+                { id: 'd3', type: 'emoji', content: '🔥' }, { id: 'd4', type: 'emoji', content: '✨' },
+                { id: 'd5', type: 'emoji', content: '😂' }, { id: 'd6', type: 'emoji', content: '📌' }, { id: 'd7', type: 'emoji', content: '👀' },
+            ];
+
+            // 1. BACA DATA DARI FOLDER TERTENTU
+            useEffect(() => {
+                const stateRef = doc(db, 'workspace_data', folderId); // Data spesifik per folder
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.tasksHistory) setTasksHistory(JSON.parse(data.tasksHistory));
+                        if (data.stickies) setStickies(JSON.parse(data.stickies));
+                        if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
+                        if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
+                        if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
+                    }
+                    setIsDataReady(true);
+                }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
+                return () => unsubscribe();
+            }, [folderId]);
+
+            // 2. AUTO-SAVE KE FOLDER TERTENTU (Jeda 1 Detik)
+            useEffect(() => {
+                if (!isDataReady) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'workspace_data', folderId);
+                    const payload = {
+                        tasksHistory: JSON.stringify(tasksHistory),
+                        stickies: JSON.stringify(stickies),
+                        archivedStickies: JSON.stringify(archivedStickies),
+                        customStickersRepo: JSON.stringify(customStickersRepo),
+                        placedStickers: JSON.stringify(placedStickers)
+                    };
+                    try { await setDoc(stateRef, payload, { merge: true }); } 
+                    catch (err) { console.error("Gagal menyimpan data:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, isDataReady, folderId]);
+
+            // 3. EFEK MESIN WAKTU
+            useEffect(() => {
+                if (!isDataReady) return; 
+                const checkAndShiftDay = () => {
+                    setTasksHistory(prevHistory => {
+                        const historyKeys = Object.keys(prevHistory).sort();
+                        if (!prevHistory[todayKey]) {
+                            const lastDateKey = historyKeys[historyKeys.length - 1];
+                            let carryOverTasks = [];
+                            if (lastDateKey && prevHistory[lastDateKey]) {
+                                carryOverTasks = prevHistory[lastDateKey]
+                                    .filter(task => task.status !== 'done')
+                                    .map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
+                            }
+                            return { ...prevHistory, [todayKey]: carryOverTasks };
+                        }
+                        return prevHistory;
+                    });
+                    setViewDate(todayKey);
+                };
+                checkAndShiftDay();
+            }, [todayKey, isDataReady]);
+
+            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
+
+            // Fungsi Logika Papan
+            const handleUploadSticker = async (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const resizedBase64 = await resizeImage(file);
+                setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]);
+                e.target.value = ''; 
+            };
+            const spawnSticker = (stickerTemplate) => {
+                setPlacedStickers(prev => [...(prev || []), {
+                    id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content,
+                    x: (window.innerWidth / 2) - 30 + (Math.random() * 40 - 20), y: (window.innerHeight / 2) - 30 + (Math.random() * 40 - 20),
+                    rotation: Math.random() * 20 - 10, scale: 1
+                }]);
+            };
+            const updatePlacedStickerPosition = (id, newX, newY) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, x: newX, y: newY } : s));
+            const updatePlacedStickerScale = (id, newScale) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, scale: newScale } : s));
+            const deletePlacedSticker = (id) => setPlacedStickers(prev => prev.filter(s => s.id !== id));
+            const deleteCustomStickerRepo = (id, e) => { e.stopPropagation(); setCustomStickersRepo(prev => prev.filter(s => s.id !== id)); }
+
+            const currentTasks = tasksHistory[viewDate] || [];
+            const handleDragStart = (e, id) => { setDraggedTaskId(id); setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); };
+            const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
+            const handleDragOver = (e) => e.preventDefault();
+            const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
+            const addTask = (e) => { e.preventDefault(); if (!newTaskInput.trim()) return; setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo' }, ...(prev[viewDate] || [])] })); setNewTaskInput(''); };
+            const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
+            const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
+            const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
+
+            const updateSticky = (id, title, content) => setStickies(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
+            const archiveSticky = (stickyData) => setArchivedStickies(prev => [stickyData, ...(prev || [])]);
+            const deleteSticky = (id) => setStickies(prev => prev.filter(s => s.id !== id));
+            const addSticky = () => {
+                const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
+                setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]);
+            };
+
+            const columns = [
+                { id: 'todo', title: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
+                { id: 'in-progress', title: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
+                { id: 'done', title: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
+            ];
+
+            return (
+                <div className={isDarkMode ? 'dark' : ''}>
+                    <div className="min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans p-4 md:p-8 overflow-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200">
+                        {placedStickers.map(sticker => (<DraggableSticker key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} />))}
+                        
+                        {/* Arsip */}
+                        {isArchiveOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsArchiveOpen(false)}></div>
+                                <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md w-full max-w-4xl max-h-[80vh] rounded-3xl shadow-2xl relative flex flex-col z-10 border border-white dark:border-gray-700 pop-in-animation">
+                                    <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 rounded-t-3xl">
+                                        <h2 className="text-2xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100"><Archive className="text-purple-500 dark:text-purple-400"/> Arsip Kertas</h2>
+                                        <button onClick={() => setIsArchiveOpen(false)} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 hover:text-red-600 dark:hover:text-red-400"><X size={20} /></button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto flex-1 hide-scrollbar">
+                                        {archivedStickies.length === 0 ? <div className="text-center text-gray-500 py-10">Belum ada kertas yang disobek.</div> : 
+                                        (<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            {archivedStickies.map((archive, i) => (
+                                                <div key={i} className={`${archive.color} p-4 rounded-br-[2rem] shadow-md transform rotate-[-2deg] opacity-80 hover:opacity-100`}>
+                                                    <div className="text-xs text-gray-500 mb-2 border-b border-black/10 pb-1">Disobek: {new Date(archive.tornAt).toLocaleDateString('id-ID')}</div>
+                                                    <div className="font-bold mb-2">{archive.title || 'Tanpa Judul'}</div>
+                                                    <div className="whitespace-pre-wrap text-sm">{archive.content || 'Kosong'}</div>
+                                                </div>
+                                            ))}
+                                        </div>)}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-start mb-6 relative z-10">
+                            <div className="w-24 md:w-40 flex justify-start pt-2 pl-2 gap-2">
+                                {/* Tombol Back ke Home */}
+                                <button onClick={onBack} className="flex flex-col items-center group">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Beranda</span>
+                                </button>
+                                {/* Tombol Tema */}
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center group hidden sm:flex">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Sun size={24} className={isDarkMode ? "hidden" : "block text-yellow-500"} /><Moon size={24} className={isDarkMode ? "block text-blue-400" : "hidden"} /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Tema</span>
+                                </button>
+                            </div>
+
+                            <div className="flex flex-col items-center flex-1 pointer-events-none">
+                                <div className="bg-pink-200/80 dark:bg-pink-900/50 backdrop-blur-md px-8 py-3 md:px-12 md:py-4 rounded-3xl shadow-xl border border-pink-300 dark:border-pink-800 transform -rotate-2 hover:rotate-0 transition-transform duration-300 mb-4 pointer-events-auto text-center">
+                                    <h1 className="text-2xl md:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
+                                        {folderName}
+                                    </h1>
+                                </div>
+                            </div>
+                            
+                            <div className="w-24 md:w-40 flex justify-end pt-2 pr-2">
+                                <button onClick={() => setIsArchiveOpen(true)} className="flex flex-col items-center group">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Archive size={24} className="text-purple-600 dark:text-purple-400" /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Arsip</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-24">
+                            <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
+                                <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
+                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                    <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2"><Plus size={20}/> Kertas Baru</button>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-6 glass-panel rounded-[2rem] p-6 shadow-2xl flex flex-col min-h-[500px] z-10">
+                                <div className="flex items-center justify-between mb-6 bg-white/60 dark:bg-gray-800/60 rounded-full py-2 px-4 shadow-sm border border-white dark:border-gray-700">
+                                    <button onClick={handlePrevDay} disabled={Object.keys(tasksHistory).sort().indexOf(viewDate) === 0} className="p-2 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 disabled:opacity-30"><ChevronLeft size={20} /></button>
+                                    <div className="flex items-center gap-2 font-bold text-gray-700 dark:text-gray-200"><Calendar size={18} className="text-purple-500 dark:text-purple-400"/> {viewDate === todayKey ? "Hari Ini" : formatDateDisplay(viewDate)}</div>
+                                    <button onClick={handleNextDay} disabled={Object.keys(tasksHistory).sort().indexOf(viewDate) === Object.keys(tasksHistory).length - 1} className="p-2 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 disabled:opacity-30"><ChevronRight size={20} /></button>
+                                </div>
+                                {viewDate === todayKey ? (
+                                    <form onSubmit={addTask} className="mb-6 relative">
+                                        <input type="text" value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} placeholder="Tambahkan tugas..." className="w-full bg-white/70 dark:bg-gray-800/70 border-2 border-white dark:border-gray-700 focus:border-purple-300 dark:focus:border-purple-500 rounded-full py-3 px-6 pr-12 outline-none shadow-inner text-gray-700 dark:text-gray-200 font-medium"/>
+                                        <button type="submit" className="absolute right-2 top-2 bottom-2 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-full p-2 hover:scale-110 shadow-md"><Plus size={20} /></button>
+                                    </form>
+                                ) : ( <div className="mb-6 p-3 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-xl text-center text-sm font-medium text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800/50">Melihat histori tanggal {formatDateDisplay(viewDate)}.</div> )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+                                    {columns.map(col => (
+                                        <div key={col.id} className="flex flex-col h-full min-h-[250px]" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, col.id)}>
+                                            <div className={`flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3`}>
+                                                <h3 className={`font-bold ${col.textColor} flex items-center gap-2 text-sm`}>{col.title}</h3>
+                                                <span className={`text-xs font-bold bg-white dark:bg-gray-700 px-2 py-1 rounded-full shadow-sm ${col.textColor}`}>{currentTasks.filter(t => t.status === col.id).length}</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
+                                                {currentTasks.filter(t => t.status === col.id).map(task => (
+                                                    <div key={task.id} draggable={viewDate === todayKey} onDragStart={(e) => handleDragStart(e, task.id)} onDragEnd={handleDragEnd} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-grab hover:shadow-md hover:-translate-y-1 transition-all group relative">
+                                                        <div className="flex items-start gap-2">
+                                                            {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
+                                                            <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
+                                                            <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {currentTasks.filter(t => t.status === col.id).length === 0 && <div className="border-2 border-dashed border-gray-300/50 dark:border-gray-600/50 rounded-xl h-16 flex items-center justify-center text-gray-400 text-xs font-medium">Kosong</div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
+                                <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
+                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Dock Stempel */}
+                        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] dark:shadow-[0_20px_50px_rgba(0,_0,_0,_0.5)] border border-white/60 dark:border-gray-600/50 flex items-center gap-3 z-50 transition-all overflow-x-auto max-w-[90vw] hide-scrollbar">
+                            <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1 hidden sm:block">Stempel:</span>
+                            {defaultStickers.map(sticker => (<button key={sticker.id} onClick={() => spawnSticker(sticker)} className="text-3xl hover:scale-125 transition-transform hover:-translate-y-2 focus:outline-none drop-shadow-sm">{sticker.content}</button>))}
+                            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                            {customStickersRepo.map(sticker => (
+                                <div key={sticker.id} className="relative group">
+                                    <button onClick={() => spawnSticker(sticker)} className="w-10 h-10 rounded-lg overflow-hidden hover:scale-125 transition-transform hover:-translate-y-2 border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-500 shadow-sm bg-white dark:bg-gray-700 flex items-center justify-center"><img src={sticker.content} className="w-full h-full object-cover" /></button>
+                                    <button onClick={(e) => deleteCustomStickerRepo(sticker.id, e)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 shadow-md hover:scale-110 z-10"><X size={10} /></button>
+                                </div>
+                            ))}
+                            <label className="cursor-pointer hover:scale-110 transition-transform flex items-center justify-center w-10 h-10 bg-purple-100 dark:bg-purple-900/50 rounded-xl text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700/50 shadow-inner hover:-translate-y-1">
+                                <input type="file" accept="image/*" className="hidden" onChange={handleUploadSticker} /><Plus size={20} />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // ==========================================
+        // KOMPONEN 2: HALAMAN BERANDA (PILIH FOLDER)
+        // ==========================================
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
+            const [folders, setFolders] = useState([]);
+            const [isCreating, setIsCreating] = useState(false);
+            const [newFolderName, setNewFolderName] = useState('');
+
+            useEffect(() => {
+                const q = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const f = [];
+                    snapshot.forEach(doc => f.push({ id: doc.id, ...doc.data() }));
+                    setFolders(f);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            const handleCreateFolder = async (e) => {
+                e.preventDefault();
+                if (!newFolderName.trim()) return;
+                try {
+                    await addDoc(collection(db, 'folders'), {
+                        name: newFolderName,
+                        createdAt: serverTimestamp()
+                    });
+                    setNewFolderName('');
+                    setIsCreating(false);
+                } catch (err) { console.error("Gagal buat folder", err); }
+            };
+
+            const handleDeleteFolder = async (e, id) => {
+                e.stopPropagation(); // Mencegah klik masuk ke folder
+                if (window.confirm("Yakin ingin menghapus folder (Workspace) ini selamanya?")) {
+                    await deleteDoc(doc(db, 'folders', id));
+                    // Opsional: Hapus juga data di workspace_data agar bersih, tp sementara biarkan.
+                }
+            };
+
+            return (
+                <div className={isDarkMode ? 'dark' : ''}>
+                    <div className="min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans p-6 md:p-12 transition-colors duration-500">
+                        
+                        {/* Header Beranda */}
+                        <div className="flex justify-between items-center mb-12">
+                            <h1 className="text-3xl md:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
+                                Workspace Kamu
+                            </h1>
+                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 hover:scale-110 transition-transform">
+                                <Sun size={24} className={isDarkMode ? "hidden" : "block text-yellow-500"} />
+                                <Moon size={24} className={isDarkMode ? "block text-blue-400" : "hidden"} />
+                            </button>
+                        </div>
+
+                        {/* Grid Folder */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                            
+                            {/* Tombol Tambah Folder Baru */}
+                            {!isCreating ? (
+                                <button onClick={() => setIsCreating(true)} className="glass-panel flex flex-col items-center justify-center p-8 rounded-3xl border-2 border-dashed border-gray-400 hover:bg-white/50 dark:hover:bg-gray-800/50 transition-all hover:-translate-y-2 group h-48">
+                                    <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                                        <Plus size={32} className="text-purple-500" />
+                                    </div>
+                                    <span className="font-bold text-gray-600 dark:text-gray-300">Folder Baru</span>
+                                </button>
+                            ) : (
+                                <form onSubmit={handleCreateFolder} className="glass-panel flex flex-col items-center justify-center p-6 rounded-3xl border-2 border-purple-400 bg-white/80 dark:bg-gray-800/80 h-48 pop-in-animation">
+                                    <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Folder..." className="w-full bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-xl outline-none text-center font-bold text-gray-700 dark:text-gray-200 mb-4 border border-gray-200 dark:border-gray-600"/>
+                                    <div className="flex gap-2 w-full">
+                                        <button type="button" onClick={() => setIsCreating(false)} className="flex-1 py-2 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-300 dark:hover:bg-gray-500">Batal</button>
+                                        <button type="submit" className="flex-1 py-2 bg-purple-500 text-white rounded-xl font-bold hover:bg-purple-600">Buat</button>
+                                    </div>
+                                </form>
+                            )}
+
+                            {/* Daftar Folder yang Ada */}
+                            {folders.map(folder => (
+                                <div key={folder.id} onClick={() => onSelectFolder(folder.id, folder.name)} className="glass-panel relative flex flex-col items-center justify-center p-6 rounded-3xl cursor-pointer hover:shadow-xl hover:-translate-y-2 transition-all hover:bg-white/60 dark:hover:bg-gray-800/60 h-48 group">
+                                    <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-3 right-3 p-1.5 bg-red-100 dark:bg-red-900/50 text-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 dark:hover:bg-red-800 hover:scale-110">
+                                        <Trash2 size={16} />
+                                    </button>
+                                    <FolderIcon size={64} className="text-sky-400 mb-4 drop-shadow-md group-hover:scale-110 transition-transform" />
+                                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-center w-full truncate px-2">{folder.name}</h3>
+                                </div>
+                            ))}
+                        </div>
+                        
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // KOMPONEN ROOT: PENGATUR NAVIGASI
+        // ==========================================
+        function App() {
+            const [authReady, setAuthReady] = useState(false);
+            const [currentFolder, setCurrentFolder] = useState(null); // { id, name }
+            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
+
+            // Simpan mode gelap ke local storage
+            useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
+
+            // Otentikasi saat web pertama kali dibuka
+            useEffect(() => {
+                signInAnonymously(auth).catch(e => console.error("Auth failed:", e));
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    if (user) setAuthReady(true);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            if (!authReady) {
+                return (
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="min-h-screen flex flex-col items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 text-purple-600 dark:text-purple-400 font-bold text-xl gap-4">
+                            <Loader size={48} className="animate-spin" />
+                            <p className="animate-pulse">Menghubungkan ke Awan...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Routing Sederhana
+            if (currentFolder) {
+                return (
+                    <BoardScreen 
+                        folderId={currentFolder.id} 
+                        folderName={currentFolder.name} 
+                        onBack={() => setCurrentFolder(null)}
+                        isDarkMode={isDarkMode}
+                        setIsDarkMode={setIsDarkMode}
+                    />
+                );
+            }
+
+            return (
+                <HomeScreen 
+                    onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
+                    isDarkMode={isDarkMode}
+                    setIsDarkMode={setIsDarkMode}
+                />
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
