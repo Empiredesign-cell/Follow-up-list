@@ -255,7 +255,9 @@
             // 2. BACA DATA DARI FIRESTORE
             useEffect(() => {
                 if (!user || !db) return;
-                const stateRef = doc(db, 'users', user.uid, 'appState', 'mainData');
+                
+                // [UBAH BAGIAN INI] Path diganti dari user.uid menjadi folder global
+                const stateRef = doc(db, 'global_workspace', 'my_main_board');
                 
                 const unsubscribe = onSnapshot(stateRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -282,7 +284,8 @@
                 if (!isDataReady || !user || !db || authError) return;
 
                 const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'users', user.uid, 'appState', 'mainData');
+                    // [UBAH BAGIAN INI] Path diganti agar sama persis dengan yang di atas
+                    const stateRef = doc(db, 'global_workspace', 'my_main_board');
                     const payload = {
                         isDarkMode,
                         tasksHistory: JSON.stringify(tasksHistory),
