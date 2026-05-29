@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Follow Up List & Folders</title>
     <link rel="icon" type="image/x-icon" href="icon.png">
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -92,7 +93,7 @@
         const ImageIcon = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></Icon>;
         const EditIcon = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
 
-        // --- KUMPULAN KARAKTER LUCU & ESTETIS ---
+        // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
             'boy': () => (
                 <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl">
@@ -209,7 +210,6 @@
             )
         };
 
-        // --- KUMPULAN WARNA FOLDER ---
         const Gradients = [
             { id: 'yellow', classes: 'from-amber-400 to-orange-500' },
             { id: 'pink', classes: 'from-rose-400 to-pink-500' },
@@ -347,7 +347,7 @@
         // ==========================================
         // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
         // ==========================================
-        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
+        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
             
@@ -360,6 +360,7 @@
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
+            const [customBackground, setCustomBackground] = useState(null); // Local state for board BG
             
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
@@ -381,6 +382,7 @@
                         if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
                         if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
                         if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
+                        if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
                     }
                     setIsDataReady(true);
                 }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
@@ -396,13 +398,14 @@
                         stickies: JSON.stringify(stickies),
                         archivedStickies: JSON.stringify(archivedStickies),
                         customStickersRepo: JSON.stringify(customStickersRepo),
-                        placedStickers: JSON.stringify(placedStickers)
+                        placedStickers: JSON.stringify(placedStickers),
+                        customBackground: customBackground || null
                     };
                     try { await setDoc(stateRef, payload, { merge: true }); } 
                     catch (err) { console.error("Gagal menyimpan data:", err); }
                 }, 1000); 
                 return () => clearTimeout(timer);
-            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, isDataReady, folderId]);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, isDataReady, folderId]);
 
             useEffect(() => {
                 if (!isDataReady) return; 
@@ -640,8 +643,9 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
             const [folders, setFolders] = useState([]);
+            const [homeBackground, setHomeBackground] = useState(null); // Local background untuk home
             
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null); 
@@ -658,6 +662,30 @@
                 });
                 return () => unsubscribe();
             }, []);
+
+            // Firebase Sync untuk Background Home
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().homeBackground !== undefined) {
+                        setHomeBackground(docSnap.data().homeBackground);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                    try { await setDoc(stateRef, { homeBackground: homeBackground || null }, { merge: true }); } 
+                    catch (err) { console.error("Gagal simpan bg home:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [homeBackground]);
 
             const openCreateModal = () => {
                 setEditingId(null);
@@ -709,8 +737,8 @@
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div 
-                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col"
-                        style={customBackground ? { backgroundImage: `url(${customBackground})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' } : {}}
+                        className={`min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col ${homeBackground ? 'bg-cover-fixed' : ''}`}
+                        style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
                     >
                         <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
 
@@ -725,12 +753,12 @@
                                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                                             const file = e.target.files[0]; if(!file) return;
                                             const bg = await resizeImage(file, 1920, 0.6); 
-                                            setCustomBackground(bg);
+                                            setHomeBackground(bg);
                                             e.target.value = '';
                                         }} />
                                     </label>
-                                    {customBackground && (
-                                        <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
+                                    {homeBackground && (
+                                        <button onClick={(e) => { e.stopPropagation(); setHomeBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
                                     )}
                                 </div>
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
@@ -740,7 +768,7 @@
                             </div>
                         </div>
 
-                        {/* --- GRID TATA LETAK FOLDER (RAPI KE BAWAH) --- */}
+                        {/* --- GRID TATA LETAK FOLDER --- */}
                         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pt-24 pb-32">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-28 justify-items-center">
                                 
@@ -760,7 +788,7 @@
                                             
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
                                                 
-                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
+                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-white/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
                                                     <EditIcon size={16} />
                                                 </button>
 
@@ -829,7 +857,6 @@
             const [user, setUser] = useState(null);
             const [currentFolder, setCurrentFolder] = useState(null); 
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
-            const [customBackground, setCustomBackground] = useState(null);
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
@@ -844,30 +871,6 @@
                 });
                 return () => unsubscribe();
             }, []);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const stateRef = doc(db, 'users', user.uid, 'appState', 'mainData');
-                
-                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
-                    }
-                });
-                return () => unsubscribe();
-            }, [user]);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'users', user.uid, 'appState', 'mainData');
-                    const payload = { customBackground: customBackground || null };
-                    try { await setDoc(stateRef, payload, { merge: true }); } 
-                    catch (err) { console.error("Gagal simpan bg:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
-            }, [customBackground, user]);
 
             if (!authReady) {
                 return (
@@ -888,8 +891,6 @@
                         onBack={() => setCurrentFolder(null)}
                         isDarkMode={isDarkMode}
                         setIsDarkMode={setIsDarkMode}
-                        customBackground={customBackground}
-                        setCustomBackground={setCustomBackground}
                     />
                 );
             }
@@ -899,8 +900,6 @@
                     onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
-                    customBackground={customBackground}
-                    setCustomBackground={setCustomBackground}
                 />
             );
         }
