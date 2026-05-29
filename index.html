@@ -94,42 +94,18 @@
 
         // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
-            'boy': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 20 45 Q 20 20 50 15 Q 80 20 80 45 Q 85 60 70 50 Q 50 30 30 50 Q 15 60 20 45 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'red-helmet': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 55 A 35 35 0 0 1 85 55 L 80 65 L 20 65 Z" fill="#ef4444" /><path d="M 40 15 L 50 25 L 60 15 Z" fill="#ffffff" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'tv-head': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><rect x="20" y="20" width="60" height="60" rx="15" fill="#ef4444" /><rect x="30" y="30" width="40" height="40" rx="8" fill="#ffffff" /><circle cx="42" cy="45" r="4" fill="#1f2937" /><circle cx="58" cy="45" r="4" fill="#1f2937" /><path d="M 45 55 Q 50 60 55 55" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><path d="M 85 30 L 85 50" stroke="#1f2937" strokeWidth="4" strokeLinecap="round" /></svg>
-            ),
-            'space': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="50" r="40" fill="#e0e7ff" /><circle cx="50" cy="55" r="30" fill="#818cf8" /><circle cx="50" cy="55" r="25" fill="#ffcdb2" /><circle cx="40" cy="55" r="4" fill="#1f2937" /><circle cx="60" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'goggles': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 18 50 Q 50 10 82 50 L 75 60 Q 50 20 25 60 Z" fill="#4b5563" /><circle cx="35" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="65" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="40" cy="60" r="3" fill="#1f2937" /><circle cx="60" cy="60" r="3" fill="#1f2937" /><path d="M 46 70 Q 50 75 54 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'green-visor': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 50 C 15 20 85 20 85 50 L 80 50 C 80 30 20 30 20 50 Z" fill="#10b981" /><rect x="25" y="25" width="50" height="20" rx="10" fill="#a7f3d0" opacity="0.8"/><circle cx="38" cy="60" r="4" fill="#1f2937" /><circle cx="62" cy="60" r="4" fill="#1f2937" /><path d="M 45 70 Q 50 75 55 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'girl-bun': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><circle cx="50" cy="18" r="16" fill="#1f2937" /><path d="M 20 55 C 20 15 80 15 80 55 C 70 15 30 15 20 55 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 33 51 L 37 54 M 67 51 L 63 54" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>
-            ),
-            'hijab': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 30 C 20 10 80 10 75 30 C 90 70 85 90 50 95 C 15 90 10 70 25 30 Z" fill="#c084fc" /><circle cx="50" cy="45" r="22" fill="#ffcdb2" /><circle cx="43" cy="45" r="3" fill="#1f2937" /><circle cx="57" cy="45" r="3" fill="#1f2937" /><path d="M 47 55 Q 50 58 53 55" stroke="#1f2937" strokeWidth="2.5" strokeLinecap="round" fill="none" /><path d="M 28 45 C 28 65 72 65 72 45 C 72 20 28 20 28 45" fill="none" stroke="#a855f7" strokeWidth="6" /></svg>
-            ),
-            'monster-green': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 50 Q 25 15 50 15 Q 75 15 75 50 Q 80 85 50 85 Q 20 85 25 50 Z" fill="#22c55e" /><path d="M 35 25 L 25 5 L 45 20 Z M 65 25 L 75 5 L 55 20 Z" fill="#bef264" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="14" fill="#ffffff" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="5" fill="#1f2937" /><circle cx="53" cy="42" r="2" fill="#ffffff" /><path d="M 38 65 Q 50 75 62 65" stroke="#15803d" strokeWidth="4" strokeLinecap="round" fill="none" /><path d="M 47 67 L 50 74 L 53 67 Z" fill="#ffffff" /></svg>
-            ),
-            'cat-cute': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 45 L 15 15 L 45 35 Z M 75 45 L 85 15 L 55 35 Z" fill="#fca5a5" stroke="#1f2937" strokeWidth="4" strokeLinejoin="round" /><ellipse cx="50" cy="55" rx="35" ry="28" fill="#ffffff" stroke="#1f2937" strokeWidth="4" /><circle cx="38" cy="50" r="4" fill="#1f2937" /><circle cx="62" cy="50" r="4" fill="#1f2937" /><path d="M 45 60 Q 50 65 55 60" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><line x1="10" y1="50" x2="25" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="10" y1="60" x2="25" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="50" x2="75" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="60" x2="75" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /></svg>
-            ),
-            'robot': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><line x1="50" y1="30" x2="50" y2="10" stroke="#6b7280" strokeWidth="4" /><circle cx="50" cy="10" r="5" fill="#ef4444" /><rect x="25" y="30" width="50" height="45" rx="8" fill="#9ca3af" stroke="#374151" strokeWidth="4" /><rect x="32" y="38" width="36" height="20" rx="4" fill="#10b981" /><circle cx="42" cy="48" r="3" fill="#ffffff" /><circle cx="58" cy="48" r="3" fill="#ffffff" /><line x1="40" y1="65" x2="60" y2="65" stroke="#374151" strokeWidth="3" strokeLinecap="round" /></svg>
-            ),
-            'ninja': () => (
-                <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#1f2937" /><path d="M 25 45 Q 50 55 75 45 L 75 60 Q 50 70 25 60 Z" fill="#ffcdb2" /><circle cx="40" cy="54" r="4" fill="#1f2937" /><circle cx="60" cy="54" r="4" fill="#1f2937" /><path d="M 15 50 Q 5 60 10 70 Q 20 60 20 50 Z" fill="#ef4444" /><path d="M 22 45 Q 50 52 78 45 L 80 52 Q 50 60 20 52 Z" fill="#ef4444" /></svg>
-            )
+            'boy': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 20 45 Q 20 20 50 15 Q 80 20 80 45 Q 85 60 70 50 Q 50 30 30 50 Q 15 60 20 45 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'red-helmet': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 55 A 35 35 0 0 1 85 55 L 80 65 L 20 65 Z" fill="#ef4444" /><path d="M 40 15 L 50 25 L 60 15 Z" fill="#ffffff" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'tv-head': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><rect x="20" y="20" width="60" height="60" rx="15" fill="#ef4444" /><rect x="30" y="30" width="40" height="40" rx="8" fill="#ffffff" /><circle cx="42" cy="45" r="4" fill="#1f2937" /><circle cx="58" cy="45" r="4" fill="#1f2937" /><path d="M 45 55 Q 50 60 55 55" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><path d="M 85 30 L 85 50" stroke="#1f2937" strokeWidth="4" strokeLinecap="round" /></svg>),
+            'space': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="50" r="40" fill="#e0e7ff" /><circle cx="50" cy="55" r="30" fill="#818cf8" /><circle cx="50" cy="55" r="25" fill="#ffcdb2" /><circle cx="40" cy="55" r="4" fill="#1f2937" /><circle cx="60" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'goggles': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 18 50 Q 50 10 82 50 L 75 60 Q 50 20 25 60 Z" fill="#4b5563" /><circle cx="35" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="65" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="40" cy="60" r="3" fill="#1f2937" /><circle cx="60" cy="60" r="3" fill="#1f2937" /><path d="M 46 70 Q 50 75 54 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'green-visor': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 50 C 15 20 85 20 85 50 L 80 50 C 80 30 20 30 20 50 Z" fill="#10b981" /><rect x="25" y="25" width="50" height="20" rx="10" fill="#a7f3d0" opacity="0.8"/><circle cx="38" cy="60" r="4" fill="#1f2937" /><circle cx="62" cy="60" r="4" fill="#1f2937" /><path d="M 45 70 Q 50 75 55 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'girl-bun': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><circle cx="50" cy="18" r="16" fill="#1f2937" /><path d="M 20 55 C 20 15 80 15 80 55 C 70 15 30 15 20 55 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 33 51 L 37 54 M 67 51 L 63 54" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'hijab': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 30 C 20 10 80 10 75 30 C 90 70 85 90 50 95 C 15 90 10 70 25 30 Z" fill="#c084fc" /><circle cx="50" cy="45" r="22" fill="#ffcdb2" /><circle cx="43" cy="45" r="3" fill="#1f2937" /><circle cx="57" cy="45" r="3" fill="#1f2937" /><path d="M 47 55 Q 50 58 53 55" stroke="#1f2937" strokeWidth="2.5" strokeLinecap="round" fill="none" /><path d="M 28 45 C 28 65 72 65 72 45 C 72 20 28 20 28 45" fill="none" stroke="#a855f7" strokeWidth="6" /></svg>),
+            'monster-green': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 50 Q 25 15 50 15 Q 75 15 75 50 Q 80 85 50 85 Q 20 85 25 50 Z" fill="#22c55e" /><path d="M 35 25 L 25 5 L 45 20 Z M 65 25 L 75 5 L 55 20 Z" fill="#bef264" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="14" fill="#ffffff" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="5" fill="#1f2937" /><circle cx="53" cy="42" r="2" fill="#ffffff" /><path d="M 38 65 Q 50 75 62 65" stroke="#15803d" strokeWidth="4" strokeLinecap="round" fill="none" /><path d="M 47 67 L 50 74 L 53 67 Z" fill="#ffffff" /></svg>),
+            'cat-cute': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 45 L 15 15 L 45 35 Z M 75 45 L 85 15 L 55 35 Z" fill="#fca5a5" stroke="#1f2937" strokeWidth="4" strokeLinejoin="round" /><ellipse cx="50" cy="55" rx="35" ry="28" fill="#ffffff" stroke="#1f2937" strokeWidth="4" /><circle cx="38" cy="50" r="4" fill="#1f2937" /><circle cx="62" cy="50" r="4" fill="#1f2937" /><path d="M 45 60 Q 50 65 55 60" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><line x1="10" y1="50" x2="25" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="10" y1="60" x2="25" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="50" x2="75" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="60" x2="75" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /></svg>),
+            'robot': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><line x1="50" y1="30" x2="50" y2="10" stroke="#6b7280" strokeWidth="4" /><circle cx="50" cy="10" r="5" fill="#ef4444" /><rect x="25" y="30" width="50" height="45" rx="8" fill="#9ca3af" stroke="#374151" strokeWidth="4" /><rect x="32" y="38" width="36" height="20" rx="4" fill="#10b981" /><circle cx="42" cy="48" r="3" fill="#ffffff" /><circle cx="58" cy="48" r="3" fill="#ffffff" /><line x1="40" y1="65" x2="60" y2="65" stroke="#374151" strokeWidth="3" strokeLinecap="round" /></svg>),
+            'ninja': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#1f2937" /><path d="M 25 45 Q 50 55 75 45 L 75 60 Q 50 70 25 60 Z" fill="#ffcdb2" /><circle cx="40" cy="54" r="4" fill="#1f2937" /><circle cx="60" cy="54" r="4" fill="#1f2937" /><path d="M 15 50 Q 5 60 10 70 Q 20 60 20 50 Z" fill="#ef4444" /><path d="M 22 45 Q 50 52 78 45 L 80 52 Q 50 60 20 52 Z" fill="#ef4444" /></svg>)
         };
 
         const Gradients = [
@@ -177,13 +153,17 @@
             });
         };
 
-        // --- KOMPONEN STEMPEL (Persentase Resolusi Responsif & Mengambang di tengah koordinat) ---
+        // --- KOMPONEN STEMPEL (Cerdas & Responsif) ---
         const DraggableSticker = ({ sticker, onMove, onDelete, onResize, onFlip }) => {
-            // Jika stiker masih pakai sistem pixel lama (X/Y diatas 100), kita konversi jadi persen
-            const initX = sticker.isPercent ? sticker.x : (sticker.x > 100 ? (sticker.x / window.innerWidth) * 100 : sticker.x);
-            const initY = sticker.isPercent ? sticker.y : (sticker.y > 100 ? (sticker.y / document.documentElement.scrollHeight) * 100 : sticker.y);
-
-            const [pos, setPos] = useState({ x: initX, y: initY });
+            const [pos, setPos] = useState(() => {
+                let x = sticker.x;
+                let y = sticker.y;
+                // Jika dari sistem lama (% untuk Y), kita konversi kasar
+                if (sticker.isPercent && !sticker.isPercentX) y = (sticker.y / 100) * Math.max(1000, document.documentElement.scrollHeight);
+                // Jika dari sistem sangat lama (pixel mati untuk X), amankan ke tengah layar agar tidak hilang
+                if (!sticker.isPercent && !sticker.isPercentX) x = 50;
+                return { x, y };
+            });
             const [isDragging, setIsDragging] = useState(false);
             const dragInfo = useRef({ startX: 0, startY: 0, origX: 0, origY: 0 });
             
@@ -199,17 +179,27 @@
             useEffect(() => {
                 const handlePointerMove = (e) => {
                     if (!isDragging) return;
+                    const container = document.getElementById('sticker-canvas');
+                    if (!container) return;
+                    
                     const dx = e.clientX - dragInfo.current.startX;
                     const dy = e.clientY - dragInfo.current.startY;
                     
-                    // Konversi pergerakan pixel mouse ke persentase layar
-                    const dxPct = (dx / document.documentElement.scrollWidth) * 100;
-                    const dyPct = (dy / document.documentElement.scrollHeight) * 100;
+                    // Hitung persentase pergerakan X berdasarkan container 1280px (max-w-7xl)
+                    const rect = container.getBoundingClientRect();
+                    const dxPct = (dx / rect.width) * 100;
                     
-                    setPos({ x: dragInfo.current.origX + dxPct, y: dragInfo.current.origY + dyPct });
+                    setPos({ 
+                        x: dragInfo.current.origX + dxPct, 
+                        y: dragInfo.current.origY + dy 
+                    });
                 };
                 const handlePointerUp = () => {
-                    if (isDragging) { setIsDragging(false); onMove(sticker.id, pos.x, pos.y); }
+                    if (isDragging) { 
+                        setIsDragging(false); 
+                        // Simpan dengan tanda bahwa ini sistem koordinat baru
+                        onMove(sticker.id, pos.x, pos.y, { isPercentX: true, isPixelY: true }); 
+                    }
                 };
                 if (isDragging) {
                     window.addEventListener('pointermove', handlePointerMove);
@@ -219,8 +209,12 @@
             }, [isDragging, pos, sticker.id, onMove]);
 
             return (
-                <div style={{ left: `${pos.x}%`, top: `${pos.y}%`, position: 'absolute', transform: 'translate(-50%, -50%)' }} className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center" onPointerDown={handlePointerDown}>
-                    <div className="absolute -top-14 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 z-50" onPointerDown={(e) => e.stopPropagation()}>
+                <div 
+                    style={{ left: `${pos.x}%`, top: `${pos.y}px`, position: 'absolute', transform: 'translate(-50%, -50%)' }} 
+                    className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center pointer-events-auto" 
+                    onPointerDown={handlePointerDown}
+                >
+                    <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 z-50" onPointerDown={(e) => e.stopPropagation()}>
                         <input type="range" min="0.3" max="3" step="0.1" value={scale} onChange={(e) => onResize(sticker.id, parseFloat(e.target.value))} className="w-20 md:w-24 outline-none" title="Atur Ukuran"/>
                         <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
                         <button onClick={(e) => { e.stopPropagation(); onFlip(sticker.id, !isFlipped); }} className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-full text-purple-600 dark:text-purple-400 transition-colors" title="Balik Stiker (Mirror)"><FlipIcon size={16}/></button>
@@ -368,17 +362,27 @@
                 e.target.value = ''; 
             };
             
-            // Perbarui spawn sticker agar menggunakan posisi relatif ke layar (%)
             const spawnSticker = (stickerTemplate) => {
+                const container = document.getElementById('sticker-canvas');
+                const rect = container ? container.getBoundingClientRect() : { top: 0 };
+                const scrollY = -rect.top; // Jarak scroll dari atas
+                const viewportCenterY = window.innerHeight / 2;
+
                 setPlacedStickers(prev => [...(prev || []), {
-                    id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content,
-                    x: 50 + (Math.random() * 10 - 5), // Titik tengah layar 50%
-                    y: 50 + (Math.random() * 10 - 5),
-                    isPercent: true, // Beri tanda ini posisi persen
-                    rotation: Math.random() * 20 - 10, scale: 1, flipX: false
+                    id: `placed-${Date.now()}-${Math.random()}`, 
+                    type: stickerTemplate.type, 
+                    content: stickerTemplate.content,
+                    x: 50 + (Math.random() * 10 - 5), // Letakkan di tengah X (50%)
+                    y: scrollY + viewportCenterY + (Math.random() * 40 - 20), // Letakkan di tengah layar Y saat ini
+                    isPercentX: true,
+                    isPixelY: true, // Menandakan sistem koordinat baru
+                    rotation: Math.random() * 20 - 10, 
+                    scale: 1, 
+                    flipX: false
                 }]);
             };
-            const updatePlacedStickerPosition = (id, newX, newY) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, x: newX, y: newY, isPercent: true } : s));
+            
+            const updatePlacedStickerPosition = (id, newX, newY, flags = {}) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, x: newX, y: newY, ...flags } : s));
             const updatePlacedStickerScale = (id, newScale) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, scale: newScale } : s));
             const updatePlacedStickerFlip = (id, newFlip) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, flipX: newFlip } : s));
             const deletePlacedSticker = (id) => setPlacedStickers(prev => prev.filter(s => s.id !== id));
@@ -419,16 +423,20 @@
 
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
-                    {/* Mengubah overflow-hidden menjadi overflow-x-hidden agar bisa di scroll di HP */}
                     <div 
-                        className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans p-4 md:p-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
+                        className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
                         style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
                     >
-                        {placedStickers.map(sticker => (
-                            <DraggableSticker 
-                                key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} onFlip={updatePlacedStickerFlip}
-                            />
-                        ))}
+                        {/* CANVAS UNTUK STIKER RESPONSIVE */}
+                        <div className="absolute inset-0 pointer-events-none z-40 flex justify-center">
+                            <div id="sticker-canvas" className="w-full max-w-7xl h-full relative">
+                                {placedStickers.map(sticker => (
+                                    <DraggableSticker 
+                                        key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} onFlip={updatePlacedStickerFlip}
+                                    />
+                                ))}
+                            </div>
+                        </div>
                         
                         {/* Arsip Editable */}
                         {isArchiveOpen && (
@@ -460,7 +468,7 @@
                             </div>
                         )}
 
-                        <div className="flex justify-between items-start mb-6 relative z-10">
+                        <div className="flex justify-between items-start mb-6 relative z-10 max-w-7xl mx-auto w-full pt-6 px-4">
                             <div className="w-auto flex justify-start pt-2 pl-2 gap-3">
                                 <button onClick={onBack} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
@@ -503,7 +511,7 @@
                             </div>
                         </div>
 
-                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 pb-32">
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
                                     {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
@@ -555,28 +563,14 @@
                             </div>
                         </div>
 
-                        {/* Tampilan Mobile: Sticky Notes ditaruh di bawah agar tidak hilang */}
-                        <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32">
+                        {/* Tampilan Mobile: Sticky Notes */}
+                        <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {stickies.map((sticky) => (
-                                <TearableStickyNote 
-                                key={`mobile-${sticky.id}`}
-                                id={sticky.id}
-                                initialColor={sticky.color}
-                                initialTitle={sticky.title}
-                                initialText={sticky.content}
-                                onUpdate={updateSticky}
-                                onTear={archiveSticky}
-                                onDelete={deleteSticky}
-                                />
+                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
                             ))}
                             </div>
-                            <button 
-                                onClick={addSticky}
-                                className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                            >
-                                <Plus size={20}/> Kertas Baru
-                            </button>
+                            <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={20}/> Kertas Baru</button>
                         </div>
 
                         {/* Dock Stempel */}
@@ -722,7 +716,7 @@
                                             
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
                                                 
-                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-white/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
+                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Edit Workspace">
                                                     <EditIcon size={16} />
                                                 </button>
 
@@ -848,7 +842,6 @@
                         onBack={() => setCurrentFolder(null)}
                         isDarkMode={isDarkMode}
                         setIsDarkMode={setIsDarkMode}
-                        // Board punya state backgroundnya sendiri yang dipanggil di dalamnya
                     />
                 );
             }
