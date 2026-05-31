@@ -274,7 +274,7 @@
         // ==========================================
         // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
         // ==========================================
-        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
+        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
             
@@ -287,6 +287,7 @@
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
+            const [customBackground, setCustomBackground] = useState(null); // State khusus untuk background folder ini
             
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
@@ -308,11 +309,30 @@
                         if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
                         if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
                         if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
+                        if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
                     }
                     setIsDataReady(true);
                 }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
                 return () => unsubscribe();
             }, [folderId]);
+
+            useEffect(() => {
+                if (!isDataReady) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'workspace_data', folderId);
+                    const payload = {
+                        tasksHistory: JSON.stringify(tasksHistory),
+                        stickies: JSON.stringify(stickies),
+                        archivedStickies: JSON.stringify(archivedStickies),
+                        customStickersRepo: JSON.stringify(customStickersRepo),
+                        placedStickers: JSON.stringify(placedStickers),
+                        customBackground: customBackground || null
+                    };
+                    try { await setDoc(stateRef, payload, { merge: true }); } 
+                    catch (err) { console.error("Gagal menyimpan data:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, isDataReady, folderId]);
 
             useEffect(() => {
                 if (!isDataReady) return;
