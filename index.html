@@ -98,6 +98,8 @@
         const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
         const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
         const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
+        const LockIcon = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>;
+        const KeyIcon = (p) => <Icon {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></Icon>;
 
         // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
@@ -145,9 +147,9 @@
             const dueDate = new Date(dueDateStr).getTime();
             const diffTime = dueDate - currentTimestamp;
             
-            if (diffTime < 0) return "text-red-600 border-red-300 bg-red-50 dark:bg-red-900/40 dark:border-red-800/50"; // Terlewat
-            if (diffTime < 24 * 60 * 60 * 1000) return "text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/40 dark:border-amber-800/50"; // Kurang dari 24 jam
-            return "text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 dark:border-emerald-800/50"; // Masih lama
+            if (diffTime < 0) return "text-red-600 border-red-300 bg-red-50 dark:bg-red-900/40 dark:border-red-800/50"; 
+            if (diffTime < 24 * 60 * 60 * 1000) return "text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/40 dark:border-amber-800/50"; 
+            return "text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 dark:border-emerald-800/50"; 
         };
 
         const formatShortDateTime = (dateStr) => {
@@ -236,7 +238,7 @@
             );
         };
 
-        // --- KOMPONEN STICKY NOTE (Dengan Fitur Checklist Cerdas & Text Hitam Terkunci) ---
+        // --- KOMPONEN STICKY NOTE CERDAS (DENGAN CEKLIS) ---
         const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
@@ -256,7 +258,6 @@
             const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
 
-            // Fungsi ini akan mengubah text "- apa saja" menjadi kotak checklist interaktif
             const renderContent = () => {
                 if (!content) return <span className="text-gray-600 font-medium">Ketik "- " untuk membuat ceklis...</span>;
                 
@@ -270,7 +271,7 @@
                     const text = isList ? line.replace(/^\s*(\[x\] |\[ \] |- )/, '') : line;
 
                     const toggleCheck = (e) => {
-                        e.stopPropagation(); // Biar klik ceklis gak buka mode textarea
+                        e.stopPropagation(); 
                         const newLines = [...lines];
                         const leadingSpace = line.match(/^\s*/)[0]; 
                         if (isChecked) {
@@ -315,7 +316,6 @@
                             <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
                         </div>
                         
-                        {/* Area Text - Klik untuk Edit, blur untuk merubah jadi checklist */}
                         <div className="flex-1 w-full relative flex flex-col mt-2">
                             {isEditing ? (
                                 <textarea 
@@ -358,7 +358,7 @@
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
-            const [customBackground, setCustomBackground] = useState(null);
+            const [customBackground, setCustomBackground] = useState(null); 
             
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
@@ -371,7 +371,7 @@
             ];
 
             useEffect(() => {
-                const interval = setInterval(() => setCurrentTime(Date.now()), 60000); // Update jam tiap 1 menit
+                const interval = setInterval(() => setCurrentTime(Date.now()), 60000); 
                 return () => clearInterval(interval);
             }, []);
 
@@ -469,9 +469,16 @@
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
             const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
-            const addTask = (e) => { e.preventDefault(); if (!newTaskInput.trim()) return; setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); setNewTaskInput(''); };
+            
+            const addTask = (e) => { 
+                e.preventDefault(); 
+                if (!newTaskInput.trim()) return; 
+                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
+                setNewTaskInput(''); 
+            };
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
             const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+            
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
@@ -625,7 +632,7 @@
                                                                 <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
                                                                 <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
                                                             </div>
-                                                            {/* Due Date Indicator (Auto update tiap menit) */}
+                                                            {/* Due Date Indicator */}
                                                             <div className="flex items-center justify-between mt-1 pl-6">
                                                                 <div className={`flex items-center gap-1.5 text-xs group/date cursor-pointer relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
                                                                     <ClockIcon size={12} />
@@ -694,15 +701,31 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
             const [folders, setFolders] = useState([]);
-            const [homeBackground, setHomeBackground] = useState(null); 
             
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null); 
             const [newFolderName, setNewFolderName] = useState('');
             const [selectedAvatar, setSelectedAvatar] = useState('boy');
             const [selectedGradient, setSelectedGradient] = useState(Gradients[0]);
+            
+            // --- STATE UNTUK FITUR PIN RAHASIA & ADMIN ---
+            const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('flAdmin') === 'true');
+            const [showAdminLogin, setShowAdminLogin] = useState(false);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [adminError, setAdminError] = useState(false);
+
+            const [folderPin, setFolderPin] = useState('');
+            const [showPinInput, setShowPinInput] = useState(false);
+            const [unlockingFolder, setUnlockingFolder] = useState(null);
+            const [unlockPin, setUnlockPin] = useState('');
+            const [unlockError, setUnlockError] = useState(false);
+
+            // Simpan status admin
+            useEffect(() => {
+                sessionStorage.setItem('flAdmin', isAdmin);
+            }, [isAdmin]);
 
             useEffect(() => {
                 const q = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
@@ -714,34 +737,25 @@
                 return () => unsubscribe();
             }, []);
 
-            useEffect(() => {
-                const authUser = auth.currentUser;
-                if (!authUser) return;
-                const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
-                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().homeBackground !== undefined) {
-                        setHomeBackground(docSnap.data().homeBackground);
-                    }
-                });
-                return () => unsubscribe();
-            }, []);
-
-            useEffect(() => {
-                const authUser = auth.currentUser;
-                if (!authUser) return;
-                const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
-                    try { await setDoc(stateRef, { homeBackground: homeBackground || null }, { merge: true }); } 
-                    catch (err) { console.error("Gagal simpan bg home:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
-            }, [homeBackground]);
+            const handleFolderClick = (folder) => {
+                if (folder.pin && folder.pin.trim() !== '' && !isAdmin) {
+                    // Kalau folder ada PIN nya dan user BUKAN admin, tampilkan modal Buka Gembok
+                    setUnlockingFolder(folder);
+                    setUnlockPin('');
+                    setUnlockError(false);
+                } else {
+                    // Kalau gak ada PIN, atau jika user adalah Admin (bisa bypass PIN), langsung masuk
+                    onSelectFolder(folder.id, folder.name);
+                }
+            };
 
             const openCreateModal = () => {
                 setEditingId(null);
                 setNewFolderName('');
                 setSelectedAvatar('boy');
                 setSelectedGradient(Gradients[0]);
+                setFolderPin('');
+                setShowPinInput(false);
                 setIsModalOpen(true);
             };
 
@@ -752,6 +766,8 @@
                 setSelectedAvatar(folder.avatarId || 'boy');
                 const grad = Gradients.find(g => g.classes === folder.gradient) || Gradients[0];
                 setSelectedGradient(grad);
+                setFolderPin(folder.pin || '');
+                setShowPinInput(!!folder.pin);
                 setIsModalOpen(true);
             };
 
@@ -763,13 +779,15 @@
                         await updateDoc(doc(db, 'folders', editingId), {
                             name: newFolderName,
                             avatarId: selectedAvatar,
-                            gradient: selectedGradient.classes
+                            gradient: selectedGradient.classes,
+                            pin: folderPin
                         });
                     } else {
                         await addDoc(collection(db, 'folders'), {
                             name: newFolderName,
                             avatarId: selectedAvatar,
                             gradient: selectedGradient.classes,
+                            pin: folderPin,
                             createdAt: serverTimestamp()
                         });
                     }
@@ -787,8 +805,8 @@
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div 
-                        className={`min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col ${homeBackground ? 'bg-cover-fixed' : ''}`}
-                        style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
+                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
+                        style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
                     >
                         <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
 
@@ -797,20 +815,30 @@
                                 <span className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-1 rounded-md text-2xl">FL</span> Workspace
                             </h1>
                             <div className="flex gap-3">
-                                <div className="relative group flex items-center">
-                                    <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
-                                        <ImageIcon size={20} className="text-emerald-500" />
-                                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                                            const file = e.target.files[0]; if(!file) return;
-                                            const bg = await resizeImage(file, 1920, 0.6); 
-                                            setHomeBackground(bg);
-                                            e.target.value = '';
-                                        }} />
-                                    </label>
-                                    {homeBackground && (
-                                        <button onClick={(e) => { e.stopPropagation(); setHomeBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
-                                    )}
-                                </div>
+                                
+                                {/* Tombol Admin (Kunci Rahasia) */}
+                                <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
+                                    <KeyIcon size={20} className={isAdmin ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"} />
+                                </button>
+
+                                {/* Background Upload hanya muncul jika Admin */}
+                                {isAdmin && (
+                                    <div className="relative group flex items-center">
+                                        <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
+                                            <ImageIcon size={20} className="text-emerald-500" />
+                                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                                const file = e.target.files[0]; if(!file) return;
+                                                const bg = await resizeImage(file, 1920, 0.6); 
+                                                setCustomBackground(bg);
+                                                e.target.value = '';
+                                            }} />
+                                        </label>
+                                        {customBackground && (
+                                            <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
+                                        )}
+                                    </div>
+                                )}
+                                
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
                                     <Sun size={20} className={isDarkMode ? "hidden" : "block text-yellow-500"} />
                                     <Moon size={20} className={isDarkMode ? "block text-blue-400" : "hidden"} />
@@ -822,29 +850,36 @@
                         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pt-24 pb-32">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-28 justify-items-center">
                                 
-                                <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
-                                    <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
-                                        <Plus size={32} className="text-purple-500" />
-                                    </div>
-                                    <span className="font-bold text-gray-500 dark:text-gray-400">Buat Workspace</span>
-                                </button>
+                                {/* Tombol Create Folder (Hanya untuk Admin) */}
+                                {isAdmin && (
+                                    <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
+                                        <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                                            <Plus size={32} className="text-purple-500" />
+                                        </div>
+                                        <span className="font-bold text-gray-500 dark:text-gray-400">Buat Workspace</span>
+                                    </button>
+                                )}
 
                                 {folders.map(folder => {
                                     const AvatarComp = Avatars[folder.avatarId || 'boy'];
                                     const gradClass = folder.gradient || Gradients[0].classes;
                                     
                                     return (
-                                        <div key={folder.id} onClick={() => onSelectFolder(folder.id, folder.name)} className="relative character-card cursor-pointer group w-56 h-72">
+                                        <div key={folder.id} onClick={() => handleFolderClick(folder)} className="relative character-card cursor-pointer group w-56 h-72">
                                             
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
                                                 
-                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
-                                                    <EditIcon size={16} />
-                                                </button>
-
-                                                <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace">
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                {/* Tombol Edit/Hapus disembunyikan untuk User Biasa */}
+                                                {isAdmin && (
+                                                    <>
+                                                        <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
+                                                            <EditIcon size={16} />
+                                                        </button>
+                                                        <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
 
                                                 <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{folder.name}</h3>
                                                 <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">Workspace Active</p>
@@ -860,11 +895,49 @@
                             </div>
                         </div>
 
-                        {/* MODAL SERBAGUNA (Bisa Create, Bisa Edit) */}
-                        {isModalOpen && (
+                        {/* MODAL AKSES ADMIN (Password) */}
+                        {showAdminLogin && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowAdminLogin(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
+                                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4">
+                                        <KeyIcon size={32} className="text-blue-500" />
+                                    </div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Akses Admin</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan password untuk mengedit dan membuat workspace.</p>
+                                    
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (adminPassword === 'ciptadigi') {
+                                            setIsAdmin(true);
+                                            setShowAdminLogin(false);
+                                            setAdminPassword('');
+                                            setAdminError(false);
+                                        } else {
+                                            setAdminError(true);
+                                            setAdminPassword('');
+                                        }
+                                    }} className="w-full">
+                                        <input autoFocus type="password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }} placeholder="Password..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${adminError ? 'border-red-500' : 'border-transparent focus:border-blue-400'}`}/>
+                                        
+                                        <div className="h-6 mb-4 flex items-center justify-center">
+                                            {adminError && <span className="text-red-500 text-xs font-bold pop-in-animation">Password Salah!</span>}
+                                        </div>
+
+                                        <div className="flex gap-3 w-full">
+                                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-md">Masuk</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL SERBAGUNA (Bisa Create, Bisa Edit) - Hanya diakses oleh Admin */}
+                        {isModalOpen && isAdmin && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
-                                <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center">
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10">
                                     <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-4">
                                         {editingId ? "Edit Workspace" : "Pilih Karaktermu"}
                                     </h2>
@@ -887,10 +960,61 @@
                                     </div>
 
                                     <form onSubmit={handleSaveFolder} className="w-full">
-                                        <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 mb-4 border-2 border-transparent focus:border-purple-400"/>
+                                        {/* Input Nama Folder & Tombol Rahasia Gembok */}
+                                        <div className="relative w-full mb-4">
+                                            <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 pl-6 pr-12 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 border-2 border-transparent focus:border-purple-400"/>
+                                            <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia">
+                                                <LockIcon size={18} />
+                                            </button>
+                                        </div>
+
+                                        {/* Input PIN Rahasia (Hanya Muncul Jika Gembok Diklik / Sudah Di-Set) */}
+                                        {showPinInput && (
+                                            <div className="w-full mb-4 pop-in-animation">
+                                                <input type="password" value={folderPin} onChange={(e) => setFolderPin(e.target.value)} placeholder="PIN Rahasia (Kosongkan jika tidak mau)..." className="w-full bg-purple-50 dark:bg-gray-800 border-2 border-purple-200 dark:border-gray-600 px-6 py-4 rounded-2xl outline-none text-center font-bold text-purple-700 dark:text-purple-300 focus:border-purple-500" />
+                                            </div>
+                                        )}
+
                                         <div className="flex gap-3 w-full">
                                             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
                                             <button type="submit" className="flex-1 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow-md">Simpan</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL MEMASUKKAN PIN SAAT MEMBUKA FOLDER RAHASIA */}
+                        {unlockingFolder && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setUnlockingFolder(null)}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
+                                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4">
+                                        <LockIcon size={32} className="text-red-500" />
+                                    </div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Folder Terkunci</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan PIN untuk membuka <br/><b>{unlockingFolder.name}</b></p>
+                                    
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (unlockPin === unlockingFolder.pin) {
+                                            const target = unlockingFolder;
+                                            setUnlockingFolder(null);
+                                            onSelectFolder(target.id, target.name);
+                                        } else {
+                                            setUnlockError(true);
+                                            setUnlockPin('');
+                                        }
+                                    }} className="w-full">
+                                        <input autoFocus type="password" value={unlockPin} onChange={(e) => { setUnlockPin(e.target.value); setUnlockError(false); }} placeholder="Masukkan PIN..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${unlockError ? 'border-red-500' : 'border-transparent focus:border-red-400'}`}/>
+                                        
+                                        <div className="h-6 mb-4 flex items-center justify-center">
+                                            {unlockError && <span className="text-red-500 text-xs font-bold pop-in-animation">PIN Salah! Silakan coba lagi.</span>}
+                                        </div>
+
+                                        <div className="flex gap-3 w-full">
+                                            <button type="button" onClick={() => setUnlockingFolder(null)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 shadow-md">Buka</button>
                                         </div>
                                     </form>
                                 </div>
@@ -907,10 +1031,10 @@
             const [user, setUser] = useState(null);
             const [currentFolder, setCurrentFolder] = useState(null); 
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
+            const [customBackgroundHome, setCustomBackgroundHome] = useState(null);
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
-            // Auth Logic
             useEffect(() => {
                 signInAnonymously(auth).catch(e => console.error("Auth failed:", e));
                 const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -921,6 +1045,27 @@
                 });
                 return () => unsubscribe();
             }, []);
+
+            useEffect(() => {
+                if (!user || !db) return;
+                const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().customBackgroundHome !== undefined) {
+                        setCustomBackgroundHome(docSnap.data().customBackgroundHome);
+                    }
+                });
+                return () => unsubscribe();
+            }, [user]);
+
+            useEffect(() => {
+                if (!user || !db) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
+                    try { await setDoc(stateRef, { customBackgroundHome: customBackgroundHome || null }, { merge: true }); } 
+                    catch (err) { console.error("Gagal simpan bg:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [customBackgroundHome, user]);
 
             if (!authReady) {
                 return (
@@ -950,6 +1095,8 @@
                     onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
+                    customBackground={customBackgroundHome}
+                    setCustomBackground={setCustomBackgroundHome}
                 />
             );
         }
