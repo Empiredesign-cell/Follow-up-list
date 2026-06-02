@@ -45,6 +45,10 @@
         .bg-cover-fixed { background-size: cover; background-position: center; background-attachment: fixed; background-repeat: no-repeat; }
 
         .character-card:hover .character-img { transform: translateY(-15px) scale(1.05); }
+
+        /* Custom Input Date Picker Overlay (Agar input kalender menutupi tombol dan bisa diklik) */
+        .date-input-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
     </style>
 </head>
 <body>
@@ -91,6 +95,11 @@
         const FlipIcon = (p) => <Icon {...p}><polyline points="9 18 3 12 9 6"></polyline><polyline points="15 6 21 12 15 18"></polyline><line x1="12" y1="4" x2="12" y2="20"></line></Icon>;
         const ImageIcon = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></Icon>;
         const EditIcon = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
+        const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
+        
+        // Ikon Ceklis (Baru ditambahkan agar tidak blank putih)
+        const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
+        const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
 
         // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
@@ -122,7 +131,7 @@
             { id: 'dark', classes: 'from-gray-700 to-gray-900' }
         ];
 
-        // --- HELPERS ---
+        // --- HELPERS TANGGAL & WAKTU ---
         const getTodayKey = () => {
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -131,6 +140,24 @@
             if (!dateStr) return '';
             return new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         };
+        
+        // Logika warna cerdas berdasarkan Jam secara Real-Time
+        const getDueDateColor = (dueDateStr, currentTimestamp) => {
+            if (!dueDateStr) return "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50";
+            const dueDate = new Date(dueDateStr).getTime();
+            const diffTime = dueDate - currentTimestamp;
+            
+            if (diffTime < 0) return "text-red-600 border-red-300 bg-red-50 dark:bg-red-900/40 dark:border-red-800/50"; // Terlewat
+            if (diffTime < 24 * 60 * 60 * 1000) return "text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/40 dark:border-amber-800/50"; // Kurang dari 24 jam
+            return "text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 dark:border-emerald-800/50"; // Masih lama
+        };
+
+        const formatShortDateTime = (dateStr) => {
+            if (!dateStr) return "Batas waktu...";
+            const d = new Date(dateStr);
+            return `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
         const resizeImage = (file, maxSize = 150, quality = 0.8) => {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -153,14 +180,11 @@
             });
         };
 
-        // --- KOMPONEN STEMPEL (Cerdas & Responsif) ---
+        // --- KOMPONEN STEMPEL ---
         const DraggableSticker = ({ sticker, onMove, onDelete, onResize, onFlip }) => {
             const [pos, setPos] = useState(() => {
-                let x = sticker.x;
-                let y = sticker.y;
-                // Jika dari sistem lama (% untuk Y), kita konversi kasar
+                let x = sticker.x; let y = sticker.y;
                 if (sticker.isPercent && !sticker.isPercentX) y = (sticker.y / 100) * Math.max(1000, document.documentElement.scrollHeight);
-                // Jika dari sistem sangat lama (pixel mati untuk X), amankan ke tengah layar agar tidak hilang
                 if (!sticker.isPercent && !sticker.isPercentX) x = 50;
                 return { x, y };
             });
@@ -181,26 +205,13 @@
                     if (!isDragging) return;
                     const container = document.getElementById('sticker-canvas');
                     if (!container) return;
-                    
                     const dx = e.clientX - dragInfo.current.startX;
                     const dy = e.clientY - dragInfo.current.startY;
-                    
-                    // Hitung persentase pergerakan X berdasarkan container 1280px (max-w-7xl)
                     const rect = container.getBoundingClientRect();
                     const dxPct = (dx / rect.width) * 100;
-                    
-                    setPos({ 
-                        x: dragInfo.current.origX + dxPct, 
-                        y: dragInfo.current.origY + dy 
-                    });
+                    setPos({ x: dragInfo.current.origX + dxPct, y: dragInfo.current.origY + dy });
                 };
-                const handlePointerUp = () => {
-                    if (isDragging) { 
-                        setIsDragging(false); 
-                        // Simpan dengan tanda bahwa ini sistem koordinat baru
-                        onMove(sticker.id, pos.x, pos.y, { isPercentX: true, isPixelY: true }); 
-                    }
-                };
+                const handlePointerUp = () => { if (isDragging) { setIsDragging(false); onMove(sticker.id, pos.x, pos.y, { isPercentX: true, isPixelY: true }); } };
                 if (isDragging) {
                     window.addEventListener('pointermove', handlePointerMove);
                     window.addEventListener('pointerup', handlePointerUp);
@@ -209,11 +220,7 @@
             }, [isDragging, pos, sticker.id, onMove]);
 
             return (
-                <div 
-                    style={{ left: `${pos.x}%`, top: `${pos.y}px`, position: 'absolute', transform: 'translate(-50%, -50%)' }} 
-                    className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center pointer-events-auto" 
-                    onPointerDown={handlePointerDown}
-                >
+                <div style={{ left: `${pos.x}%`, top: `${pos.y}px`, position: 'absolute', transform: 'translate(-50%, -50%)' }} className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center pointer-events-auto" onPointerDown={handlePointerDown}>
                     <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 z-50" onPointerDown={(e) => e.stopPropagation()}>
                         <input type="range" min="0.3" max="3" step="0.1" value={scale} onChange={(e) => onResize(sticker.id, parseFloat(e.target.value))} className="w-20 md:w-24 outline-none" title="Atur Ukuran"/>
                         <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
@@ -231,11 +238,12 @@
             );
         };
 
-        // --- KOMPONEN STICKY NOTE ---
+        // --- KOMPONEN STICKY NOTE CERDAS (DENGAN CEKLIS) ---
         const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
             const [title, setTitle] = useState(initialTitle);
+            const [isEditing, setIsEditing] = useState(false);
             const noteRef = useRef(null);
 
             useEffect(() => { setContent(initialText); }, [initialText]);
@@ -249,6 +257,49 @@
             };
             const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
+
+            // Mengubah barisan teks menjadi komponen Ceklis jika diawali dengan tanda "- "
+            const renderContent = () => {
+                if (!content) return <span className="text-gray-400 dark:text-gray-500">Ketik "- " untuk membuat ceklis...</span>;
+                
+                const lines = content.split('\n');
+                return lines.map((line, i) => {
+                    const trimmedLine = line.trim();
+                    const isChecked = trimmedLine.startsWith('[x] ');
+                    const isUnchecked = trimmedLine.startsWith('[ ] ') || trimmedLine.startsWith('- ');
+                    const isList = isChecked || isUnchecked;
+                    
+                    const text = isList ? line.replace(/^\s*(\[x\] |\[ \] |- )/, '') : line;
+
+                    const toggleCheck = (e) => {
+                        e.stopPropagation(); // Mencegah pindah ke mode mengetik saat mengklik tombol kotak ceklis
+                        const newLines = [...lines];
+                        const leadingSpace = line.match(/^\s*/)[0]; // Menjaga spasi awal
+                        if (isChecked) {
+                            newLines[i] = leadingSpace + '- ' + text;
+                        } else {
+                            newLines[i] = leadingSpace + '[x] ' + text;
+                        }
+                        const newContent = newLines.join('\n');
+                        setContent(newContent);
+                        onUpdate(id, title, newContent);
+                    }
+
+                    if (isList) {
+                        return (
+                            <div key={i} className="flex items-start gap-2 mb-1.5 group/list">
+                                <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none">
+                                    {isChecked ? <CheckSquare size={16} className="text-emerald-600 dark:text-emerald-400"/> : <Square size={16} className="text-gray-500 dark:text-gray-400"/>}
+                                </button>
+                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+                                    {text}
+                                </span>
+                            </div>
+                        )
+                    }
+                    return <div key={i} className="mb-1 text-gray-800 dark:text-gray-200 min-h-[1.5rem] break-words whitespace-pre-wrap">{line}</div>
+                });
+            };
 
             return (
                 <div className="relative mb-6">
@@ -265,7 +316,28 @@
                             <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-800 bg-transparent outline-none w-full placeholder-gray-500" placeholder="Judul..."/>
                             <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-500 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-black/5"><RotateCcw size={16} /></button>
                         </div>
-                        <textarea value={content} onChange={handleChange} className="flex-1 w-full bg-transparent outline-none resize-none text-gray-700 leading-relaxed hide-scrollbar placeholder-gray-400" placeholder="Tulis sesuatu..."/>
+                        
+                        {/* Area Teks Cerdas (Ganti ke textarea kalau di-klik) */}
+                        <div className="flex-1 w-full relative flex flex-col mt-2">
+                            {isEditing ? (
+                                <textarea 
+                                    autoFocus
+                                    value={content} 
+                                    onChange={handleChange} 
+                                    onBlur={() => setIsEditing(false)}
+                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-700 dark:text-gray-200 leading-relaxed hide-scrollbar placeholder-gray-400 dark:placeholder-gray-500" 
+                                    placeholder="Ketik '- ' lalu spasi untuk membuat ceklis..."
+                                />
+                            ) : (
+                                <div 
+                                    className="absolute inset-0 w-full h-full overflow-y-auto hide-scrollbar cursor-text text-sm"
+                                    onClick={() => setIsEditing(true)}
+                                >
+                                    {renderContent()}
+                                </div>
+                            )}
+                        </div>
+
                     </div>
                 </div>
             );
@@ -278,6 +350,9 @@
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
             
+            // Mesin Waktu Internal: Mengupdate State (Current Time) Tiap 1 Menit
+            const [currentTime, setCurrentTime] = useState(Date.now());
+            
             const [tasksHistory, setTasksHistory] = useState({ [todayKey]: [] });
             const [viewDate, setViewDate] = useState(todayKey);
             const [stickies, setStickies] = useState([
@@ -287,7 +362,7 @@
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
-            const [customBackground, setCustomBackground] = useState(null); // State khusus untuk background folder ini
+            const [customBackground, setCustomBackground] = useState(null); 
             
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
@@ -298,6 +373,12 @@
                 { id: 'd3', type: 'emoji', content: '🔥' }, { id: 'd4', type: 'emoji', content: '✨' },
                 { id: 'd5', type: 'emoji', content: '😂' }, { id: 'd6', type: 'emoji', content: '📌' }, { id: 'd7', type: 'emoji', content: '👀' },
             ];
+
+            // Menggerakkan mesin waktu setiap 1 menit (Memicu perubahan warna otomatis di layar)
+            useEffect(() => {
+                const interval = setInterval(() => setCurrentTime(Date.now()), 60000);
+                return () => clearInterval(interval);
+            }, []);
 
             useEffect(() => {
                 const stateRef = doc(db, 'workspace_data', folderId); 
@@ -335,23 +416,6 @@
             }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, isDataReady, folderId]);
 
             useEffect(() => {
-                if (!isDataReady) return;
-                const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'workspace_data', folderId);
-                    const payload = {
-                        tasksHistory: JSON.stringify(tasksHistory),
-                        stickies: JSON.stringify(stickies),
-                        archivedStickies: JSON.stringify(archivedStickies),
-                        customStickersRepo: JSON.stringify(customStickersRepo),
-                        placedStickers: JSON.stringify(placedStickers)
-                    };
-                    try { await setDoc(stateRef, payload, { merge: true }); } 
-                    catch (err) { console.error("Gagal menyimpan data:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
-            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, isDataReady, folderId]);
-
-            useEffect(() => {
                 if (!isDataReady) return; 
                 const checkAndShiftDay = () => {
                     setTasksHistory(prevHistory => {
@@ -381,24 +445,20 @@
                 setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]);
                 e.target.value = ''; 
             };
-            
             const spawnSticker = (stickerTemplate) => {
                 const container = document.getElementById('sticker-canvas');
                 const rect = container ? container.getBoundingClientRect() : { top: 0 };
-                const scrollY = -rect.top; // Jarak scroll dari atas
+                const scrollY = -rect.top;
                 const viewportCenterY = window.innerHeight / 2;
 
                 setPlacedStickers(prev => [...(prev || []), {
                     id: `placed-${Date.now()}-${Math.random()}`, 
                     type: stickerTemplate.type, 
                     content: stickerTemplate.content,
-                    x: 50 + (Math.random() * 10 - 5), // Letakkan di tengah X (50%)
-                    y: scrollY + viewportCenterY + (Math.random() * 40 - 20), // Letakkan di tengah layar Y saat ini
-                    isPercentX: true,
-                    isPixelY: true, // Menandakan sistem koordinat baru
-                    rotation: Math.random() * 20 - 10, 
-                    scale: 1, 
-                    flipX: false
+                    x: 50 + (Math.random() * 10 - 5),
+                    y: scrollY + viewportCenterY + (Math.random() * 40 - 20),
+                    isPercentX: true, isPixelY: true,
+                    rotation: Math.random() * 20 - 10, scale: 1, flipX: false
                 }]);
             };
             
@@ -413,8 +473,17 @@
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
             const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
-            const addTask = (e) => { e.preventDefault(); if (!newTaskInput.trim()) return; setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo' }, ...(prev[viewDate] || [])] })); setNewTaskInput(''); };
+            
+            // TASK DENGAN DUE DATE
+            const addTask = (e) => { 
+                e.preventDefault(); 
+                if (!newTaskInput.trim()) return; 
+                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
+                setNewTaskInput(''); 
+            };
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
+            const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+            
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
@@ -462,7 +531,7 @@
                         {isArchiveOpen && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsArchiveOpen(false)}></div>
-                                <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md w-full max-w-4xl max-h-[80vh] rounded-3xl shadow-2xl relative flex flex-col z-10 border border-white dark:border-gray-700 pop-in-animation">
+                                <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md w-full max-w-4xl max-h-[80vh] rounded-3xl shadow-2xl relative flex flex-col z-10 border border-white dark:border-gray-700 pop-in-animation pointer-events-auto">
                                     <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 rounded-t-3xl">
                                         <h2 className="text-2xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100"><Archive className="text-purple-500 dark:text-purple-400"/> Arsip Kertas</h2>
                                         <button onClick={() => setIsArchiveOpen(false)} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 hover:text-red-600 dark:hover:text-red-400"><X size={20} /></button>
@@ -489,7 +558,7 @@
                         )}
 
                         <div className="flex justify-between items-start mb-6 relative z-10 max-w-7xl mx-auto w-full pt-6 px-4">
-                            <div className="w-auto flex justify-start pt-2 pl-2 gap-3">
+                            <div className="w-auto flex justify-start pt-2 pl-2 gap-3 pointer-events-auto">
                                 <button onClick={onBack} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Beranda</span>
@@ -515,15 +584,15 @@
                                 </div>
                             </div>
 
-                            <div className="flex flex-col items-center flex-1 pointer-events-none px-4">
-                                <div className="bg-pink-200/80 dark:bg-pink-900/50 backdrop-blur-md px-6 py-3 md:px-12 md:py-4 rounded-3xl shadow-xl border border-pink-300 dark:border-pink-800 transform -rotate-2 hover:rotate-0 transition-transform duration-300 mb-4 pointer-events-auto text-center w-full max-w-md">
+                            <div className="flex flex-col items-center flex-1 px-4">
+                                <div className="bg-pink-200/80 dark:bg-pink-900/50 backdrop-blur-md px-6 py-3 md:px-12 md:py-4 rounded-3xl shadow-xl border border-pink-300 dark:border-pink-800 transform -rotate-2 hover:rotate-0 transition-transform duration-300 mb-4 text-center w-full max-w-md pointer-events-auto">
                                     <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide truncate" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
                                         {folderName}
                                     </h1>
                                 </div>
                             </div>
                             
-                            <div className="w-auto flex justify-end pt-2 pr-2">
+                            <div className="w-auto flex justify-end pt-2 pr-2 pointer-events-auto">
                                 <button onClick={() => setIsArchiveOpen(true)} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Archive size={24} className="text-purple-600 dark:text-purple-400" /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Arsip</span>
@@ -531,7 +600,7 @@
                             </div>
                         </div>
 
-                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32">
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
                                     {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
@@ -562,10 +631,31 @@
                                             <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
                                                 {currentTasks.filter(t => t.status === col.id).map(task => (
                                                     <div key={task.id} draggable={viewDate === todayKey} onDragStart={(e) => handleDragStart(e, task.id)} onDragEnd={handleDragEnd} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-grab hover:shadow-md hover:-translate-y-1 transition-all group relative">
-                                                        <div className="flex items-start gap-2">
-                                                            {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
-                                                            <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
-                                                            <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
+                                                        <div className="flex flex-col gap-2">
+                                                            <div className="flex items-start gap-2">
+                                                                {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
+                                                                <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
+                                                                <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
+                                                            </div>
+                                                            {/* Bagian Due Date (Warna Pintar Mesin Waktu) */}
+                                                            <div className="flex items-center justify-between mt-1 pl-6">
+                                                                <div className={`flex items-center gap-1.5 text-xs group/date cursor-pointer relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
+                                                                    <ClockIcon size={12} />
+                                                                    <span className="whitespace-nowrap">{formatShortDateTime(task.dueDate)}</span>
+                                                                    <input 
+                                                                        type="datetime-local" 
+                                                                        value={task.dueDate || ''}
+                                                                        onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                                                                        className="date-input-hidden"
+                                                                        title="Set Batas Waktu"
+                                                                    />
+                                                                </div>
+                                                                {task.dueDate && (
+                                                                    <button onClick={() => updateTaskDueDate(task.id, '')} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1" title="Hapus Batas Waktu">
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -584,7 +674,7 @@
                         </div>
 
                         {/* Tampilan Mobile: Sticky Notes */}
-                        <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10">
+                        <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10 pointer-events-auto">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {stickies.map((sticky) => (
                                 <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
@@ -594,7 +684,7 @@
                         </div>
 
                         {/* Dock Stempel */}
-                        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] dark:shadow-[0_20px_50px_rgba(0,_0,_0,_0.5)] border border-white/60 dark:border-gray-600/50 flex items-center gap-3 z-50 transition-all overflow-x-auto max-w-[90vw] hide-scrollbar">
+                        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] dark:shadow-[0_20px_50px_rgba(0,_0,_0,_0.5)] border border-white/60 dark:border-gray-600/50 flex items-center gap-3 z-50 transition-all overflow-x-auto max-w-[90vw] hide-scrollbar pointer-events-auto">
                             <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1 hidden sm:block">Stempel:</span>
                             {defaultStickers.map(sticker => (<button key={sticker.id} onClick={() => spawnSticker(sticker)} className="text-3xl hover:scale-125 transition-transform hover:-translate-y-2 focus:outline-none drop-shadow-sm">{sticker.content}</button>))}
                             <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1"></div>
@@ -616,8 +706,9 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
             const [folders, setFolders] = useState([]);
+            const [homeBackground, setHomeBackground] = useState(null); 
             
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null); 
@@ -634,6 +725,30 @@
                 });
                 return () => unsubscribe();
             }, []);
+
+            // Firebase Sync untuk Background Home
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().homeBackground !== undefined) {
+                        setHomeBackground(docSnap.data().homeBackground);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                    try { await setDoc(stateRef, { homeBackground: homeBackground || null }, { merge: true }); } 
+                    catch (err) { console.error("Gagal simpan bg home:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [homeBackground]);
 
             const openCreateModal = () => {
                 setEditingId(null);
@@ -685,8 +800,8 @@
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div 
-                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
-                        style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
+                        className={`min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col ${homeBackground ? 'bg-cover-fixed' : ''}`}
+                        style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
                     >
                         <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
 
@@ -701,12 +816,12 @@
                                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                                             const file = e.target.files[0]; if(!file) return;
                                             const bg = await resizeImage(file, 1920, 0.6); 
-                                            setCustomBackground(bg);
+                                            setHomeBackground(bg);
                                             e.target.value = '';
                                         }} />
                                     </label>
-                                    {customBackground && (
-                                        <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
+                                    {homeBackground && (
+                                        <button onClick={(e) => { e.stopPropagation(); setHomeBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
                                     )}
                                 </div>
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
@@ -716,7 +831,7 @@
                             </div>
                         </div>
 
-                        {/* --- GRID TATA LETAK FOLDER (RAPI KE BAWAH) --- */}
+                        {/* --- GRID TATA LETAK FOLDER --- */}
                         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pt-24 pb-32">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-28 justify-items-center">
                                 
@@ -736,7 +851,7 @@
                                             
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
                                                 
-                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Edit Workspace">
+                                                <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
                                                     <EditIcon size={16} />
                                                 </button>
 
@@ -805,7 +920,6 @@
             const [user, setUser] = useState(null);
             const [currentFolder, setCurrentFolder] = useState(null); 
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
-            const [customBackgroundHome, setCustomBackgroundHome] = useState(null);
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
@@ -820,28 +934,6 @@
                 });
                 return () => unsubscribe();
             }, []);
-
-            // Firebase Sync untuk Background Global (Khusus Home/Beranda)
-            useEffect(() => {
-                if (!user || !db) return;
-                const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
-                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().customBackgroundHome !== undefined) {
-                        setCustomBackgroundHome(docSnap.data().customBackgroundHome);
-                    }
-                });
-                return () => unsubscribe();
-            }, [user]);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
-                    try { await setDoc(stateRef, { customBackgroundHome: customBackgroundHome || null }, { merge: true }); } 
-                    catch (err) { console.error("Gagal simpan bg:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
-            }, [customBackgroundHome, user]);
 
             if (!authReady) {
                 return (
@@ -871,8 +963,6 @@
                     onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
-                    customBackground={customBackgroundHome}
-                    setCustomBackground={setCustomBackgroundHome}
                 />
             );
         }
