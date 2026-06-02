@@ -46,7 +46,7 @@
 
         .character-card:hover .character-img { transform: translateY(-15px) scale(1.05); }
 
-        /* Custom Input Date Picker Overlay (Agar input kalender menutupi tombol dan bisa diklik) */
+        /* Custom Input Date Picker Overlay */
         .date-input-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
     </style>
@@ -96,8 +96,6 @@
         const ImageIcon = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></Icon>;
         const EditIcon = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
         const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
-        
-        // Ikon Ceklis (Baru ditambahkan agar tidak blank putih)
         const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
         const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
 
@@ -238,7 +236,7 @@
             );
         };
 
-        // --- KOMPONEN STICKY NOTE CERDAS (DENGAN CEKLIS) ---
+        // --- KOMPONEN STICKY NOTE (Dengan Fitur Checklist Cerdas & Text Hitam Terkunci) ---
         const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
@@ -258,9 +256,9 @@
             const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
 
-            // Mengubah barisan teks menjadi komponen Ceklis jika diawali dengan tanda "- "
+            // Fungsi ini akan mengubah text "- apa saja" menjadi kotak checklist interaktif
             const renderContent = () => {
-                if (!content) return <span className="text-gray-400 dark:text-gray-500">Ketik "- " untuk membuat ceklis...</span>;
+                if (!content) return <span className="text-gray-600 font-medium">Ketik "- " untuk membuat ceklis...</span>;
                 
                 const lines = content.split('\n');
                 return lines.map((line, i) => {
@@ -272,9 +270,9 @@
                     const text = isList ? line.replace(/^\s*(\[x\] |\[ \] |- )/, '') : line;
 
                     const toggleCheck = (e) => {
-                        e.stopPropagation(); // Mencegah pindah ke mode mengetik saat mengklik tombol kotak ceklis
+                        e.stopPropagation(); // Biar klik ceklis gak buka mode textarea
                         const newLines = [...lines];
-                        const leadingSpace = line.match(/^\s*/)[0]; // Menjaga spasi awal
+                        const leadingSpace = line.match(/^\s*/)[0]; 
                         if (isChecked) {
                             newLines[i] = leadingSpace + '- ' + text;
                         } else {
@@ -289,15 +287,15 @@
                         return (
                             <div key={i} className="flex items-start gap-2 mb-1.5 group/list">
                                 <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none">
-                                    {isChecked ? <CheckSquare size={16} className="text-emerald-600 dark:text-emerald-400"/> : <Square size={16} className="text-gray-500 dark:text-gray-400"/>}
+                                    {isChecked ? <CheckSquare size={16} className="text-emerald-700"/> : <Square size={16} className="text-gray-700"/>}
                                 </button>
-                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 font-medium'}`}>
                                     {text}
                                 </span>
                             </div>
                         )
                     }
-                    return <div key={i} className="mb-1 text-gray-800 dark:text-gray-200 min-h-[1.5rem] break-words whitespace-pre-wrap">{line}</div>
+                    return <div key={i} className="mb-1 text-gray-900 font-medium min-h-[1.5rem] break-words whitespace-pre-wrap">{line}</div>
                 });
             };
 
@@ -305,19 +303,19 @@
                 <div className="relative mb-6">
                     {isTearing && (
                         <div className={`absolute inset-0 ${initialColor} shadow-md rounded-br-3xl p-4 flex flex-col z-0 opacity-50`}>
-                            <div className="font-bold text-gray-800 mb-2">{title}</div>
-                            <div className="flex-1 border-dashed border-2 border-black/10 rounded"></div>
+                            <div className="font-bold text-gray-900 mb-2">{title}</div>
+                            <div className="flex-1 border-dashed border-2 border-gray-400 rounded"></div>
                         </div>
                     )}
                     <div ref={noteRef} className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''}`}>
                         <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
-                        <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-400 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-500 z-20"><X size={14} /></button>
-                        <div className="flex justify-between items-center mb-2 border-b border-black/10 pb-2">
-                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-800 bg-transparent outline-none w-full placeholder-gray-500" placeholder="Judul..."/>
-                            <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-500 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-black/5"><RotateCcw size={16} /></button>
+                        <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 z-20"><X size={14} /></button>
+                        <div className="flex justify-between items-center mb-2 border-b border-gray-400/30 pb-2">
+                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600" placeholder="Judul..."/>
+                            <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
                         </div>
                         
-                        {/* Area Teks Cerdas (Ganti ke textarea kalau di-klik) */}
+                        {/* Area Text - Klik untuk Edit, blur untuk merubah jadi checklist */}
                         <div className="flex-1 w-full relative flex flex-col mt-2">
                             {isEditing ? (
                                 <textarea 
@@ -325,7 +323,7 @@
                                     value={content} 
                                     onChange={handleChange} 
                                     onBlur={() => setIsEditing(false)}
-                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-700 dark:text-gray-200 leading-relaxed hide-scrollbar placeholder-gray-400 dark:placeholder-gray-500" 
+                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-900 font-medium leading-relaxed hide-scrollbar placeholder-gray-600" 
                                     placeholder="Ketik '- ' lalu spasi untuk membuat ceklis..."
                                 />
                             ) : (
@@ -349,8 +347,6 @@
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
-            
-            // Mesin Waktu Internal: Mengupdate State (Current Time) Tiap 1 Menit
             const [currentTime, setCurrentTime] = useState(Date.now());
             
             const [tasksHistory, setTasksHistory] = useState({ [todayKey]: [] });
@@ -362,7 +358,7 @@
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
-            const [customBackground, setCustomBackground] = useState(null); 
+            const [customBackground, setCustomBackground] = useState(null);
             
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
@@ -374,9 +370,8 @@
                 { id: 'd5', type: 'emoji', content: '😂' }, { id: 'd6', type: 'emoji', content: '📌' }, { id: 'd7', type: 'emoji', content: '👀' },
             ];
 
-            // Menggerakkan mesin waktu setiap 1 menit (Memicu perubahan warna otomatis di layar)
             useEffect(() => {
-                const interval = setInterval(() => setCurrentTime(Date.now()), 60000);
+                const interval = setInterval(() => setCurrentTime(Date.now()), 60000); // Update jam tiap 1 menit
                 return () => clearInterval(interval);
             }, []);
 
@@ -445,6 +440,7 @@
                 setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]);
                 e.target.value = ''; 
             };
+            
             const spawnSticker = (stickerTemplate) => {
                 const container = document.getElementById('sticker-canvas');
                 const rect = container ? container.getBoundingClientRect() : { top: 0 };
@@ -473,17 +469,9 @@
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
             const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
-            
-            // TASK DENGAN DUE DATE
-            const addTask = (e) => { 
-                e.preventDefault(); 
-                if (!newTaskInput.trim()) return; 
-                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
-                setNewTaskInput(''); 
-            };
+            const addTask = (e) => { e.preventDefault(); if (!newTaskInput.trim()) return; setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); setNewTaskInput(''); };
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
             const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
-            
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
@@ -516,7 +504,7 @@
                         className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
                         style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
                     >
-                        {/* CANVAS UNTUK STIKER RESPONSIVE */}
+                        {/* CANVAS STIKER */}
                         <div className="absolute inset-0 pointer-events-none z-40 flex justify-center">
                             <div id="sticker-canvas" className="w-full max-w-7xl h-full relative">
                                 {placedStickers.map(sticker => (
@@ -547,8 +535,8 @@
                                                             <X size={14} />
                                                         </button>
                                                     </div>
-                                                    <input type="text" value={archive.title} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, e.target.value, archive.content)} className="font-bold text-gray-800 dark:text-gray-100 mb-2 bg-transparent outline-none w-full placeholder-gray-500 dark:placeholder-gray-400" placeholder="Judul (Bisa diedit)..." />
-                                                    <textarea value={archive.content} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, archive.title, e.target.value)} className="text-gray-700 dark:text-gray-200 whitespace-pre-wrap text-sm bg-transparent outline-none resize-none flex-1 hide-scrollbar placeholder-gray-400 dark:placeholder-gray-500" placeholder="Isi catatan (Bisa diedit)..." />
+                                                    <input type="text" value={archive.title} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, e.target.value, archive.content)} className="font-bold text-gray-900 mb-2 bg-transparent outline-none w-full placeholder-gray-600" placeholder="Judul (Bisa diedit)..." />
+                                                    <textarea value={archive.content} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, archive.title, e.target.value)} className="text-gray-900 whitespace-pre-wrap text-sm bg-transparent outline-none resize-none flex-1 hide-scrollbar placeholder-gray-600" placeholder="Isi catatan (Bisa diedit)..." />
                                                 </div>
                                             ))}
                                         </div>)}
@@ -637,7 +625,7 @@
                                                                 <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
                                                                 <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
                                                             </div>
-                                                            {/* Bagian Due Date (Warna Pintar Mesin Waktu) */}
+                                                            {/* Due Date Indicator (Auto update tiap menit) */}
                                                             <div className="flex items-center justify-between mt-1 pl-6">
                                                                 <div className={`flex items-center gap-1.5 text-xs group/date cursor-pointer relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
                                                                     <ClockIcon size={12} />
@@ -726,7 +714,6 @@
                 return () => unsubscribe();
             }, []);
 
-            // Firebase Sync untuk Background Home
             useEffect(() => {
                 const authUser = auth.currentUser;
                 if (!authUser) return;
