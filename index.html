@@ -141,7 +141,6 @@
             return new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         };
         
-        // Logika warna cerdas berdasarkan Jam secara Real-Time
         const getDueDateColor = (dueDateStr, currentTimestamp) => {
             if (!dueDateStr) return "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50";
             const dueDate = new Date(dueDateStr).getTime();
@@ -238,7 +237,7 @@
             );
         };
 
-        // --- KOMPONEN STICKY NOTE CERDAS (DENGAN CEKLIS) ---
+        // --- KOMPONEN STICKY NOTE (DENGAN CEKLIS) ---
         const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
@@ -360,9 +359,22 @@
             const [placedStickers, setPlacedStickers] = useState([]);
             const [customBackground, setCustomBackground] = useState(null); 
             
+            // --- STATE UNTUK EDIT JUDUL KOLOM KANBAN ---
+            const [columnTitles, setColumnTitles] = useState({
+                'todo': 'To Do',
+                'in-progress': 'In Progress',
+                'done': 'Done'
+            });
+            const [editingColumn, setEditingColumn] = useState(null);
+            const [tempColumnTitle, setTempColumnTitle] = useState('');
+
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
             const [draggedTaskId, setDraggedTaskId] = useState(null);
+
+            // --- STATE UNTUK EDIT ISI TUGAS ---
+            const [editingTaskId, setEditingTaskId] = useState(null);
+            const [tempTaskContent, setTempTaskContent] = useState('');
 
             const defaultStickers = [
                 { id: 'd1', type: 'emoji', content: '❤️' }, { id: 'd2', type: 'emoji', content: '👍' },
@@ -386,6 +398,7 @@
                         if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
                         if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
                         if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
+                        if (data.columnTitles) setColumnTitles(JSON.parse(data.columnTitles)); // Load nama kolom
                     }
                     setIsDataReady(true);
                 }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
@@ -402,13 +415,14 @@
                         archivedStickies: JSON.stringify(archivedStickies),
                         customStickersRepo: JSON.stringify(customStickersRepo),
                         placedStickers: JSON.stringify(placedStickers),
+                        columnTitles: JSON.stringify(columnTitles), // Save nama kolom
                         customBackground: customBackground || null
                     };
                     try { await setDoc(stateRef, payload, { merge: true }); } 
                     catch (err) { console.error("Gagal menyimpan data:", err); }
                 }, 1000); 
                 return () => clearTimeout(timer);
-            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, isDataReady, folderId]);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, columnTitles, isDataReady, folderId]);
 
             useEffect(() => {
                 if (!isDataReady) return; 
@@ -432,7 +446,7 @@
                 checkAndShiftDay();
             }, [todayKey, isDataReady]);
 
-            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
+            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} className="animate-spin" /><p className="animate-pulse">Membuka Folder...</p></div>);
 
             const handleUploadSticker = async (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -479,6 +493,16 @@
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
             const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
             
+            const saveTaskEdit = (id) => {
+                setTasksHistory(prev => ({
+                    ...prev,
+                    [viewDate]: prev[viewDate].map(t =>
+                        t.id === id ? { ...t, content: tempTaskContent || t.content } : t
+                    )
+                }));
+                setEditingTaskId(null);
+            };
+
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
@@ -500,9 +524,9 @@
             };
 
             const columns = [
-                { id: 'todo', title: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
-                { id: 'in-progress', title: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
-                { id: 'done', title: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
+                { id: 'todo', defaultTitle: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
+                { id: 'in-progress', defaultTitle: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
+                { id: 'done', defaultTitle: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
             ];
 
             return (
@@ -619,8 +643,39 @@
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
                                     {columns.map(col => (
                                         <div key={col.id} className="flex flex-col h-full min-h-[250px]" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, col.id)}>
-                                            <div className={`flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3`}>
-                                                <h3 className={`font-bold ${col.textColor} flex items-center gap-2 text-sm`}>{col.title}</h3>
+                                            <div className={`group flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3`}>
+                                                <h3 className={`font-bold ${col.textColor} flex items-center text-sm`}>
+                                                    {editingColumn === col.id ? (
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            value={tempColumnTitle}
+                                                            onChange={(e) => setTempColumnTitle(e.target.value)}
+                                                            onBlur={() => {
+                                                                setColumnTitles(prev => ({ ...prev, [col.id]: tempColumnTitle || col.defaultTitle }));
+                                                                setEditingColumn(null);
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    setColumnTitles(prev => ({ ...prev, [col.id]: tempColumnTitle || col.defaultTitle }));
+                                                                    setEditingColumn(null);
+                                                                }
+                                                            }}
+                                                            className="bg-transparent border-b-2 border-current outline-none w-24 px-1"
+                                                        />
+                                                    ) : (
+                                                        <>
+                                                            {columnTitles[col.id] || col.defaultTitle}
+                                                            <button 
+                                                                onClick={() => { setEditingColumn(col.id); setTempColumnTitle(columnTitles[col.id] || col.defaultTitle); }}
+                                                                className="opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 ml-2"
+                                                                title="Edit Nama Kolom"
+                                                            >
+                                                                <EditIcon size={14} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </h3>
                                                 <span className={`text-xs font-bold bg-white dark:bg-gray-700 px-2 py-1 rounded-full shadow-sm ${col.textColor}`}>{currentTasks.filter(t => t.status === col.id).length}</span>
                                             </div>
                                             <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
@@ -629,10 +684,32 @@
                                                         <div className="flex flex-col gap-2">
                                                             <div className="flex items-start gap-2">
                                                                 {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
-                                                                <p className={`flex-1 text-sm font-medium ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
-                                                                <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"><Trash2 size={14} /></button>
+                                                                
+                                                                {editingTaskId === task.id ? (
+                                                                    <textarea 
+                                                                        autoFocus
+                                                                        value={tempTaskContent}
+                                                                        onChange={(e) => setTempTaskContent(e.target.value)}
+                                                                        onBlur={() => saveTaskEdit(task.id)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                                                e.preventDefault();
+                                                                                saveTaskEdit(task.id);
+                                                                            }
+                                                                        }}
+                                                                        className="flex-1 text-sm font-medium bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-purple-300 dark:border-purple-500 rounded p-1 outline-none resize-none"
+                                                                        rows="2"
+                                                                    />
+                                                                ) : (
+                                                                    <p className={`flex-1 text-sm font-medium whitespace-pre-wrap ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
+                                                                )}
+
+                                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
+                                                                    <button onClick={() => { setEditingTaskId(task.id); setTempTaskContent(task.content); }} className="text-gray-300 hover:text-blue-500 transition-colors" title="Edit Tugas"><EditIcon size={14} /></button>
+                                                                    <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Hapus Tugas"><Trash2 size={14} /></button>
+                                                                </div>
                                                             </div>
-                                                            {/* Due Date Indicator */}
+                                                            {/* Due Date Indicator (Auto update tiap menit) */}
                                                             <div className="flex items-center justify-between mt-1 pl-6">
                                                                 <div className={`flex items-center gap-1.5 text-xs group/date cursor-pointer relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
                                                                     <ClockIcon size={12} />
@@ -710,7 +787,6 @@
             const [selectedAvatar, setSelectedAvatar] = useState('boy');
             const [selectedGradient, setSelectedGradient] = useState(Gradients[0]);
             
-            // --- STATE UNTUK FITUR PIN RAHASIA & ADMIN ---
             const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('flAdmin') === 'true');
             const [showAdminLogin, setShowAdminLogin] = useState(false);
             const [adminPassword, setAdminPassword] = useState('');
@@ -722,7 +798,6 @@
             const [unlockPin, setUnlockPin] = useState('');
             const [unlockError, setUnlockError] = useState(false);
 
-            // Simpan status admin
             useEffect(() => {
                 sessionStorage.setItem('flAdmin', isAdmin);
             }, [isAdmin]);
@@ -739,12 +814,10 @@
 
             const handleFolderClick = (folder) => {
                 if (folder.pin && folder.pin.trim() !== '' && !isAdmin) {
-                    // Kalau folder ada PIN nya dan user BUKAN admin, tampilkan modal Buka Gembok
                     setUnlockingFolder(folder);
                     setUnlockPin('');
                     setUnlockError(false);
                 } else {
-                    // Kalau gak ada PIN, atau jika user adalah Admin (bisa bypass PIN), langsung masuk
                     onSelectFolder(folder.id, folder.name);
                 }
             };
@@ -816,12 +889,10 @@
                             </h1>
                             <div className="flex gap-3">
                                 
-                                {/* Tombol Admin (Kunci Rahasia) */}
                                 <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
                                     <KeyIcon size={20} className={isAdmin ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"} />
                                 </button>
 
-                                {/* Background Upload hanya muncul jika Admin */}
                                 {isAdmin && (
                                     <div className="relative group flex items-center">
                                         <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
@@ -846,11 +917,9 @@
                             </div>
                         </div>
 
-                        {/* --- GRID TATA LETAK FOLDER --- */}
                         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pt-24 pb-32">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-28 justify-items-center">
                                 
-                                {/* Tombol Create Folder (Hanya untuk Admin) */}
                                 {isAdmin && (
                                     <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
                                         <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
@@ -869,7 +938,6 @@
                                             
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
                                                 
-                                                {/* Tombol Edit/Hapus disembunyikan untuk User Biasa */}
                                                 {isAdmin && (
                                                     <>
                                                         <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
@@ -895,7 +963,6 @@
                             </div>
                         </div>
 
-                        {/* MODAL AKSES ADMIN (Password) */}
                         {showAdminLogin && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowAdminLogin(false)}></div>
@@ -933,7 +1000,6 @@
                             </div>
                         )}
 
-                        {/* MODAL SERBAGUNA (Bisa Create, Bisa Edit) - Hanya diakses oleh Admin */}
                         {isModalOpen && isAdmin && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
@@ -960,7 +1026,6 @@
                                     </div>
 
                                     <form onSubmit={handleSaveFolder} className="w-full">
-                                        {/* Input Nama Folder & Tombol Rahasia Gembok */}
                                         <div className="relative w-full mb-4">
                                             <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 pl-6 pr-12 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 border-2 border-transparent focus:border-purple-400"/>
                                             <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia">
@@ -968,7 +1033,6 @@
                                             </button>
                                         </div>
 
-                                        {/* Input PIN Rahasia (Hanya Muncul Jika Gembok Diklik / Sudah Di-Set) */}
                                         {showPinInput && (
                                             <div className="w-full mb-4 pop-in-animation">
                                                 <input type="password" value={folderPin} onChange={(e) => setFolderPin(e.target.value)} placeholder="PIN Rahasia (Kosongkan jika tidak mau)..." className="w-full bg-purple-50 dark:bg-gray-800 border-2 border-purple-200 dark:border-gray-600 px-6 py-4 rounded-2xl outline-none text-center font-bold text-purple-700 dark:text-purple-300 focus:border-purple-500" />
@@ -984,7 +1048,6 @@
                             </div>
                         )}
 
-                        {/* MODAL MEMASUKKAN PIN SAAT MEMBUKA FOLDER RAHASIA */}
                         {unlockingFolder && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setUnlockingFolder(null)}></div>
