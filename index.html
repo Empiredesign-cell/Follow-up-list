@@ -5,17 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Follow Up List & Folders</title>
     <link rel="icon" type="image/x-icon" href="icon.png">
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
     </script>
 
-    <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
@@ -103,7 +100,7 @@
         const LockIcon = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>;
         const KeyIcon = (p) => <Icon {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></Icon>;
         const PencilIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></Icon>;
-        const SendIcon = (p) => <Icon {...p}><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></Icon>; // Ikon Bis Surat
+        const SendIcon = (p) => <Icon {...p}><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></Icon>;
 
         // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
@@ -243,7 +240,7 @@
         };
 
         // --- KOMPONEN STICKY NOTE CERDAS ---
-        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete, isAdmin }) => {
+        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
             const [title, setTitle] = useState(initialTitle);
@@ -263,8 +260,7 @@
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
 
             const handleDragStart = (e) => {
-                if (!isAdmin) return;
-                // Simpan data sticky note untuk fitur Mailbox
+                // Semua orang bisa nge-drag
                 e.dataTransfer.setData('application/json', JSON.stringify({
                     type: 'sticky',
                     id: id,
@@ -321,9 +317,9 @@
                     )}
                     <div 
                         ref={noteRef} 
-                        draggable={isAdmin && !isEditing} // Bisa ditarik ke Mailbox jika Admin
+                        draggable={!isEditing} 
                         onDragStart={handleDragStart}
-                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${isAdmin && !isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${!isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
                         <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
                         <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 z-20"><X size={14} /></button>
@@ -362,7 +358,6 @@
         // ==========================================
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
-            const isAdmin = sessionStorage.getItem('flAdmin') === 'true'; // Cek Status Admin
             const [isDataReady, setIsDataReady] = useState(false);
             const [currentTime, setCurrentTime] = useState(Date.now());
             
@@ -477,9 +472,8 @@
                 return () => unsubscribe();
             }, [folderId]);
 
-            // FETCH LIST FOLDER (Untuk Kotak Surat)
+            // FETCH LIST FOLDER (Untuk Kotak Surat - Semua Bisa Pakai)
             useEffect(() => {
-                if (!isAdmin) return;
                 const q = query(collection(db, 'folders'));
                 const unsub = onSnapshot(q, (snap) => {
                     const f = [];
@@ -489,7 +483,7 @@
                     setAvailableFolders(f);
                 });
                 return () => unsub();
-            }, [isAdmin, folderId]);
+            }, [folderId]);
 
             useEffect(() => {
                 if (!isDataReady) return;
@@ -776,7 +770,7 @@
                         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
+                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
                                     <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2"><Plus size={20}/> Kertas Baru</button>
                                 </div>
                             </div>
@@ -812,7 +806,7 @@
                                             </div>
                                             <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
                                                 {currentTasks.filter(t => t.status === col.id).map(task => (
-                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative cursor-grab active:cursor-grabbing`}>
                                                         <div className="flex flex-col gap-2">
                                                             <div className="flex items-start gap-2">
                                                                 {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
@@ -827,21 +821,26 @@
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center justify-between mt-1 pl-6">
-                                                                <div className={`flex items-center gap-1.5 text-xs group/date relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
+                                                                {/* Due Date Wrapper yang kebal Drag */}
+                                                                <label 
+                                                                    onMouseDown={(e) => e.stopPropagation()} 
+                                                                    onTouchStart={(e) => e.stopPropagation()} 
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                                                    className={`flex items-center gap-1.5 text-xs group/date relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm cursor-pointer ${getDueDateColor(task.dueDate, currentTime)}`}
+                                                                >
                                                                     <ClockIcon size={12} />
                                                                     <span className="whitespace-nowrap">{formatShortDateTime(task.dueDate)}</span>
                                                                     <input 
                                                                         type="datetime-local" 
                                                                         value={task.dueDate || ''} 
                                                                         onChange={(e) => updateTaskDueDate(task.id, e.target.value)} 
-                                                                        onMouseDown={(e) => e.stopPropagation()} 
-                                                                        onClick={(e) => e.stopPropagation()}
                                                                         className="date-input-hidden" 
                                                                         title="Set Batas Waktu" 
                                                                     />
-                                                                </div>
+                                                                </label>
                                                                 {task.dueDate && (
-                                                                    <button onClick={() => updateTaskDueDate(task.id, '')} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1" title="Hapus Batas Waktu"><X size={14} /></button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateTaskDueDate(task.id, ''); }} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1 z-20 ml-1" title="Hapus Batas Waktu"><X size={14} /></button>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -856,7 +855,7 @@
 
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
+                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
                                 </div>
                             </div>
                         </div>
@@ -865,7 +864,7 @@
                         <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10 pointer-events-auto">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {stickies.map((sticky) => (
-                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />
+                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
                             ))}
                             </div>
                             <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={20}/> Kertas Baru</button>
@@ -887,27 +886,25 @@
                             </label>
                         </div>
 
-                        {/* KOTAK SURAT (MAILBOX) LINTAS DIVISI - HANYA ADMIN */}
-                        {isAdmin && (
-                            <div 
-                                className={`fixed bottom-8 left-8 z-50 transition-all duration-300 ${isMailboxHovered ? 'mailbox-hover' : 'hover:scale-110'}`}
-                                onDragOver={(e) => { e.preventDefault(); setIsMailboxHovered(true); }}
-                                onDragLeave={() => setIsMailboxHovered(false)}
-                                onDrop={handleMailboxDrop}
-                            >
-                                <div className="relative group flex flex-col items-center">
-                                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shadow-xl border-4 transition-colors ${isMailboxHovered ? 'bg-yellow-400 border-yellow-200 text-yellow-900' : 'bg-gradient-to-br from-blue-400 to-indigo-600 border-white dark:border-gray-700 text-white'}`}>
-                                        <SendIcon size={28} />
-                                    </div>
-                                    <span className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition-opacity pointer-events-none drop-shadow-md">
-                                        Seret tugas kesini!
-                                    </span>
+                        {/* KOTAK SURAT (MAILBOX) LINTAS DIVISI - BISA DIPAKAI SEMUA ORANG */}
+                        <div 
+                            className={`fixed bottom-8 left-8 z-50 transition-all duration-300 ${isMailboxHovered ? 'mailbox-hover' : 'hover:scale-110'}`}
+                            onDragOver={(e) => { e.preventDefault(); setIsMailboxHovered(true); }}
+                            onDragLeave={() => setIsMailboxHovered(false)}
+                            onDrop={handleMailboxDrop}
+                        >
+                            <div className="relative group flex flex-col items-center">
+                                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shadow-xl border-4 transition-colors ${isMailboxHovered ? 'bg-yellow-400 border-yellow-200 text-yellow-900' : 'bg-gradient-to-br from-blue-400 to-indigo-600 border-white dark:border-gray-700 text-white'}`}>
+                                    <SendIcon size={28} />
                                 </div>
+                                <span className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition-opacity pointer-events-none drop-shadow-md">
+                                    Seret tugas kesini!
+                                </span>
                             </div>
-                        )}
+                        </div>
 
                         {/* MODAL PILIH DIVISI TUJUAN KOTAK SURAT */}
-                        {isMailboxModalOpen && isAdmin && (
+                        {isMailboxModalOpen && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setIsMailboxModalOpen(false); setMailboxTargetItem(null); }}></div>
                                 <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10 border-2 border-indigo-200 dark:border-indigo-900">
