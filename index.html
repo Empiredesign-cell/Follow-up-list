@@ -46,9 +46,11 @@
 
         .character-card:hover .character-img { transform: translateY(-15px) scale(1.05); }
 
-        /* Custom Input Date Picker Overlay */
-        .date-input-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        /* Perbaikan CSS Input Date Picker */
+        .date-input-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
         .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
+
+        .mailbox-hover { transform: scale(1.2) rotate(-5deg); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
     </style>
 </head>
 <body>
@@ -57,7 +59,7 @@
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- KONFIGURASI FIREBASE ---
         const firebaseConfig = {
@@ -100,6 +102,8 @@
         const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
         const LockIcon = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>;
         const KeyIcon = (p) => <Icon {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></Icon>;
+        const PencilIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></Icon>;
+        const SendIcon = (p) => <Icon {...p}><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></Icon>; // Ikon Bis Surat
 
         // --- CUSTOM AVATAR SVGs ---
         const Avatars = {
@@ -141,6 +145,7 @@
             return new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         };
         
+        // Logika warna cerdas berdasarkan Jam secara Real-Time
         const getDueDateColor = (dueDateStr, currentTimestamp) => {
             if (!dueDateStr) return "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50";
             const dueDate = new Date(dueDateStr).getTime();
@@ -237,8 +242,8 @@
             );
         };
 
-        // --- KOMPONEN STICKY NOTE (DENGAN CEKLIS) ---
-        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
+        // --- KOMPONEN STICKY NOTE CERDAS ---
+        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete, isAdmin }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
             const [title, setTitle] = useState(initialTitle);
@@ -257,6 +262,18 @@
             const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
 
+            const handleDragStart = (e) => {
+                if (!isAdmin) return;
+                // Simpan data sticky note untuk fitur Mailbox
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'sticky',
+                    id: id,
+                    title: title,
+                    content: content,
+                    color: initialColor
+                }));
+            };
+
             const renderContent = () => {
                 if (!content) return <span className="text-gray-600 font-medium">Ketik "- " untuk membuat ceklis...</span>;
                 
@@ -273,11 +290,8 @@
                         e.stopPropagation(); 
                         const newLines = [...lines];
                         const leadingSpace = line.match(/^\s*/)[0]; 
-                        if (isChecked) {
-                            newLines[i] = leadingSpace + '- ' + text;
-                        } else {
-                            newLines[i] = leadingSpace + '[x] ' + text;
-                        }
+                        if (isChecked) { newLines[i] = leadingSpace + '- ' + text; } 
+                        else { newLines[i] = leadingSpace + '[x] ' + text; }
                         const newContent = newLines.join('\n');
                         setContent(newContent);
                         onUpdate(id, title, newContent);
@@ -289,9 +303,7 @@
                                 <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none">
                                     {isChecked ? <CheckSquare size={16} className="text-emerald-700"/> : <Square size={16} className="text-gray-700"/>}
                                 </button>
-                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 font-medium'}`}>
-                                    {text}
-                                </span>
+                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 font-medium'}`}>{text}</span>
                             </div>
                         )
                     }
@@ -307,11 +319,16 @@
                             <div className="flex-1 border-dashed border-2 border-gray-400 rounded"></div>
                         </div>
                     )}
-                    <div ref={noteRef} className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''}`}>
+                    <div 
+                        ref={noteRef} 
+                        draggable={isAdmin && !isEditing} // Bisa ditarik ke Mailbox jika Admin
+                        onDragStart={handleDragStart}
+                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${isAdmin && !isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    >
                         <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
                         <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 z-20"><X size={14} /></button>
                         <div className="flex justify-between items-center mb-2 border-b border-gray-400/30 pb-2">
-                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600" placeholder="Judul..."/>
+                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600 cursor-text" placeholder="Judul..."/>
                             <button onClick={handleTear} title="Sobek & Simpan di Arsip!" className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
                         </div>
                         
@@ -322,7 +339,7 @@
                                     value={content} 
                                     onChange={handleChange} 
                                     onBlur={() => setIsEditing(false)}
-                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-900 font-medium leading-relaxed hide-scrollbar placeholder-gray-600" 
+                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-900 font-medium leading-relaxed hide-scrollbar placeholder-gray-600 cursor-text" 
                                     placeholder="Ketik '- ' lalu spasi untuk membuat ceklis..."
                                 />
                             ) : (
@@ -345,6 +362,7 @@
         // ==========================================
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
+            const isAdmin = sessionStorage.getItem('flAdmin') === 'true'; // Cek Status Admin
             const [isDataReady, setIsDataReady] = useState(false);
             const [currentTime, setCurrentTime] = useState(Date.now());
             
@@ -358,23 +376,29 @@
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
             const [customBackground, setCustomBackground] = useState(null); 
+            const [columnNames, setColumnNames] = useState({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
+
+            // --- STATE UNTUK POMODORO TIMER ---
+            const [isPomoActive, setIsPomoActive] = useState(false);
+            const [isPomoPaused, setIsPomoPaused] = useState(false);
+            const [pomoMode, setPomoMode] = useState('focus'); // 'focus' atau 'break'
+            const [pomoTimeLeft, setPomoTimeLeft] = useState(25 * 60); // 25 Menit dalam detik
             
-            // --- STATE UNTUK EDIT JUDUL KOLOM KANBAN ---
-            const [columnTitles, setColumnTitles] = useState({
-                'todo': 'To Do',
-                'in-progress': 'In Progress',
-                'done': 'Done'
-            });
-            const [editingColumn, setEditingColumn] = useState(null);
-            const [tempColumnTitle, setTempColumnTitle] = useState('');
+            // --- STATE UNTUK KOTAK SURAT (MAILBOX) ---
+            const [availableFolders, setAvailableFolders] = useState([]);
+            const [isMailboxHovered, setIsMailboxHovered] = useState(false);
+            const [isMailboxModalOpen, setIsMailboxModalOpen] = useState(false);
+            const [mailboxTargetItem, setMailboxTargetItem] = useState(null);
+            const [selectedTargetFolder, setSelectedTargetFolder] = useState('');
 
             const [isArchiveOpen, setIsArchiveOpen] = useState(false);
             const [newTaskInput, setNewTaskInput] = useState('');
             const [draggedTaskId, setDraggedTaskId] = useState(null);
 
-            // --- STATE UNTUK EDIT ISI TUGAS ---
             const [editingTaskId, setEditingTaskId] = useState(null);
-            const [tempTaskContent, setTempTaskContent] = useState('');
+            const [editingTaskContent, setEditingTaskContent] = useState('');
+            const [editingColumnId, setEditingColumnId] = useState(null);
+            const [editingColumnName, setEditingColumnName] = useState('');
 
             const defaultStickers = [
                 { id: 'd1', type: 'emoji', content: '❤️' }, { id: 'd2', type: 'emoji', content: '👍' },
@@ -387,6 +411,54 @@
                 return () => clearInterval(interval);
             }, []);
 
+            // POMODORO TIMER TICKER
+            useEffect(() => {
+                let interval = null;
+                if (isPomoActive && !isPomoPaused && pomoTimeLeft > 0) {
+                    interval = setInterval(() => setPomoTimeLeft(t => t - 1), 1000);
+                } else if (isPomoActive && !isPomoPaused && pomoTimeLeft === 0) {
+                    // Waktu Habis! Putar Suara Alarm
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log("Audio block", e));
+                    
+                    if (pomoMode === 'focus') {
+                        setPomoMode('break');
+                        setPomoTimeLeft(5 * 60); // Istirahat 5 Menit
+                    } else {
+                        setIsPomoActive(false);
+                        setPomoMode('focus');
+                        setPomoTimeLeft(25 * 60);
+                    }
+                }
+                return () => clearInterval(interval);
+            }, [isPomoActive, isPomoPaused, pomoTimeLeft, pomoMode]);
+
+            const togglePomodoro = () => {
+                if (!isPomoActive) {
+                    setIsPomoActive(true);
+                    setIsPomoPaused(false);
+                    setPomoMode('focus');
+                    setPomoTimeLeft(25 * 60);
+                } else {
+                    setIsPomoPaused(!isPomoPaused);
+                }
+            };
+
+            const resetPomodoro = (e) => {
+                e.stopPropagation();
+                setIsPomoActive(false);
+                setIsPomoPaused(false);
+                setPomoMode('focus');
+                setPomoTimeLeft(25 * 60);
+            };
+
+            const formatPomoDisplay = () => {
+                const m = Math.floor(pomoTimeLeft / 60).toString().padStart(2, '0');
+                const s = (pomoTimeLeft % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            // FETCH DATA FOLDER SAAT INI
             useEffect(() => {
                 const stateRef = doc(db, 'workspace_data', folderId); 
                 const unsubscribe = onSnapshot(stateRef, (docSnap) => {
@@ -397,32 +469,42 @@
                         if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
                         if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
                         if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
+                        if (data.columnNames) setColumnNames(JSON.parse(data.columnNames));
                         if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
-                        if (data.columnTitles) setColumnTitles(JSON.parse(data.columnTitles)); // Load nama kolom
                     }
                     setIsDataReady(true);
                 }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
                 return () => unsubscribe();
             }, [folderId]);
 
+            // FETCH LIST FOLDER (Untuk Kotak Surat)
+            useEffect(() => {
+                if (!isAdmin) return;
+                const q = query(collection(db, 'folders'));
+                const unsub = onSnapshot(q, (snap) => {
+                    const f = [];
+                    snap.forEach(doc => { 
+                        if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name });
+                    });
+                    setAvailableFolders(f);
+                });
+                return () => unsub();
+            }, [isAdmin, folderId]);
+
             useEffect(() => {
                 if (!isDataReady) return;
                 const timer = setTimeout(async () => {
                     const stateRef = doc(db, 'workspace_data', folderId);
                     const payload = {
-                        tasksHistory: JSON.stringify(tasksHistory),
-                        stickies: JSON.stringify(stickies),
-                        archivedStickies: JSON.stringify(archivedStickies),
-                        customStickersRepo: JSON.stringify(customStickersRepo),
-                        placedStickers: JSON.stringify(placedStickers),
-                        columnTitles: JSON.stringify(columnTitles), // Save nama kolom
+                        tasksHistory: JSON.stringify(tasksHistory), stickies: JSON.stringify(stickies),
+                        archivedStickies: JSON.stringify(archivedStickies), customStickersRepo: JSON.stringify(customStickersRepo),
+                        placedStickers: JSON.stringify(placedStickers), columnNames: JSON.stringify(columnNames),
                         customBackground: customBackground || null
                     };
-                    try { await setDoc(stateRef, payload, { merge: true }); } 
-                    catch (err) { console.error("Gagal menyimpan data:", err); }
+                    try { await setDoc(stateRef, payload, { merge: true }); } catch (err) { console.error("Gagal menyimpan data:", err); }
                 }, 1000); 
                 return () => clearTimeout(timer);
-            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, customBackground, columnTitles, isDataReady, folderId]);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, columnNames, customBackground, isDataReady, folderId]);
 
             useEffect(() => {
                 if (!isDataReady) return; 
@@ -433,9 +515,7 @@
                             const lastDateKey = historyKeys[historyKeys.length - 1];
                             let carryOverTasks = [];
                             if (lastDateKey && prevHistory[lastDateKey]) {
-                                carryOverTasks = prevHistory[lastDateKey]
-                                    .filter(task => task.status !== 'done')
-                                    .map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
+                                carryOverTasks = prevHistory[lastDateKey].filter(task => task.status !== 'done').map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
                             }
                             return { ...prevHistory, [todayKey]: carryOverTasks };
                         }
@@ -446,7 +526,62 @@
                 checkAndShiftDay();
             }, [todayKey, isDataReady]);
 
-            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} className="animate-spin" /><p className="animate-pulse">Membuka Folder...</p></div>);
+            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
+
+            // LOGIKA KOTAK SURAT (MAILBOX)
+            const handleMailboxDrop = (e) => {
+                e.preventDefault();
+                setIsMailboxHovered(false);
+                const dataStr = e.dataTransfer.getData('application/json');
+                if (dataStr) {
+                    const data = JSON.parse(dataStr);
+                    setMailboxTargetItem(data);
+                    setIsMailboxModalOpen(true);
+                }
+            };
+
+            const executeMailboxMove = async () => {
+                if (!selectedTargetFolder || !mailboxTargetItem) return;
+                
+                // 1. Hapus dari folder saat ini
+                if (mailboxTargetItem.type === 'task') {
+                    deleteTask(mailboxTargetItem.id);
+                } else if (mailboxTargetItem.type === 'sticky') {
+                    deleteSticky(mailboxTargetItem.id);
+                }
+
+                // 2. Tambahkan ke folder target via Firebase API langsung
+                const targetRef = doc(db, 'workspace_data', selectedTargetFolder);
+                const snap = await getDoc(targetRef);
+                let targetData = snap.exists() ? snap.data() : {};
+                
+                if (mailboxTargetItem.type === 'task') {
+                    const history = targetData.tasksHistory ? JSON.parse(targetData.tasksHistory) : {};
+                    const today = getTodayKey(); // Kirim ke hari ini di folder target
+                    if (!history[today]) history[today] = [];
+                    history[today].unshift({
+                        id: `moved-${Date.now()}`,
+                        content: mailboxTargetItem.content,
+                        status: 'todo', // Selalu masuk ke kolom To Do agar tim lain notice
+                        dueDate: mailboxTargetItem.dueDate
+                    });
+                    await setDoc(targetRef, { tasksHistory: JSON.stringify(history) }, { merge: true });
+                } else if (mailboxTargetItem.type === 'sticky') {
+                    const sticks = targetData.stickies ? JSON.parse(targetData.stickies) : [];
+                    sticks.push({
+                        id: `moved-${Date.now()}`,
+                        color: mailboxTargetItem.color,
+                        title: mailboxTargetItem.title,
+                        content: mailboxTargetItem.content
+                    });
+                    await setDoc(targetRef, { stickies: JSON.stringify(sticks) }, { merge: true });
+                }
+                
+                // Reset Modal
+                setIsMailboxModalOpen(false);
+                setMailboxTargetItem(null);
+                setSelectedTargetFolder('');
+            };
 
             const handleUploadSticker = async (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -460,15 +595,10 @@
                 const rect = container ? container.getBoundingClientRect() : { top: 0 };
                 const scrollY = -rect.top;
                 const viewportCenterY = window.innerHeight / 2;
-
                 setPlacedStickers(prev => [...(prev || []), {
-                    id: `placed-${Date.now()}-${Math.random()}`, 
-                    type: stickerTemplate.type, 
-                    content: stickerTemplate.content,
-                    x: 50 + (Math.random() * 10 - 5),
-                    y: scrollY + viewportCenterY + (Math.random() * 40 - 20),
-                    isPercentX: true, isPixelY: true,
-                    rotation: Math.random() * 20 - 10, scale: 1, flipX: false
+                    id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content,
+                    x: 50 + (Math.random() * 10 - 5), y: scrollY + viewportCenterY + (Math.random() * 40 - 20),
+                    isPercentX: true, isPixelY: true, rotation: Math.random() * 20 - 10, scale: 1, flipX: false
                 }]);
             };
             
@@ -479,7 +609,15 @@
             const deleteCustomStickerRepo = (id, e) => { e.stopPropagation(); setCustomStickersRepo(prev => prev.filter(s => s.id !== id)); }
 
             const currentTasks = tasksHistory[viewDate] || [];
-            const handleDragStart = (e, id) => { setDraggedTaskId(id); setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); };
+            
+            // Drag untuk Pindah Kolom (Task) ATAU Kotak Surat
+            const handleDragStart = (e, task) => { 
+                setDraggedTaskId(task.id); 
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'task', id: task.id, content: task.content, status: task.status, dueDate: task.dueDate
+                }));
+                setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); 
+            };
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
             const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
@@ -493,14 +631,16 @@
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
             const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
             
-            const saveTaskEdit = (id) => {
-                setTasksHistory(prev => ({
-                    ...prev,
-                    [viewDate]: prev[viewDate].map(t =>
-                        t.id === id ? { ...t, content: tempTaskContent || t.content } : t
-                    )
-                }));
+            const startEditingTask = (task) => { setEditingTaskId(task.id); setEditingTaskContent(task.content); };
+            const saveEditingTask = () => {
+                if (editingTaskContent.trim()) { setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content: editingTaskContent.trim() } : t) })); }
                 setEditingTaskId(null);
+            };
+
+            const startEditingColumn = (colId, currentName) => { setEditingColumnId(colId); setEditingColumnName(currentName); };
+            const saveEditingColumn = () => {
+                if (editingColumnName.trim()) { setColumnNames(prev => ({ ...prev, [editingColumnId]: editingColumnName.trim() })); }
+                setEditingColumnId(null);
             };
 
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
@@ -513,27 +653,23 @@
                 const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
                 setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]);
             };
-
-            const updateArchivedSticky = (archiveId, title, content) => {
-                setArchivedStickies(prev => prev.map(a => (a.archiveId || a.tornAt) === archiveId ? { ...a, title, content } : a));
-            };
-            const deleteArchivedSticky = (archiveId) => {
-                if(window.confirm("Hapus kertas dari arsip selamanya?")) {
-                    setArchivedStickies(prev => prev.filter(a => (a.archiveId || a.tornAt) !== archiveId));
-                }
-            };
+            const updateArchivedSticky = (archiveId, title, content) => { setArchivedStickies(prev => prev.map(a => (a.archiveId || a.tornAt) === archiveId ? { ...a, title, content } : a)); };
+            const deleteArchivedSticky = (archiveId) => { if(window.confirm("Hapus kertas dari arsip selamanya?")) { setArchivedStickies(prev => prev.filter(a => (a.archiveId || a.tornAt) !== archiveId)); } };
 
             const columns = [
-                { id: 'todo', defaultTitle: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
-                { id: 'in-progress', defaultTitle: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
-                { id: 'done', defaultTitle: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
+                { id: 'todo', stateId: 'todo', defaultTitle: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
+                { id: 'in-progress', stateId: 'inProgress', defaultTitle: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
+                { id: 'done', stateId: 'done', defaultTitle: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
             ];
 
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
+                    {/* DIMMING OVERLAY POMODORO */}
+                    <div className={`fixed inset-0 bg-black transition-opacity duration-1000 z-0 pointer-events-none ${isPomoActive && pomoMode === 'focus' ? 'opacity-50' : 'opacity-0'}`}></div>
+
                     <div 
                         className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
-                        style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
+                        style={customBackground ? { backgroundImage: `url(${customBackground})`, backgroundBlendMode: (isPomoActive && pomoMode === 'focus') ? 'darken' : 'normal' } : {}}
                     >
                         {/* CANVAS STIKER */}
                         <div className="absolute inset-0 pointer-events-none z-40 flex justify-center">
@@ -582,6 +718,24 @@
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Beranda</span>
                                 </button>
+                                
+                                {/* Tombol Pomodoro */}
+                                <div className="flex flex-col items-center group relative pointer-events-auto">
+                                    <button onClick={togglePomodoro} className={`bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 hover:scale-110 transition-all duration-300 relative ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'ring-4 ring-red-400' : 'ring-4 ring-emerald-400') : (isPomoPaused ? 'ring-4 ring-yellow-400' : '')}`}>
+                                        <div className="text-2xl drop-shadow-md leading-none w-6 h-6 flex items-center justify-center">🍅</div>
+                                    </button>
+                                    
+                                    {(isPomoActive || isPomoPaused) && (
+                                        <button onClick={resetPomodoro} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" title="Reset Timer">
+                                            <RotateCcw size={12} />
+                                        </button>
+                                    )}
+
+                                    <span className={`text-xs font-bold mt-2 px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm border border-white/50 dark:border-gray-700/50 transition-colors duration-300 ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : (isPomoPaused ? 'bg-yellow-400 text-gray-900' : 'bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400')}`}>
+                                        {isPomoActive || isPomoPaused ? formatPomoDisplay() : "Timer"}
+                                    </span>
+                                </div>
+
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center group hidden sm:flex">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Sun size={24} className={isDarkMode ? "hidden" : "block text-yellow-500"} /><Moon size={24} className={isDarkMode ? "block text-blue-400" : "hidden"} /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Tema</span>
@@ -622,7 +776,7 @@
                         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
                                     <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2"><Plus size={20}/> Kertas Baru</button>
                                 </div>
                             </div>
@@ -641,91 +795,53 @@
                                 ) : ( <div className="mb-6 p-3 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-xl text-center text-sm font-medium text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800/50">Melihat histori tanggal {formatDateDisplay(viewDate)}.</div> )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
-                                    {columns.map(col => (
+                                    {columns.map(col => {
+                                        const currentTitle = columnNames[col.stateId] || col.defaultTitle;
+                                        return (
                                         <div key={col.id} className="flex flex-col h-full min-h-[250px]" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, col.id)}>
-                                            <div className={`group flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3`}>
-                                                <h3 className={`font-bold ${col.textColor} flex items-center text-sm`}>
-                                                    {editingColumn === col.id ? (
-                                                        <input
-                                                            type="text"
-                                                            autoFocus
-                                                            value={tempColumnTitle}
-                                                            onChange={(e) => setTempColumnTitle(e.target.value)}
-                                                            onBlur={() => {
-                                                                setColumnTitles(prev => ({ ...prev, [col.id]: tempColumnTitle || col.defaultTitle }));
-                                                                setEditingColumn(null);
-                                                            }}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    setColumnTitles(prev => ({ ...prev, [col.id]: tempColumnTitle || col.defaultTitle }));
-                                                                    setEditingColumn(null);
-                                                                }
-                                                            }}
-                                                            className="bg-transparent border-b-2 border-current outline-none w-24 px-1"
-                                                        />
-                                                    ) : (
-                                                        <>
-                                                            {columnTitles[col.id] || col.defaultTitle}
-                                                            <button 
-                                                                onClick={() => { setEditingColumn(col.id); setTempColumnTitle(columnTitles[col.id] || col.defaultTitle); }}
-                                                                className="opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 ml-2"
-                                                                title="Edit Nama Kolom"
-                                                            >
-                                                                <EditIcon size={14} />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </h3>
+                                            <div className={`group/header flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3 relative`}>
+                                                {editingColumnId === col.stateId ? (
+                                                    <input autoFocus type="text" value={editingColumnName} onChange={(e) => setEditingColumnName(e.target.value)} onBlur={saveEditingColumn} onKeyDown={(e) => e.key === 'Enter' && saveEditingColumn()} className={`font-bold ${col.textColor} text-sm bg-transparent outline-none border-b border-gray-400 w-full`}/>
+                                                ) : (
+                                                    <div className="flex items-center gap-1">
+                                                        <h3 className={`font-bold ${col.textColor} text-sm cursor-pointer`}>{currentTitle}</h3>
+                                                        <button onClick={() => startEditingColumn(col.stateId, currentTitle)} className="opacity-0 group-hover/header:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity p-1"><PencilIcon size={12} /></button>
+                                                    </div>
+                                                )}
                                                 <span className={`text-xs font-bold bg-white dark:bg-gray-700 px-2 py-1 rounded-full shadow-sm ${col.textColor}`}>{currentTasks.filter(t => t.status === col.id).length}</span>
                                             </div>
                                             <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
                                                 {currentTasks.filter(t => t.status === col.id).map(task => (
-                                                    <div key={task.id} draggable={viewDate === todayKey} onDragStart={(e) => handleDragStart(e, task.id)} onDragEnd={handleDragEnd} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 cursor-grab hover:shadow-md hover:-translate-y-1 transition-all group relative">
+                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''}`}>
                                                         <div className="flex flex-col gap-2">
                                                             <div className="flex items-start gap-2">
                                                                 {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
-                                                                
                                                                 {editingTaskId === task.id ? (
-                                                                    <textarea 
-                                                                        autoFocus
-                                                                        value={tempTaskContent}
-                                                                        onChange={(e) => setTempTaskContent(e.target.value)}
-                                                                        onBlur={() => saveTaskEdit(task.id)}
-                                                                        onKeyDown={(e) => {
-                                                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                                                e.preventDefault();
-                                                                                saveTaskEdit(task.id);
-                                                                            }
-                                                                        }}
-                                                                        className="flex-1 text-sm font-medium bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-purple-300 dark:border-purple-500 rounded p-1 outline-none resize-none"
-                                                                        rows="2"
-                                                                    />
+                                                                    <textarea autoFocus value={editingTaskContent} onChange={(e) => setEditingTaskContent(e.target.value)} onBlur={saveEditingTask} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditingTask(); } }} className="flex-1 text-sm font-medium bg-gray-50 dark:bg-gray-700 p-1 rounded outline-none border border-blue-300 resize-none" />
                                                                 ) : (
                                                                     <p className={`flex-1 text-sm font-medium whitespace-pre-wrap ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
                                                                 )}
-
-                                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity gap-1">
-                                                                    <button onClick={() => { setEditingTaskId(task.id); setTempTaskContent(task.content); }} className="text-gray-300 hover:text-blue-500 transition-colors" title="Edit Tugas"><EditIcon size={14} /></button>
-                                                                    <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 transition-colors" title="Hapus Tugas"><Trash2 size={14} /></button>
+                                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button onClick={() => startEditingTask(task)} className="text-gray-300 hover:text-blue-500"><PencilIcon size={14} /></button>
+                                                                    <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
                                                                 </div>
                                                             </div>
-                                                            {/* Due Date Indicator (Auto update tiap menit) */}
                                                             <div className="flex items-center justify-between mt-1 pl-6">
-                                                                <div className={`flex items-center gap-1.5 text-xs group/date cursor-pointer relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
+                                                                <div className={`flex items-center gap-1.5 text-xs group/date relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm ${getDueDateColor(task.dueDate, currentTime)}`}>
                                                                     <ClockIcon size={12} />
                                                                     <span className="whitespace-nowrap">{formatShortDateTime(task.dueDate)}</span>
                                                                     <input 
                                                                         type="datetime-local" 
-                                                                        value={task.dueDate || ''}
-                                                                        onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
-                                                                        className="date-input-hidden"
-                                                                        title="Set Batas Waktu"
+                                                                        value={task.dueDate || ''} 
+                                                                        onChange={(e) => updateTaskDueDate(task.id, e.target.value)} 
+                                                                        onMouseDown={(e) => e.stopPropagation()} 
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="date-input-hidden" 
+                                                                        title="Set Batas Waktu" 
                                                                     />
                                                                 </div>
                                                                 {task.dueDate && (
-                                                                    <button onClick={() => updateTaskDueDate(task.id, '')} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1" title="Hapus Batas Waktu">
-                                                                        <X size={14} />
-                                                                    </button>
+                                                                    <button onClick={() => updateTaskDueDate(task.id, '')} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1" title="Hapus Batas Waktu"><X size={14} /></button>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -734,13 +850,13 @@
                                                 {currentTasks.filter(t => t.status === col.id).length === 0 && <div className="border-2 border-dashed border-gray-300/50 dark:border-gray-600/50 rounded-xl h-16 flex items-center justify-center text-gray-400 text-xs font-medium">Kosong</div>}
                                             </div>
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
                             </div>
 
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
                                 </div>
                             </div>
                         </div>
@@ -749,7 +865,7 @@
                         <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10 pointer-events-auto">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {stickies.map((sticky) => (
-                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
+                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />
                             ))}
                             </div>
                             <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={20}/> Kertas Baru</button>
@@ -770,6 +886,64 @@
                                 <input type="file" accept="image/*" className="hidden" onChange={handleUploadSticker} /><Plus size={20} />
                             </label>
                         </div>
+
+                        {/* KOTAK SURAT (MAILBOX) LINTAS DIVISI - HANYA ADMIN */}
+                        {isAdmin && (
+                            <div 
+                                className={`fixed bottom-8 left-8 z-50 transition-all duration-300 ${isMailboxHovered ? 'mailbox-hover' : 'hover:scale-110'}`}
+                                onDragOver={(e) => { e.preventDefault(); setIsMailboxHovered(true); }}
+                                onDragLeave={() => setIsMailboxHovered(false)}
+                                onDrop={handleMailboxDrop}
+                            >
+                                <div className="relative group flex flex-col items-center">
+                                    <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shadow-xl border-4 transition-colors ${isMailboxHovered ? 'bg-yellow-400 border-yellow-200 text-yellow-900' : 'bg-gradient-to-br from-blue-400 to-indigo-600 border-white dark:border-gray-700 text-white'}`}>
+                                        <SendIcon size={28} />
+                                    </div>
+                                    <span className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition-opacity pointer-events-none drop-shadow-md">
+                                        Seret tugas kesini!
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL PILIH DIVISI TUJUAN KOTAK SURAT */}
+                        {isMailboxModalOpen && isAdmin && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setIsMailboxModalOpen(false); setMailboxTargetItem(null); }}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10 border-2 border-indigo-200 dark:border-indigo-900">
+                                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mb-4 text-indigo-500">
+                                        <SendIcon size={32} />
+                                    </div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Kirim Surat! 📬</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">
+                                        Pindahkan {mailboxTargetItem?.type === 'task' ? 'tugas' : 'catatan'} ini ke divisi lain.
+                                    </p>
+                                    
+                                    <div className="w-full mb-6">
+                                        <select 
+                                            value={selectedTargetFolder} 
+                                            onChange={(e) => setSelectedTargetFolder(e.target.value)}
+                                            className="w-full bg-gray-100 dark:bg-gray-700 border-2 border-transparent focus:border-indigo-400 text-gray-800 dark:text-gray-100 font-bold py-3 px-4 rounded-xl outline-none appearance-none cursor-pointer text-center"
+                                        >
+                                            <option value="" disabled>-- Pilih Divisi / Folder --</option>
+                                            {availableFolders.map(f => (
+                                                <option key={f.id} value={f.id}>{f.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex gap-3 w-full">
+                                        <button onClick={() => { setIsMailboxModalOpen(false); setMailboxTargetItem(null); }} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                        <button 
+                                            onClick={executeMailboxMove} 
+                                            disabled={!selectedTargetFolder}
+                                            className="flex-1 py-3 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >Kirim</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
                     </div>
                 </div>
             );
@@ -778,8 +952,9 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, customBackground, setCustomBackground }) => {
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
             const [folders, setFolders] = useState([]);
+            const [homeBackground, setHomeBackground] = useState(null); 
             
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingId, setEditingId] = useState(null); 
@@ -798,9 +973,7 @@
             const [unlockPin, setUnlockPin] = useState('');
             const [unlockError, setUnlockError] = useState(false);
 
-            useEffect(() => {
-                sessionStorage.setItem('flAdmin', isAdmin);
-            }, [isAdmin]);
+            useEffect(() => { sessionStorage.setItem('flAdmin', isAdmin); }, [isAdmin]);
 
             useEffect(() => {
                 const q = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
@@ -849,20 +1022,9 @@
                 if (!newFolderName.trim()) return;
                 try {
                     if (editingId) {
-                        await updateDoc(doc(db, 'folders', editingId), {
-                            name: newFolderName,
-                            avatarId: selectedAvatar,
-                            gradient: selectedGradient.classes,
-                            pin: folderPin
-                        });
+                        await updateDoc(doc(db, 'folders', editingId), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin });
                     } else {
-                        await addDoc(collection(db, 'folders'), {
-                            name: newFolderName,
-                            avatarId: selectedAvatar,
-                            gradient: selectedGradient.classes,
-                            pin: folderPin,
-                            createdAt: serverTimestamp()
-                        });
+                        await addDoc(collection(db, 'folders'), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin, createdAt: serverTimestamp() });
                     }
                     setIsModalOpen(false);
                 } catch (err) { console.error("Gagal simpan folder", err); }
@@ -875,11 +1037,34 @@
                 }
             };
 
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().homeBackground !== undefined) {
+                        setHomeBackground(docSnap.data().homeBackground);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                const authUser = auth.currentUser;
+                if (!authUser) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                    try { await setDoc(stateRef, { homeBackground: homeBackground || null }, { merge: true }); } 
+                    catch (err) { console.error("Gagal simpan bg home:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [homeBackground]);
+
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div 
                         className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
-                        style={customBackground ? { backgroundImage: `url(${customBackground})` } : {}}
+                        style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
                     >
                         <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
 
@@ -888,11 +1073,9 @@
                                 <span className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-1 rounded-md text-2xl">FL</span> Workspace
                             </h1>
                             <div className="flex gap-3">
-                                
                                 <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
                                     <KeyIcon size={20} className={isAdmin ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"} />
                                 </button>
-
                                 {isAdmin && (
                                     <div className="relative group flex items-center">
                                         <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
@@ -900,16 +1083,15 @@
                                             <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                                                 const file = e.target.files[0]; if(!file) return;
                                                 const bg = await resizeImage(file, 1920, 0.6); 
-                                                setCustomBackground(bg);
+                                                setHomeBackground(bg);
                                                 e.target.value = '';
                                             }} />
                                         </label>
-                                        {customBackground && (
-                                            <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
+                                        {homeBackground && (
+                                            <button onClick={(e) => { e.stopPropagation(); setHomeBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
                                         )}
                                     </div>
                                 )}
-                                
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
                                     <Sun size={20} className={isDarkMode ? "hidden" : "block text-yellow-500"} />
                                     <Moon size={20} className={isDarkMode ? "block text-blue-400" : "hidden"} />
@@ -919,7 +1101,6 @@
 
                         <div className="relative z-10 w-full max-w-7xl mx-auto px-4 pt-24 pb-32">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-28 justify-items-center">
-                                
                                 {isAdmin && (
                                     <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
                                         <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
@@ -935,28 +1116,19 @@
                                     
                                     return (
                                         <div key={folder.id} onClick={() => handleFolderClick(folder)} className="relative character-card cursor-pointer group w-56 h-72">
-                                            
                                             <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
-                                                
                                                 {isAdmin && (
                                                     <>
-                                                        <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace">
-                                                            <EditIcon size={16} />
-                                                        </button>
-                                                        <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace">
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                                        <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace"><EditIcon size={16} /></button>
+                                                        <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace"><Trash2 size={16} /></button>
                                                     </>
                                                 )}
-
                                                 <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{folder.name}</h3>
                                                 <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">Workspace Active</p>
                                             </div>
-
                                             <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">
                                                 {AvatarComp ? <AvatarComp /> : <Avatars.boy />}
                                             </div>
-
                                         </div>
                                     );
                                 })}
@@ -967,30 +1139,12 @@
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowAdminLogin(false)}></div>
                                 <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
-                                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4">
-                                        <KeyIcon size={32} className="text-blue-500" />
-                                    </div>
+                                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4"><KeyIcon size={32} className="text-blue-500" /></div>
                                     <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Akses Admin</h2>
                                     <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan password untuk mengedit dan membuat workspace.</p>
-                                    
-                                    <form onSubmit={(e) => {
-                                        e.preventDefault();
-                                        if (adminPassword === 'ciptadigi') {
-                                            setIsAdmin(true);
-                                            setShowAdminLogin(false);
-                                            setAdminPassword('');
-                                            setAdminError(false);
-                                        } else {
-                                            setAdminError(true);
-                                            setAdminPassword('');
-                                        }
-                                    }} className="w-full">
+                                    <form onSubmit={(e) => { e.preventDefault(); if (adminPassword === 'ciptadigi') { setIsAdmin(true); setShowAdminLogin(false); setAdminPassword(''); setAdminError(false); } else { setAdminError(true); setAdminPassword(''); } }} className="w-full">
                                         <input autoFocus type="password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }} placeholder="Password..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${adminError ? 'border-red-500' : 'border-transparent focus:border-blue-400'}`}/>
-                                        
-                                        <div className="h-6 mb-4 flex items-center justify-center">
-                                            {adminError && <span className="text-red-500 text-xs font-bold pop-in-animation">Password Salah!</span>}
-                                        </div>
-
+                                        <div className="h-6 mb-4 flex items-center justify-center">{adminError && <span className="text-red-500 text-xs font-bold pop-in-animation">Password Salah!</span>}</div>
                                         <div className="flex gap-3 w-full">
                                             <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
                                             <button type="submit" className="flex-1 py-3 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-md">Masuk</button>
@@ -1004,41 +1158,28 @@
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
                                 <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10">
-                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-4">
-                                        {editingId ? "Edit Workspace" : "Pilih Karaktermu"}
-                                    </h2>
-                                    
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-4">{editingId ? "Edit Workspace" : "Pilih Karaktermu"}</h2>
                                     <div className="grid grid-cols-4 md:grid-cols-4 gap-3 mb-4 w-full max-h-48 overflow-y-auto p-2 hide-scrollbar border border-gray-100 dark:border-gray-700 rounded-xl">
                                         {Object.keys(Avatars).map(avKey => {
                                             const AvatarC = Avatars[avKey];
                                             return (
-                                                <button key={avKey} type="button" onClick={() => setSelectedAvatar(avKey)} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === avKey ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                                                    <div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><AvatarC /></div>
-                                                </button>
+                                                <button key={avKey} type="button" onClick={() => setSelectedAvatar(avKey)} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === avKey ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}><div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><AvatarC /></div></button>
                                             );
                                         })}
                                     </div>
-
                                     <div className="flex flex-wrap justify-center gap-2 mb-6 w-full max-h-24 overflow-y-auto p-2 hide-scrollbar">
-                                        {Gradients.map(g => (
-                                            <button key={g.id} type="button" onClick={() => setSelectedGradient(g)} className={`w-8 h-8 rounded-full bg-gradient-to-b ${g.classes} transition-transform border-2 ${selectedGradient.id === g.id ? 'scale-125 border-gray-800 dark:border-white shadow-md' : 'border-transparent hover:scale-110'}`}></button>
-                                        ))}
+                                        {Gradients.map(g => (<button key={g.id} type="button" onClick={() => setSelectedGradient(g)} className={`w-8 h-8 rounded-full bg-gradient-to-b ${g.classes} transition-transform border-2 ${selectedGradient.id === g.id ? 'scale-125 border-gray-800 dark:border-white shadow-md' : 'border-transparent hover:scale-110'}`}></button>))}
                                     </div>
-
                                     <form onSubmit={handleSaveFolder} className="w-full">
                                         <div className="relative w-full mb-4">
                                             <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 pl-6 pr-12 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 border-2 border-transparent focus:border-purple-400"/>
-                                            <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia">
-                                                <LockIcon size={18} />
-                                            </button>
+                                            <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia"><LockIcon size={18} /></button>
                                         </div>
-
                                         {showPinInput && (
                                             <div className="w-full mb-4 pop-in-animation">
                                                 <input type="password" value={folderPin} onChange={(e) => setFolderPin(e.target.value)} placeholder="PIN Rahasia (Kosongkan jika tidak mau)..." className="w-full bg-purple-50 dark:bg-gray-800 border-2 border-purple-200 dark:border-gray-600 px-6 py-4 rounded-2xl outline-none text-center font-bold text-purple-700 dark:text-purple-300 focus:border-purple-500" />
                                             </div>
                                         )}
-
                                         <div className="flex gap-3 w-full">
                                             <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
                                             <button type="submit" className="flex-1 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow-md">Simpan</button>
@@ -1052,29 +1193,12 @@
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setUnlockingFolder(null)}></div>
                                 <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
-                                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4">
-                                        <LockIcon size={32} className="text-red-500" />
-                                    </div>
+                                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4"><LockIcon size={32} className="text-red-500" /></div>
                                     <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Folder Terkunci</h2>
                                     <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan PIN untuk membuka <br/><b>{unlockingFolder.name}</b></p>
-                                    
-                                    <form onSubmit={(e) => {
-                                        e.preventDefault();
-                                        if (unlockPin === unlockingFolder.pin) {
-                                            const target = unlockingFolder;
-                                            setUnlockingFolder(null);
-                                            onSelectFolder(target.id, target.name);
-                                        } else {
-                                            setUnlockError(true);
-                                            setUnlockPin('');
-                                        }
-                                    }} className="w-full">
+                                    <form onSubmit={(e) => { e.preventDefault(); if (unlockPin === unlockingFolder.pin) { const target = unlockingFolder; setUnlockingFolder(null); onSelectFolder(target.id, target.name); } else { setUnlockError(true); setUnlockPin(''); } }} className="w-full">
                                         <input autoFocus type="password" value={unlockPin} onChange={(e) => { setUnlockPin(e.target.value); setUnlockError(false); }} placeholder="Masukkan PIN..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${unlockError ? 'border-red-500' : 'border-transparent focus:border-red-400'}`}/>
-                                        
-                                        <div className="h-6 mb-4 flex items-center justify-center">
-                                            {unlockError && <span className="text-red-500 text-xs font-bold pop-in-animation">PIN Salah! Silakan coba lagi.</span>}
-                                        </div>
-
+                                        <div className="h-6 mb-4 flex items-center justify-center">{unlockError && <span className="text-red-500 text-xs font-bold pop-in-animation">PIN Salah! Silakan coba lagi.</span>}</div>
                                         <div className="flex gap-3 w-full">
                                             <button type="button" onClick={() => setUnlockingFolder(null)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
                                             <button type="submit" className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 shadow-md">Buka</button>
@@ -1094,7 +1218,6 @@
             const [user, setUser] = useState(null);
             const [currentFolder, setCurrentFolder] = useState(null); 
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
-            const [customBackgroundHome, setCustomBackgroundHome] = useState(null);
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
@@ -1108,27 +1231,6 @@
                 });
                 return () => unsubscribe();
             }, []);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
-                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().customBackgroundHome !== undefined) {
-                        setCustomBackgroundHome(docSnap.data().customBackgroundHome);
-                    }
-                });
-                return () => unsubscribe();
-            }, [user]);
-
-            useEffect(() => {
-                if (!user || !db) return;
-                const timer = setTimeout(async () => {
-                    const stateRef = doc(db, 'users', user.uid, 'appState', 'homeData');
-                    try { await setDoc(stateRef, { customBackgroundHome: customBackgroundHome || null }, { merge: true }); } 
-                    catch (err) { console.error("Gagal simpan bg:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
-            }, [customBackgroundHome, user]);
 
             if (!authReady) {
                 return (
@@ -1158,8 +1260,6 @@
                     onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
                     isDarkMode={isDarkMode}
                     setIsDarkMode={setIsDarkMode}
-                    customBackground={customBackgroundHome}
-                    setCustomBackground={setCustomBackgroundHome}
                 />
             );
         }
