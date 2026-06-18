@@ -4,16 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Follow Up List & Folders</title>
-     <link rel="icon" type="image/x-icon" href="icon.png">
+    <link rel="icon" type="image/x-icon" href="icon.png">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = { darkMode: 'class' }
     </script>
 
-    <!-- React & ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Import Map untuk mengatasi error "react/jsx-runtime" -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+        }
+    }
+    </script>
     
     <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -56,6 +63,9 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
+        // IMPORT MODULES
+        import React, { useState, useEffect, useRef } from "react";
+        import { createRoot } from "react-dom/client";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -73,8 +83,6 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-
-        const { useState, useEffect, useRef } = React;
 
         // --- IKON SVG ---
         const Icon = ({ size = 24, className = "", children }) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
@@ -268,7 +276,7 @@
         };
 
         // --- KOMPONEN STICKY NOTE CERDAS ---
-        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete, isAdmin }) => {
+        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
             const [isTearing, setIsTearing] = useState(false);
             const [content, setContent] = useState(initialText);
             const [title, setTitle] = useState(initialTitle);
@@ -292,9 +300,14 @@
             const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
 
             const handleDragStart = (e) => {
-                if (isAdmin) {
-                    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'sticky', id: id, title: title, content: content, color: initialColor }));
-                }
+                // Semua orang bisa nge-drag
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'sticky',
+                    id: id,
+                    title: title,
+                    content: content,
+                    color: initialColor
+                }));
             };
 
             const renderContent = () => {
@@ -323,7 +336,7 @@
                     if (isList) {
                         return (
                             <div key={i} className="flex items-start gap-2 mb-1.5 group/list">
-                                <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none">
+                                <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none z-10 relative">
                                     {isChecked ? <CheckSquare size={16} className="text-emerald-700"/> : <Square size={16} className="text-gray-700"/>}
                                 </button>
                                 <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 font-medium'}`}>{text}</span>
@@ -344,15 +357,15 @@
                     )}
                     <div 
                         ref={noteRef} 
-                        draggable={isAdmin && !isEditing} 
+                        draggable={!isEditing} 
                         onDragStart={handleDragStart}
-                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${isAdmin && !isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${!isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
                         <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
                         <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 z-20"><X size={14} /></button>
                         <div className="flex justify-between items-center mb-2 border-b border-gray-400/30 pb-2">
-                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600 cursor-text" placeholder="Judul (Misal: Titipan Daniel)..."/>
-                            <button onClick={handleTear} title="Hapus Catatan!" className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
+                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600 cursor-text" placeholder="Judul..."/>
+                            <button onClick={handleTear} title={onTear ? "Sobek & Simpan di Arsip!" : "Hapus Catatan!"} className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
                         </div>
                         
                         <div className="flex-1 w-full relative flex flex-col mt-2">
@@ -363,7 +376,7 @@
                                     onChange={handleChange} 
                                     onBlur={() => setIsEditing(false)}
                                     className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-900 font-medium leading-relaxed hide-scrollbar placeholder-gray-600 cursor-text" 
-                                    placeholder="Ketik '- ' lalu spasi untuk membuat list..."
+                                    placeholder="Ketik '- ' lalu spasi untuk membuat ceklis..."
                                 />
                             ) : (
                                 <div 
@@ -385,24 +398,28 @@
         // ==========================================
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
             const todayKey = getTodayKey();
-            const isAdmin = sessionStorage.getItem('flAdmin') === 'true'; 
             const [isDataReady, setIsDataReady] = useState(false);
             const [currentTime, setCurrentTime] = useState(Date.now());
             
             const [tasksHistory, setTasksHistory] = useState({ [todayKey]: [] });
             const [viewDate, setViewDate] = useState(todayKey);
-            const [stickies, setStickies] = useState([{ id: 's1', color: 'bg-yellow-200', title: '', content: '' }, { id: 's2', color: 'bg-rose-200', title: '', content: '' }]);
+            const [stickies, setStickies] = useState([
+                { id: 's1', color: 'bg-yellow-200', title: '', content: '' },
+                { id: 's2', color: 'bg-rose-200', title: '', content: '' }
+            ]);
             const [archivedStickies, setArchivedStickies] = useState([]);
             const [customStickersRepo, setCustomStickersRepo] = useState([]);
             const [placedStickers, setPlacedStickers] = useState([]);
             const [customBackground, setCustomBackground] = useState(null); 
             const [columnNames, setColumnNames] = useState({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
 
+            // --- STATE UNTUK POMODORO TIMER ---
             const [isPomoActive, setIsPomoActive] = useState(false);
             const [isPomoPaused, setIsPomoPaused] = useState(false);
-            const [pomoMode, setPomoMode] = useState('focus'); 
-            const [pomoTimeLeft, setPomoTimeLeft] = useState(25 * 60); 
+            const [pomoMode, setPomoMode] = useState('focus'); // 'focus' atau 'break'
+            const [pomoTimeLeft, setPomoTimeLeft] = useState(25 * 60); // 25 Menit dalam detik
             
+            // --- STATE UNTUK KOTAK SURAT (MAILBOX) ---
             const [availableFolders, setAvailableFolders] = useState([]);
             const [isMailboxHovered, setIsMailboxHovered] = useState(false);
             const [isMailboxModalOpen, setIsMailboxModalOpen] = useState(false);
@@ -424,23 +441,59 @@
                 { id: 'd5', type: 'emoji', content: '😂' }, { id: 'd6', type: 'emoji', content: '📌' }, { id: 'd7', type: 'emoji', content: '👀' },
             ];
 
-            useEffect(() => { const interval = setInterval(() => setCurrentTime(Date.now()), 60000); return () => clearInterval(interval); }, []);
+            useEffect(() => {
+                const interval = setInterval(() => setCurrentTime(Date.now()), 60000); 
+                return () => clearInterval(interval);
+            }, []);
 
+            // POMODORO TIMER TICKER
             useEffect(() => {
                 let interval = null;
-                if (isPomoActive && !isPomoPaused && pomoTimeLeft > 0) { interval = setInterval(() => setPomoTimeLeft(t => t - 1), 1000); } 
-                else if (isPomoActive && !isPomoPaused && pomoTimeLeft === 0) {
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); audio.play().catch(e => console.log("Audio block", e));
-                    if (pomoMode === 'focus') { setPomoMode('break'); setPomoTimeLeft(5 * 60); } 
-                    else { setIsPomoActive(false); setPomoMode('focus'); setPomoTimeLeft(25 * 60); }
+                if (isPomoActive && !isPomoPaused && pomoTimeLeft > 0) {
+                    interval = setInterval(() => setPomoTimeLeft(t => t - 1), 1000);
+                } else if (isPomoActive && !isPomoPaused && pomoTimeLeft === 0) {
+                    // Waktu Habis! Putar Suara Alarm
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log("Audio block", e));
+                    
+                    if (pomoMode === 'focus') {
+                        setPomoMode('break');
+                        setPomoTimeLeft(5 * 60); // Istirahat 5 Menit
+                    } else {
+                        setIsPomoActive(false);
+                        setPomoMode('focus');
+                        setPomoTimeLeft(25 * 60);
+                    }
                 }
                 return () => clearInterval(interval);
             }, [isPomoActive, isPomoPaused, pomoTimeLeft, pomoMode]);
 
-            const togglePomodoro = () => { if (!isPomoActive) { setIsPomoActive(true); setIsPomoPaused(false); setPomoMode('focus'); setPomoTimeLeft(25 * 60); } else { setIsPomoPaused(!isPomoPaused); } };
-            const resetPomodoro = (e) => { e.stopPropagation(); setIsPomoActive(false); setIsPomoPaused(false); setPomoMode('focus'); setPomoTimeLeft(25 * 60); };
-            const formatPomoDisplay = () => { const m = Math.floor(pomoTimeLeft / 60).toString().padStart(2, '0'); const s = (pomoTimeLeft % 60).toString().padStart(2, '0'); return `${m}:${s}`; };
+            const togglePomodoro = () => {
+                if (!isPomoActive) {
+                    setIsPomoActive(true);
+                    setIsPomoPaused(false);
+                    setPomoMode('focus');
+                    setPomoTimeLeft(25 * 60);
+                } else {
+                    setIsPomoPaused(!isPomoPaused);
+                }
+            };
 
+            const resetPomodoro = (e) => {
+                e.stopPropagation();
+                setIsPomoActive(false);
+                setIsPomoPaused(false);
+                setPomoMode('focus');
+                setPomoTimeLeft(25 * 60);
+            };
+
+            const formatPomoDisplay = () => {
+                const m = Math.floor(pomoTimeLeft / 60).toString().padStart(2, '0');
+                const s = (pomoTimeLeft % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            // FETCH DATA FOLDER SAAT INI
             useEffect(() => {
                 const stateRef = doc(db, 'workspace_data', folderId); 
                 const unsubscribe = onSnapshot(stateRef, (docSnap) => {
@@ -459,10 +512,15 @@
                 return () => unsubscribe();
             }, [folderId]);
 
+            // FETCH LIST FOLDER (Untuk Kotak Surat)
             useEffect(() => {
                 const q = query(collection(db, 'folders'));
                 const unsub = onSnapshot(q, (snap) => {
-                    const f = []; snap.forEach(doc => { if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name }); }); setAvailableFolders(f);
+                    const f = [];
+                    snap.forEach(doc => { 
+                        if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name });
+                    });
+                    setAvailableFolders(f);
                 });
                 return () => unsub();
             }, [folderId]);
@@ -474,7 +532,8 @@
                     const payload = {
                         tasksHistory: JSON.stringify(tasksHistory), stickies: JSON.stringify(stickies),
                         archivedStickies: JSON.stringify(archivedStickies), customStickersRepo: JSON.stringify(customStickersRepo),
-                        placedStickers: JSON.stringify(placedStickers), columnNames: JSON.stringify(columnNames), customBackground: customBackground || null
+                        placedStickers: JSON.stringify(placedStickers), columnNames: JSON.stringify(columnNames),
+                        customBackground: customBackground || null
                     };
                     try { await setDoc(stateRef, payload, { merge: true }); } catch (err) { console.error("Gagal menyimpan data:", err); }
                 }, 1000); 
@@ -489,7 +548,9 @@
                         if (!prevHistory[todayKey]) {
                             const lastDateKey = historyKeys[historyKeys.length - 1];
                             let carryOverTasks = [];
-                            if (lastDateKey && prevHistory[lastDateKey]) { carryOverTasks = prevHistory[lastDateKey].filter(task => task.status !== 'done').map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` })); }
+                            if (lastDateKey && prevHistory[lastDateKey]) {
+                                carryOverTasks = prevHistory[lastDateKey].filter(task => task.status !== 'done').map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
+                            }
                             return { ...prevHistory, [todayKey]: carryOverTasks };
                         }
                         return prevHistory;
@@ -501,29 +562,80 @@
 
             if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
 
-            const handleMailboxDrop = (e) => { e.preventDefault(); setIsMailboxHovered(false); const dataStr = e.dataTransfer.getData('application/json'); if (dataStr) { setMailboxTargetItem(JSON.parse(dataStr)); setIsMailboxModalOpen(true); } };
+            // LOGIKA KOTAK SURAT (MAILBOX)
+            const handleMailboxDrop = (e) => {
+                e.preventDefault();
+                setIsMailboxHovered(false);
+                const dataStr = e.dataTransfer.getData('application/json');
+                if (dataStr) {
+                    const data = JSON.parse(dataStr);
+                    setMailboxTargetItem(data);
+                    setIsMailboxModalOpen(true);
+                }
+            };
 
             const executeMailboxMove = async () => {
                 if (!selectedTargetFolder || !mailboxTargetItem) return;
-                if (mailboxTargetItem.type === 'task') { deleteTask(mailboxTargetItem.id); } else if (mailboxTargetItem.type === 'sticky') { deleteSticky(mailboxTargetItem.id); }
+                
+                // 1. Hapus dari folder saat ini
+                if (mailboxTargetItem.type === 'task') {
+                    deleteTask(mailboxTargetItem.id);
+                } else if (mailboxTargetItem.type === 'sticky') {
+                    deleteSticky(mailboxTargetItem.id);
+                }
+
+                // 2. Tambahkan ke folder target via Firebase API langsung
                 const targetRef = doc(db, 'workspace_data', selectedTargetFolder);
-                const snap = await getDoc(targetRef); let targetData = snap.exists() ? snap.data() : {};
+                const snap = await getDoc(targetRef);
+                let targetData = snap.exists() ? snap.data() : {};
+                
                 if (mailboxTargetItem.type === 'task') {
                     const history = targetData.tasksHistory ? JSON.parse(targetData.tasksHistory) : {};
-                    const today = getTodayKey(); 
+                    const today = getTodayKey(); // Kirim ke hari ini di folder target
                     if (!history[today]) history[today] = [];
-                    history[today].unshift({ id: `moved-${Date.now()}`, content: mailboxTargetItem.content, status: 'todo', dueDate: mailboxTargetItem.dueDate });
+                    history[today].unshift({
+                        id: `moved-${Date.now()}`,
+                        content: mailboxTargetItem.content,
+                        status: 'todo', // Selalu masuk ke kolom To Do agar tim lain notice
+                        dueDate: mailboxTargetItem.dueDate
+                    });
                     await setDoc(targetRef, { tasksHistory: JSON.stringify(history) }, { merge: true });
                 } else if (mailboxTargetItem.type === 'sticky') {
                     const sticks = targetData.stickies ? JSON.parse(targetData.stickies) : [];
-                    sticks.push({ id: `moved-${Date.now()}`, color: mailboxTargetItem.color, title: mailboxTargetItem.title, content: mailboxTargetItem.content });
+                    sticks.push({
+                        id: `moved-${Date.now()}`,
+                        color: mailboxTargetItem.color,
+                        title: mailboxTargetItem.title,
+                        content: mailboxTargetItem.content
+                    });
                     await setDoc(targetRef, { stickies: JSON.stringify(sticks) }, { merge: true });
                 }
-                setIsMailboxModalOpen(false); setMailboxTargetItem(null); setSelectedTargetFolder('');
+                
+                // Reset Modal
+                setIsMailboxModalOpen(false);
+                setMailboxTargetItem(null);
+                setSelectedTargetFolder('');
             };
 
-            const handleUploadSticker = async (e) => { const file = e.target.files[0]; if (!file) return; const resizedBase64 = await resizeImage(file); setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]); e.target.value = ''; };
-            const spawnSticker = (stickerTemplate) => { const container = document.getElementById('sticker-canvas'); const rect = container ? container.getBoundingClientRect() : { top: 0 }; const scrollY = -rect.top; const viewportCenterY = window.innerHeight / 2; setPlacedStickers(prev => [...(prev || []), { id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content, x: 50 + (Math.random() * 10 - 5), y: scrollY + viewportCenterY + (Math.random() * 40 - 20), isPercentX: true, isPixelY: true, rotation: Math.random() * 20 - 10, scale: 1, flipX: false }]); };
+            const handleUploadSticker = async (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const resizedBase64 = await resizeImage(file);
+                setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]);
+                e.target.value = ''; 
+            };
+            
+            const spawnSticker = (stickerTemplate) => {
+                const container = document.getElementById('sticker-canvas');
+                const rect = container ? container.getBoundingClientRect() : { top: 0 };
+                const scrollY = -rect.top;
+                const viewportCenterY = window.innerHeight / 2;
+                setPlacedStickers(prev => [...(prev || []), {
+                    id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content,
+                    x: 50 + (Math.random() * 10 - 5), y: scrollY + viewportCenterY + (Math.random() * 40 - 20),
+                    isPercentX: true, isPixelY: true, rotation: Math.random() * 20 - 10, scale: 1, flipX: false
+                }]);
+            };
+            
             const updatePlacedStickerPosition = (id, newX, newY, flags = {}) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, x: newX, y: newY, ...flags } : s));
             const updatePlacedStickerScale = (id, newScale) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, scale: newScale } : s));
             const updatePlacedStickerFlip = (id, newFlip) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, flipX: newFlip } : s));
@@ -532,25 +644,49 @@
 
             const currentTasks = tasksHistory[viewDate] || [];
             
-            const handleDragStart = (e, task) => { setDraggedTaskId(task.id); e.dataTransfer.setData('application/json', JSON.stringify({ type: 'task', id: task.id, content: task.content, status: task.status, dueDate: task.dueDate })); setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); };
+            // Drag untuk Pindah Kolom (Task) ATAU Kotak Surat
+            const handleDragStart = (e, task) => { 
+                setDraggedTaskId(task.id); 
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'task', id: task.id, content: task.content, status: task.status, dueDate: task.dueDate
+                }));
+                setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); 
+            };
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
             const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
             
-            const addTask = (e) => { e.preventDefault(); if (!newTaskInput.trim()) return; setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); setNewTaskInput(''); };
+            const addTask = (e) => { 
+                e.preventDefault(); 
+                if (!newTaskInput.trim()) return; 
+                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
+                setNewTaskInput(''); 
+            };
             const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
             const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+            
             const startEditingTask = (task) => { setEditingTaskId(task.id); setEditingTaskContent(task.content); };
-            const saveEditingTask = () => { if (editingTaskContent.trim()) { setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content: editingTaskContent.trim() } : t) })); } setEditingTaskId(null); };
+            const saveEditingTask = () => {
+                if (editingTaskContent.trim()) { setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content: editingTaskContent.trim() } : t) })); }
+                setEditingTaskId(null);
+            };
+
             const startEditingColumn = (colId, currentName) => { setEditingColumnId(colId); setEditingColumnName(currentName); };
-            const saveEditingColumn = () => { if (editingColumnName.trim()) { setColumnNames(prev => ({ ...prev, [editingColumnId]: editingColumnName.trim() })); } setEditingColumnId(null); };
+            const saveEditingColumn = () => {
+                if (editingColumnName.trim()) { setColumnNames(prev => ({ ...prev, [editingColumnId]: editingColumnName.trim() })); }
+                setEditingColumnId(null);
+            };
+
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
             const updateSticky = (id, title, content) => setStickies(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
             const archiveSticky = (stickyData) => setArchivedStickies(prev => [stickyData, ...(prev || [])]);
             const deleteSticky = (id) => setStickies(prev => prev.filter(s => s.id !== id));
-            const addSticky = () => { const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200']; setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]); };
+            const addSticky = () => {
+                const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
+                setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]);
+            };
             const updateArchivedSticky = (archiveId, title, content) => { setArchivedStickies(prev => prev.map(a => (a.archiveId || a.tornAt) === archiveId ? { ...a, title, content } : a)); };
             const deleteArchivedSticky = (archiveId) => { if(window.confirm("Hapus kertas dari arsip selamanya?")) { setArchivedStickies(prev => prev.filter(a => (a.archiveId || a.tornAt) !== archiveId)); } };
 
@@ -562,14 +698,25 @@
 
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
+                    {/* DIMMING OVERLAY POMODORO */}
                     <div className={`fixed inset-0 bg-black transition-opacity duration-1000 z-0 pointer-events-none ${isPomoActive && pomoMode === 'focus' ? 'opacity-50' : 'opacity-0'}`}></div>
-                    <div className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`} style={customBackground ? { backgroundImage: `url(${customBackground})`, backgroundBlendMode: (isPomoActive && pomoMode === 'focus') ? 'darken' : 'normal' } : {}}>
+
+                    <div 
+                        className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
+                        style={customBackground ? { backgroundImage: `url(${customBackground})`, backgroundBlendMode: (isPomoActive && pomoMode === 'focus') ? 'darken' : 'normal' } : {}}
+                    >
+                        {/* CANVAS STIKER */}
                         <div className="absolute inset-0 pointer-events-none z-40 flex justify-center">
                             <div id="sticker-canvas" className="w-full max-w-7xl h-full relative">
-                                {placedStickers.map(sticker => (<DraggableSticker key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} onFlip={updatePlacedStickerFlip} />))}
+                                {placedStickers.map(sticker => (
+                                    <DraggableSticker 
+                                        key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} onFlip={updatePlacedStickerFlip}
+                                    />
+                                ))}
                             </div>
                         </div>
                         
+                        {/* Arsip Editable */}
                         {isArchiveOpen && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsArchiveOpen(false)}></div>
@@ -585,7 +732,9 @@
                                                 <div key={archive.archiveId || archive.tornAt} className={`${archive.color} p-4 rounded-br-[2rem] shadow-md transform rotate-[-2deg] opacity-90 hover:opacity-100 transition-all group flex flex-col min-h-[150px]`}>
                                                     <div className="text-xs text-gray-600 dark:text-gray-500 mb-2 border-b border-black/10 dark:border-white/10 pb-1 flex justify-between items-center">
                                                         <span>Disobek: {new Date(archive.tornAt).toLocaleDateString('id-ID')}</span>
-                                                        <button onClick={() => deleteArchivedSticky(archive.archiveId || archive.tornAt)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity hover:scale-110" title="Hapus Permanen"><X size={14} /></button>
+                                                        <button onClick={() => deleteArchivedSticky(archive.archiveId || archive.tornAt)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity hover:scale-110" title="Hapus Permanen">
+                                                            <X size={14} />
+                                                        </button>
                                                     </div>
                                                     <input type="text" value={archive.title} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, e.target.value, archive.content)} className="font-bold text-gray-900 mb-2 bg-transparent outline-none w-full placeholder-gray-600" placeholder="Judul (Bisa diedit)..." />
                                                     <textarea value={archive.content} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, archive.title, e.target.value)} className="text-gray-900 whitespace-pre-wrap text-sm bg-transparent outline-none resize-none flex-1 hide-scrollbar placeholder-gray-600" placeholder="Isi catatan (Bisa diedit)..." />
@@ -603,11 +752,24 @@
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Beranda</span>
                                 </button>
+                                
+                                {/* Tombol Pomodoro */}
                                 <div className="flex flex-col items-center group relative pointer-events-auto">
-                                    <button onClick={togglePomodoro} className={`bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 hover:scale-110 transition-all duration-300 relative ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'ring-4 ring-red-400' : 'ring-4 ring-emerald-400') : (isPomoPaused ? 'ring-4 ring-yellow-400' : '')}`}><div className="text-2xl drop-shadow-md leading-none w-6 h-6 flex items-center justify-center">🍅</div></button>
-                                    {(isPomoActive || isPomoPaused) && (<button onClick={resetPomodoro} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" title="Reset Timer"><RotateCcw size={12} /></button>)}
-                                    <span className={`text-xs font-bold mt-2 px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm border border-white/50 dark:border-gray-700/50 transition-colors duration-300 ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : (isPomoPaused ? 'bg-yellow-400 text-gray-900' : 'bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400')}`}>{isPomoActive || isPomoPaused ? formatPomoDisplay() : "Timer"}</span>
+                                    <button onClick={togglePomodoro} className={`bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 hover:scale-110 transition-all duration-300 relative ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'ring-4 ring-red-400' : 'ring-4 ring-emerald-400') : (isPomoPaused ? 'ring-4 ring-yellow-400' : '')}`}>
+                                        <div className="text-2xl drop-shadow-md leading-none w-6 h-6 flex items-center justify-center">🍅</div>
+                                    </button>
+                                    
+                                    {(isPomoActive || isPomoPaused) && (
+                                        <button onClick={resetPomodoro} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" title="Reset Timer">
+                                            <RotateCcw size={12} />
+                                        </button>
+                                    )}
+
+                                    <span className={`text-xs font-bold mt-2 px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm border border-white/50 dark:border-gray-700/50 transition-colors duration-300 ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : (isPomoPaused ? 'bg-yellow-400 text-gray-900' : 'bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400')}`}>
+                                        {isPomoActive || isPomoPaused ? formatPomoDisplay() : "Timer"}
+                                    </span>
                                 </div>
+
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center group hidden sm:flex">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Sun size={24} className={isDarkMode ? "hidden" : "block text-yellow-500"} /><Moon size={24} className={isDarkMode ? "block text-blue-400" : "hidden"} /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Tema</span>
@@ -615,17 +777,28 @@
                                 <div className="flex flex-col items-center group hidden sm:flex relative">
                                     <label className="cursor-pointer bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform">
                                         <ImageIcon size={24} className="text-emerald-500 dark:text-emerald-400" />
-                                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files[0]; if(!file) return; const bg = await resizeImage(file, 1920, 0.6); setCustomBackground(bg); e.target.value = ''; }} />
+                                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                            const file = e.target.files[0]; if(!file) return;
+                                            const bg = await resizeImage(file, 1920, 0.6);
+                                            setCustomBackground(bg);
+                                            e.target.value = '';
+                                        }} />
                                     </label>
-                                    {customBackground && (<button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10" title="Hapus Background"><X size={10} /></button>)}
+                                    {customBackground && (
+                                        <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10" title="Hapus Background"><X size={10} /></button>
+                                    )}
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Background</span>
                                 </div>
                             </div>
+
                             <div className="flex flex-col items-center flex-1 px-4">
                                 <div className="bg-pink-200/80 dark:bg-pink-900/50 backdrop-blur-md px-6 py-3 md:px-12 md:py-4 rounded-3xl shadow-xl border border-pink-300 dark:border-pink-800 transform -rotate-2 hover:rotate-0 transition-transform duration-300 mb-4 text-center w-full max-w-md pointer-events-auto">
-                                    <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide truncate" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>{folderName}</h1>
+                                    <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide truncate" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
+                                        {folderName}
+                                    </h1>
                                 </div>
                             </div>
+                            
                             <div className="w-auto flex justify-end pt-2 pr-2 pointer-events-auto">
                                 <button onClick={() => setIsArchiveOpen(true)} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Archive size={24} className="text-purple-600 dark:text-purple-400" /></div>
@@ -637,7 +810,7 @@
                         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
+                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
                                     <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2"><Plus size={20}/> Kertas Baru</button>
                                 </div>
                             </div>
@@ -673,7 +846,7 @@
                                             </div>
                                             <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
                                                 {currentTasks.filter(t => t.status === col.id).map(task => (
-                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative cursor-grab active:cursor-grabbing`}>
                                                         <div className="flex flex-col gap-2">
                                                             <div className="flex items-start gap-2">
                                                                 {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
@@ -721,7 +894,7 @@
 
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
-                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />)}
+                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
                                 </div>
                             </div>
                         </div>
@@ -730,7 +903,7 @@
                         <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10 pointer-events-auto">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {stickies.map((sticky) => (
-                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} isAdmin={isAdmin} />
+                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
                             ))}
                             </div>
                             <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={20}/> Kertas Baru</button>
@@ -1003,10 +1176,10 @@
                                                 </div>
                                                 <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">
                                                     {AvatarComp ? <AvatarComp /> : <Avatars.boy />}
-                                                </div>
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                    );
+                                })}
                                 </div>
                             </div>
 
@@ -1042,7 +1215,7 @@
                                                 initialText={note.content} 
                                                 onUpdate={updateWeekendNote} 
                                                 onDelete={deleteWeekendNote}
-                                                onTear={() => deleteWeekendNote(note.id)} /* Tombol Refresh (Tear) akan menghapusnya dari daftar */
+                                                onTear={() => deleteWeekendNote(note.id)} 
                                             />
                                         ))
                                     )}
@@ -1180,7 +1353,7 @@
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
