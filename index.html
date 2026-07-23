@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Follow Up List & Folders</title>
-    <link rel="icon" type="image/x-icon" href="icon.png">
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -136,6 +136,13 @@
             <line x1="6" y1="15.5" x2="9" y2="15.5"></line>
             <line x1="14" y1="14.5" x2="17" y2="14.5"></line>
             <line x1="14" y1="16.5" x2="17" y2="16.5"></line>
+        </Icon>;
+
+        // Ikon Mesin Cetak (Garis Cetak)
+        const PrinterIcon = (p) => <Icon {...p}>
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
         </Icon>;
 
         // --- CUSTOM AVATAR SVGs ---
@@ -1115,6 +1122,17 @@
                                     title="Buka Hitung Compro"
                                 >
                                     <CalculatorIcon size={20} className="text-rose-500 dark:text-rose-400" />
+                                </a>
+
+                                {/* Tombol Link Garis Cetak */}
+                                <a 
+                                    href="https://gariscetak.vercel.app/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Garis Cetak"
+                                >
+                                    <PrinterIcon size={20} className="text-purple-500 dark:text-purple-400" />
                                 </a>
 
                                 <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
