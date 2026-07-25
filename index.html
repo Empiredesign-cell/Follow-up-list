@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Follow Up List & Folders</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+
+    <!-- Import Map untuk mengatasi error "react/jsx-runtime" -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+        }
+    }
+    </script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @keyframes tearOff {
+            0% { transform: rotate(0deg) translateY(0) scale(1); opacity: 1; transform-origin: top left; filter: drop-shadow(0 10px 8px rgb(0 0 0 / 0.04)); }
+            20% { transform: rotate(-5deg) translateY(10px) scale(1.05); filter: drop-shadow(0 20px 13px rgb(0 0 0 / 0.1)); }
+            100% { transform: rotate(-35deg) translateY(800px) scale(0.9); opacity: 0; filter: drop-shadow(0 0px 0px rgb(0 0 0 / 0)); }
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .sticky-tear-animation { animation: tearOff 0.8s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; pointer-events: none; z-index: 50; }
+        .pop-in-animation { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        
+        .glass-panel { background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07); transition: all 0.3s ease; }
+        .dark .glass-panel { background: rgba(31, 41, 55, 0.4); border: 1px solid rgba(75, 85, 99, 0.6); }
+        
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #a855f7; cursor: pointer; margin-top: -6px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #e5e7eb; border-radius: 2px; }
+        .dark input[type=range]::-webkit-slider-runnable-track { background: #4b5563; }
+        
+        .bg-cover-fixed { background-size: cover; background-position: center; background-attachment: fixed; background-repeat: no-repeat; }
+
+        .character-card:hover .character-img { transform: translateY(-15px) scale(1.05); }
+
+        .date-input-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+        .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
+
+        .mailbox-hover { transform: scale(1.2) rotate(-5deg); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        // IMPORT MODULES
+        import React, { useState, useEffect, useRef } from "react";
+        import { createRoot } from "react-dom/client";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- KONFIGURASI FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAS_LhW8Kgxb9amoDMsHkta-rnKu5RnYZI",
+            authDomain: "follow-up-list.firebaseapp.com",
+            projectId: "follow-up-list",
+            storageBucket: "follow-up-list.firebasestorage.app",
+            messagingSenderId: "1042244485783",
+            appId: "1:1042244485783:web:a75b4e272133965de05fd2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // --- IKON SVG ---
+        const Icon = ({ size = 24, className = "", children }) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
+        const X = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></Icon>;
+        const Plus = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+        const Minus = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12"></line></Icon>;
+        const RotateCcw = (p) => <Icon {...p}><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></Icon>;
+        const Trash2 = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></Icon>;
+        const Archive = (p) => <Icon {...p}><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></Icon>;
+        const ChevronLeft = (p) => <Icon {...p}><polyline points="15 18 9 12 15 6"></polyline></Icon>;
+        const ChevronRight = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6"></polyline></Icon>;
+        const Calendar = (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></Icon>;
+        const Sun = (p) => <Icon {...p}><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></Icon>;
+        const Moon = (p) => <Icon {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></Icon>;
+        const PenTool = (p) => <Icon {...p}><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></Icon>;
+        const GripVertical = (p) => <Icon {...p}><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></Icon>;
+        const Loader = (p) => <Icon className="animate-spin" {...p}><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></Icon>;
+        const HomeIcon = (p) => <Icon {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></Icon>;
+        const FlipIcon = (p) => <Icon {...p}><polyline points="9 18 3 12 9 6"></polyline><polyline points="15 6 21 12 15 18"></polyline><line x1="12" y1="4" x2="12" y2="20"></line></Icon>;
+        const ImageIcon = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></Icon>;
+        const EditIcon = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
+        const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
+        const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
+        const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
+        const LockIcon = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></Icon>;
+        const KeyIcon = (p) => <Icon {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></Icon>;
+        const PencilIcon = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></Icon>;
+        const SendIcon = (p) => <Icon {...p}><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></Icon>;
+        const ListIcon = (p) => <Icon {...p}><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></Icon>;
+        
+        // Ikon Buku Catatan (Notepad Hitung Nota)
+        const NotepadIcon = (p) => <Icon {...p}>
+            <rect x="5" y="5" width="14" height="17" rx="1"></rect>
+            <line x1="8" y1="3" x2="8" y2="7"></line>
+            <line x1="12" y1="3" x2="12" y2="7"></line>
+            <line x1="16" y1="3" x2="16" y2="7"></line>
+            <line x1="9" y1="11" x2="15" y2="11"></line>
+            <line x1="9" y1="15" x2="15" y2="15"></line>
+            <line x1="9" y1="19" x2="15" y2="19"></line>
+        </Icon>;
+
+        // Ikon Kalkulator Grid (Hitung Compro)
+        const CalculatorIcon = (p) => <Icon {...p}>
+            <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
+            <line x1="12" y1="3" x2="12" y2="21"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="6" y1="7.5" x2="9" y2="7.5"></line>
+            <line x1="14" y1="6" x2="17" y2="9"></line>
+            <line x1="14" y1="9" x2="17" y2="6"></line>
+            <line x1="7.5" y1="14" x2="7.5" y2="17"></line>
+            <line x1="6" y1="15.5" x2="9" y2="15.5"></line>
+            <line x1="14" y1="14.5" x2="17" y2="14.5"></line>
+            <line x1="14" y1="16.5" x2="17" y2="16.5"></line>
+        </Icon>;
+
+        // Ikon Mesin Cetak (Garis Cetak)
+        const PrinterIcon = (p) => <Icon {...p}>
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+        </Icon>;
+
+        // Ikon Ruang Pola (Pola Jaringan / Geometris)
+        const PatternIcon = (p) => <Icon {...p}>
+            <circle cx="12" cy="12" r="2"></circle>
+            <circle cx="5" cy="5" r="2"></circle>
+            <circle cx="19" cy="5" r="2"></circle>
+            <circle cx="5" cy="19" r="2"></circle>
+            <circle cx="19" cy="19" r="2"></circle>
+            <line x1="6.5" y1="6.5" x2="10.5" y2="10.5"></line>
+            <line x1="17.5" y1="6.5" x2="13.5" y2="10.5"></line>
+            <line x1="6.5" y1="17.5" x2="10.5" y2="13.5"></line>
+            <line x1="17.5" y1="17.5" x2="13.5" y2="13.5"></line>
+        </Icon>;
+
+        // --- CUSTOM AVATAR SVGs ---
+        const Avatars = {
+            'boy': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 20 45 Q 20 20 50 15 Q 80 20 80 45 Q 85 60 70 50 Q 50 30 30 50 Q 15 60 20 45 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'red-helmet': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 55 A 35 35 0 0 1 85 55 L 80 65 L 20 65 Z" fill="#ef4444" /><path d="M 40 15 L 50 25 L 60 15 Z" fill="#ffffff" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'tv-head': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><rect x="20" y="20" width="60" height="60" rx="15" fill="#ef4444" /><rect x="30" y="30" width="40" height="40" rx="8" fill="#ffffff" /><circle cx="42" cy="45" r="4" fill="#1f2937" /><circle cx="58" cy="45" r="4" fill="#1f2937" /><path d="M 45 55 Q 50 60 55 55" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><path d="M 85 30 L 85 50" stroke="#1f2937" strokeWidth="4" strokeLinecap="round" /></svg>),
+            'space': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="50" r="40" fill="#e0e7ff" /><circle cx="50" cy="55" r="30" fill="#818cf8" /><circle cx="50" cy="55" r="25" fill="#ffcdb2" /><circle cx="40" cy="55" r="4" fill="#1f2937" /><circle cx="60" cy="55" r="4" fill="#1f2937" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'goggles': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 18 50 Q 50 10 82 50 L 75 60 Q 50 20 25 60 Z" fill="#4b5563" /><circle cx="35" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="65" cy="40" r="12" fill="#f3f4f6" stroke="#1f2937" strokeWidth="3"/><circle cx="40" cy="60" r="3" fill="#1f2937" /><circle cx="60" cy="60" r="3" fill="#1f2937" /><path d="M 46 70 Q 50 75 54 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'green-visor': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><path d="M 15 50 C 15 20 85 20 85 50 L 80 50 C 80 30 20 30 20 50 Z" fill="#10b981" /><rect x="25" y="25" width="50" height="20" rx="10" fill="#a7f3d0" opacity="0.8"/><circle cx="38" cy="60" r="4" fill="#1f2937" /><circle cx="62" cy="60" r="4" fill="#1f2937" /><path d="M 45 70 Q 50 75 55 70" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'girl-bun': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#ffcdb2" /><circle cx="50" cy="18" r="16" fill="#1f2937" /><path d="M 20 55 C 20 15 80 15 80 55 C 70 15 30 15 20 55 Z" fill="#1f2937" /><circle cx="38" cy="55" r="4" fill="#1f2937" /><circle cx="62" cy="55" r="4" fill="#1f2937" /><path d="M 33 51 L 37 54 M 67 51 L 63 54" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><path d="M 45 65 Q 50 70 55 65" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /></svg>),
+            'hijab': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 30 C 20 10 80 10 75 30 C 90 70 85 90 50 95 C 15 90 10 70 25 30 Z" fill="#c084fc" /><circle cx="50" cy="45" r="22" fill="#ffcdb2" /><circle cx="43" cy="45" r="3" fill="#1f2937" /><circle cx="57" cy="45" r="3" fill="#1f2937" /><path d="M 47 55 Q 50 58 53 55" stroke="#1f2937" strokeWidth="2.5" strokeLinecap="round" fill="none" /><path d="M 28 45 C 28 65 72 65 72 45 C 72 20 28 20 28 45" fill="none" stroke="#a855f7" strokeWidth="6" /></svg>),
+            'monster-green': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 50 Q 25 15 50 15 Q 75 15 75 50 Q 80 85 50 85 Q 20 85 25 50 Z" fill="#22c55e" /><path d="M 35 25 L 25 5 L 45 20 Z M 65 25 L 75 5 L 55 20 Z" fill="#bef264" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="14" fill="#ffffff" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="5" fill="#1f2937" /><circle cx="53" cy="42" r="2" fill="#ffffff" /><path d="M 38 65 Q 50 75 62 65" stroke="#15803d" strokeWidth="4" strokeLinecap="round" fill="none" /><path d="M 47 67 L 50 74 L 53 67 Z" fill="#ffffff" /></svg>),
+            'cat-cute': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 45 L 15 15 L 45 35 Z M 75 45 L 85 15 L 55 35 Z" fill="#fca5a5" stroke="#1f2937" strokeWidth="4" strokeLinejoin="round" /><ellipse cx="50" cy="55" rx="35" ry="28" fill="#ffffff" stroke="#1f2937" strokeWidth="4" /><circle cx="38" cy="50" r="4" fill="#1f2937" /><circle cx="62" cy="50" r="4" fill="#1f2937" /><path d="M 45 60 Q 50 65 55 60" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><line x1="10" y1="50" x2="25" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="10" y1="60" x2="25" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="50" x2="75" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="60" x2="75" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /></svg>),
+            'robot': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><line x1="50" y1="30" x2="50" y2="10" stroke="#6b7280" strokeWidth="4" /><circle cx="50" cy="10" r="5" fill="#ef4444" /><rect x="25" y="30" width="50" height="45" rx="8" fill="#9ca3af" stroke="#374151" strokeWidth="4" /><rect x="32" y="38" width="36" height="20" rx="4" fill="#10b981" /><circle cx="42" cy="48" r="3" fill="#ffffff" /><circle cx="58" cy="48" r="3" fill="#ffffff" /><line x1="40" y1="65" x2="60" y2="65" stroke="#374151" strokeWidth="3" strokeLinecap="round" /></svg>),
+            'ninja': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#1f2937" /><path d="M 25 45 Q 50 55 75 45 L 75 60 Q 50 70 25 60 Z" fill="#ffcdb2" /><circle cx="40" cy="54" r="4" fill="#1f2937" /><circle cx="60" cy="54" r="4" fill="#1f2937" /><path d="M 15 50 Q 5 60 10 70 Q 20 60 20 50 Z" fill="#ef4444" /><path d="M 22 45 Q 50 52 78 45 L 80 52 Q 50 60 20 52 Z" fill="#ef4444" /></svg>)
+        };
+
+        const Gradients = [
+            { id: 'yellow', classes: 'from-amber-400 to-orange-500' },
+            { id: 'pink', classes: 'from-rose-400 to-pink-500' },
+            { id: 'cyan', classes: 'from-cyan-400 to-blue-500' },
+            { id: 'emerald', classes: 'from-emerald-400 to-teal-500' },
+            { id: 'purple', classes: 'from-purple-400 to-indigo-500' },
+            { id: 'red', classes: 'from-red-400 to-rose-600' },
+            { id: 'indigo', classes: 'from-indigo-400 to-blue-700' },
+            { id: 'fuchsia', classes: 'from-fuchsia-400 to-purple-600' },
+            { id: 'lime', classes: 'from-lime-400 to-green-500' },
+            { id: 'sky', classes: 'from-sky-300 to-cyan-500' },
+            { id: 'dark', classes: 'from-gray-700 to-gray-900' }
+        ];
+
+        // --- HELPERS TANGGAL & WAKTU ---
+        const getTodayKey = () => {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        };
+        const formatDateDisplay = (dateStr) => {
+            if (!dateStr) return '';
+            return new Date(dateStr).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        };
+        
+        // Logika warna cerdas berdasarkan Jam secara Real-Time
+        const getDueDateColor = (dueDateStr, currentTimestamp) => {
+            if (!dueDateStr) return "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 border-gray-200 dark:border-gray-600 bg-white/50 dark:bg-gray-800/50";
+            const dueDate = new Date(dueDateStr).getTime();
+            const diffTime = dueDate - currentTimestamp;
+            
+            if (diffTime < 0) return "text-red-600 border-red-300 bg-red-50 dark:bg-red-900/40 dark:border-red-800/50"; 
+            if (diffTime < 24 * 60 * 60 * 1000) return "text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/40 dark:border-amber-800/50"; 
+            return "text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 dark:border-emerald-800/50"; 
+        };
+
+        const formatShortDateTime = (dateStr) => {
+            if (!dateStr) return "Batas waktu...";
+            const d = new Date(dateStr);
+            return `${d.getDate()} ${d.toLocaleString('id-ID', { month: 'short' })} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+
+        const resizeImage = (file, maxSize = 150, quality = 0.8) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width; let height = img.height;
+                        if (width > height) { if (width > maxSize) { height *= maxSize / width; width = maxSize; } } 
+                        else { if (height > maxSize) { width *= maxSize / height; height = maxSize; } }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const mimeType = maxSize > 500 ? 'image/jpeg' : 'image/png';
+                        resolve(canvas.toDataURL(mimeType, quality));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
+        // --- KOMPONEN STEMPEL ---
+        const DraggableSticker = ({ sticker, onMove, onDelete, onResize, onFlip }) => {
+            const [pos, setPos] = useState(() => {
+                let x = sticker.x; let y = sticker.y;
+                if (sticker.isPercent && !sticker.isPercentX) y = (sticker.y / 100) * Math.max(1000, document.documentElement.scrollHeight);
+                if (!sticker.isPercent && !sticker.isPercentX) x = 50;
+                return { x, y };
+            });
+            const [isDragging, setIsDragging] = useState(false);
+            const dragInfo = useRef({ startX: 0, startY: 0, origX: 0, origY: 0 });
+            
+            const scale = sticker.scale || 1;
+            const isFlipped = sticker.flipX || false;
+
+            const handlePointerDown = (e) => {
+                e.preventDefault(); 
+                setIsDragging(true);
+                dragInfo.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+            };
+
+            useEffect(() => {
+                const handlePointerMove = (e) => {
+                    if (!isDragging) return;
+                    const container = document.getElementById('sticker-canvas');
+                    if (!container) return;
+                    const dx = e.clientX - dragInfo.current.startX;
+                    const dy = e.clientY - dragInfo.current.startY;
+                    const rect = container.getBoundingClientRect();
+                    const dxPct = (dx / rect.width) * 100;
+                    setPos({ x: dragInfo.current.origX + dxPct, y: dragInfo.current.origY + dy });
+                };
+                const handlePointerUp = () => { if (isDragging) { setIsDragging(false); onMove(sticker.id, pos.x, pos.y, { isPercentX: true, isPixelY: true }); } };
+                if (isDragging) {
+                    window.addEventListener('pointermove', handlePointerMove);
+                    window.addEventListener('pointerup', handlePointerUp);
+                }
+                return () => { window.removeEventListener('pointermove', handlePointerMove); window.removeEventListener('pointerup', handlePointerUp); };
+            }, [isDragging, pos, sticker.id, onMove]);
+
+            return (
+                <div style={{ left: `${pos.x}%`, top: `${pos.y}px`, position: 'absolute', transform: 'translate(-50%, -50%)' }} className="cursor-move group z-40 pop-in-animation touch-none flex flex-col items-center justify-center pointer-events-auto" onPointerDown={handlePointerDown}>
+                    <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-600 z-50" onPointerDown={(e) => e.stopPropagation()}>
+                        <input type="range" min="0.3" max="3" step="0.1" value={scale} onChange={(e) => onResize(sticker.id, parseFloat(e.target.value))} className="w-20 md:w-24 outline-none" title="Atur Ukuran"/>
+                        <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                        <button onClick={(e) => { e.stopPropagation(); onFlip(sticker.id, !isFlipped); }} className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-full text-purple-600 dark:text-purple-400 transition-colors" title="Balik Stiker (Mirror)"><FlipIcon size={16}/></button>
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(sticker.id); }} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-500 rounded-full transition-colors" title="Hapus"><X size={16} /></button>
+                    </div>
+                    <div style={{ transform: `rotate(${sticker.rotation || 0}deg) scaleX(${isFlipped ? -1 : 1})` }} className="relative flex justify-center items-center transition-transform duration-200">
+                        {sticker.type === 'image' ? (
+                            <img src={sticker.content} style={{ width: `${80 * scale}px`, height: `${80 * scale}px` }} className="object-contain pointer-events-none drop-shadow-md select-none transition-all duration-100" draggable="false" />
+                        ) : (
+                            <span style={{ fontSize: `${48 * scale}px`, lineHeight: 1 }} className="pointer-events-none select-none drop-shadow-md block transition-all duration-100">{sticker.content}</span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- KOMPONEN STICKY NOTE CERDAS ---
+        const TearableStickyNote = ({ id, initialColor, initialTitle, initialText, onUpdate, onTear, onDelete }) => {
+            const [isTearing, setIsTearing] = useState(false);
+            const [content, setContent] = useState(initialText);
+            const [title, setTitle] = useState(initialTitle);
+            const [isEditing, setIsEditing] = useState(false);
+            const noteRef = useRef(null);
+
+            useEffect(() => { setContent(initialText); }, [initialText]);
+            useEffect(() => { setTitle(initialTitle); }, [initialTitle]);
+
+            const handleTear = () => {
+                if (!title && !content) return;
+                setIsTearing(true);
+                if (onTear) {
+                    onTear({ archiveId: Date.now().toString() + Math.random(), title, content, color: initialColor, tornAt: new Date().toISOString() });
+                    setTimeout(() => { setContent(''); setTitle(''); setIsTearing(false); onUpdate(id, '', ''); }, 800);
+                } else {
+                    onDelete(id);
+                }
+            };
+            const handleChange = (e) => { setContent(e.target.value); onUpdate(id, title, e.target.value); };
+            const handleTitleChange = (e) => { setTitle(e.target.value); onUpdate(id, e.target.value, content); };
+
+            const handleDragStart = (e) => {
+                // Semua orang bisa nge-drag
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'sticky',
+                    id: id,
+                    title: title,
+                    content: content,
+                    color: initialColor
+                }));
+            };
+
+            const renderContent = () => {
+                if (!content) return <span className="text-gray-600 font-medium">Ketik "- " untuk membuat ceklis...</span>;
+                
+                const lines = content.split('\n');
+                return lines.map((line, i) => {
+                    const trimmedLine = line.trim();
+                    const isChecked = trimmedLine.startsWith('[x] ');
+                    const isUnchecked = trimmedLine.startsWith('[ ] ') || trimmedLine.startsWith('- ');
+                    const isList = isChecked || isUnchecked;
+                    
+                    const text = isList ? line.replace(/^\s*(\[x\] |\[ \] |- )/, '') : line;
+
+                    const toggleCheck = (e) => {
+                        e.stopPropagation(); 
+                        const newLines = [...lines];
+                        const leadingSpace = line.match(/^\s*/)[0]; 
+                        if (isChecked) { newLines[i] = leadingSpace + '- ' + text; } 
+                        else { newLines[i] = leadingSpace + '[x] ' + text; }
+                        const newContent = newLines.join('\n');
+                        setContent(newContent);
+                        onUpdate(id, title, newContent);
+                    }
+
+                    if (isList) {
+                        return (
+                            <div key={i} className="flex items-start gap-2 mb-1.5 group/list">
+                                <button onClick={toggleCheck} className="mt-0.5 flex-shrink-0 opacity-80 hover:opacity-100 hover:scale-110 transition-transform focus:outline-none z-10 relative">
+                                    {isChecked ? <CheckSquare size={16} className="text-emerald-700"/> : <Square size={16} className="text-gray-700"/>}
+                                </button>
+                                <span className={`flex-1 break-words leading-tight ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 font-medium'}`}>{text}</span>
+                            </div>
+                        )
+                    }
+                    return <div key={i} className="mb-1 text-gray-900 font-medium min-h-[1.5rem] break-words whitespace-pre-wrap">{line}</div>
+                });
+            };
+
+            return (
+                <div className="relative mb-6">
+                    {isTearing && (
+                        <div className={`absolute inset-0 ${initialColor} shadow-md rounded-br-3xl p-4 flex flex-col z-0 opacity-50`}>
+                            <div className="font-bold text-gray-900 mb-2">{title}</div>
+                            <div className="flex-1 border-dashed border-2 border-gray-400 rounded"></div>
+                        </div>
+                    )}
+                    <div 
+                        ref={noteRef} 
+                        draggable={!isEditing} 
+                        onDragStart={handleDragStart}
+                        className={`${initialColor} shadow-lg hover:shadow-xl transition-all duration-300 rounded-br-[2rem] p-4 flex flex-col min-h-[200px] relative z-10 group ${isTearing ? 'sticky-tear-animation' : ''} ${!isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    >
+                        <div className="absolute bottom-0 right-0 w-8 h-8 bg-black/10 rounded-tl-[2rem] rounded-br-[2rem]"></div>
+                        <button onClick={() => onDelete(id)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:bg-red-600 z-20"><X size={14} /></button>
+                        <div className="flex justify-between items-center mb-2 border-b border-gray-400/30 pb-2">
+                            <input type="text" value={title} onChange={handleTitleChange} className="font-bold text-gray-900 bg-transparent outline-none w-full placeholder-gray-600 cursor-text" placeholder="Judul..."/>
+                            <button onClick={handleTear} title={onTear ? "Sobek & Simpan di Arsip!" : "Hapus Catatan!"} className="text-gray-600 hover:text-red-600 transition-colors p-1 rounded-full hover:bg-black/10"><RotateCcw size={16} /></button>
+                        </div>
+                        
+                        <div className="flex-1 w-full relative flex flex-col mt-2">
+                            {isEditing ? (
+                                <textarea 
+                                    autoFocus
+                                    value={content} 
+                                    onChange={handleChange} 
+                                    onBlur={() => setIsEditing(false)}
+                                    className="absolute inset-0 w-full h-full bg-transparent outline-none resize-none text-gray-900 font-medium leading-relaxed hide-scrollbar placeholder-gray-600 cursor-text" 
+                                    placeholder="Ketik '- ' lalu spasi untuk membuat ceklis..."
+                                />
+                            ) : (
+                                <div 
+                                    className="absolute inset-0 w-full h-full overflow-y-auto hide-scrollbar cursor-text text-sm"
+                                    onClick={() => setIsEditing(true)}
+                                >
+                                    {renderContent()}
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
+        // ==========================================
+        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
+            const todayKey = getTodayKey();
+            const [isDataReady, setIsDataReady] = useState(false);
+            const [currentTime, setCurrentTime] = useState(Date.now());
+            
+            const [tasksHistory, setTasksHistory] = useState({ [todayKey]: [] });
+            const [viewDate, setViewDate] = useState(todayKey);
+            const [stickies, setStickies] = useState([
+                { id: 's1', color: 'bg-yellow-200', title: '', content: '' },
+                { id: 's2', color: 'bg-rose-200', title: '', content: '' }
+            ]);
+            const [archivedStickies, setArchivedStickies] = useState([]);
+            const [customStickersRepo, setCustomStickersRepo] = useState([]);
+            const [placedStickers, setPlacedStickers] = useState([]);
+            const [customBackground, setCustomBackground] = useState(null); 
+            const [columnNames, setColumnNames] = useState({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
+
+            // --- STATE UNTUK POMODORO TIMER ---
+            const [isPomoActive, setIsPomoActive] = useState(false);
+            const [isPomoPaused, setIsPomoPaused] = useState(false);
+            const [pomoMode, setPomoMode] = useState('focus'); // 'focus' atau 'break'
+            const [pomoTimeLeft, setPomoTimeLeft] = useState(25 * 60); // 25 Menit dalam detik
+            
+            // --- STATE UNTUK KOTAK SURAT (MAILBOX) ---
+            const [availableFolders, setAvailableFolders] = useState([]);
+            const [isMailboxHovered, setIsMailboxHovered] = useState(false);
+            const [isMailboxModalOpen, setIsMailboxModalOpen] = useState(false);
+            const [mailboxTargetItem, setMailboxTargetItem] = useState(null);
+            const [selectedTargetFolder, setSelectedTargetFolder] = useState('');
+
+            const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+            const [newTaskInput, setNewTaskInput] = useState('');
+            const [draggedTaskId, setDraggedTaskId] = useState(null);
+
+            const [editingTaskId, setEditingTaskId] = useState(null);
+            const [editingTaskContent, setEditingTaskContent] = useState('');
+            const [editingColumnId, setEditingColumnId] = useState(null);
+            const [editingColumnName, setEditingColumnName] = useState('');
+
+            const defaultStickers = [
+                { id: 'd1', type: 'emoji', content: '❤️' }, { id: 'd2', type: 'emoji', content: '👍' },
+                { id: 'd3', type: 'emoji', content: '🔥' }, { id: 'd4', type: 'emoji', content: '✨' },
+                { id: 'd5', type: 'emoji', content: '😂' }, { id: 'd6', type: 'emoji', content: '📌' }, { id: 'd7', type: 'emoji', content: '👀' },
+            ];
+
+            useEffect(() => {
+                const interval = setInterval(() => setCurrentTime(Date.now()), 60000); 
+                return () => clearInterval(interval);
+            }, []);
+
+            // POMODORO TIMER TICKER
+            useEffect(() => {
+                let interval = null;
+                if (isPomoActive && !isPomoPaused && pomoTimeLeft > 0) {
+                    interval = setInterval(() => setPomoTimeLeft(t => t - 1), 1000);
+                } else if (isPomoActive && !isPomoPaused && pomoTimeLeft === 0) {
+                    // Waktu Habis! Putar Suara Alarm
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log("Audio block", e));
+                    
+                    if (pomoMode === 'focus') {
+                        setPomoMode('break');
+                        setPomoTimeLeft(5 * 60); // Istirahat 5 Menit
+                    } else {
+                        setIsPomoActive(false);
+                        setPomoMode('focus');
+                        setPomoTimeLeft(25 * 60);
+                    }
+                }
+                return () => clearInterval(interval);
+            }, [isPomoActive, isPomoPaused, pomoTimeLeft, pomoMode]);
+
+            const togglePomodoro = () => {
+                if (!isPomoActive) {
+                    setIsPomoActive(true);
+                    setIsPomoPaused(false);
+                    setPomoMode('focus');
+                    setPomoTimeLeft(25 * 60);
+                } else {
+                    setIsPomoPaused(!isPomoPaused);
+                }
+            };
+
+            const resetPomodoro = (e) => {
+                e.stopPropagation();
+                setIsPomoActive(false);
+                setIsPomoPaused(false);
+                setPomoMode('focus');
+                setPomoTimeLeft(25 * 60);
+            };
+
+            const formatPomoDisplay = () => {
+                const m = Math.floor(pomoTimeLeft / 60).toString().padStart(2, '0');
+                const s = (pomoTimeLeft % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            };
+
+            // FETCH DATA FOLDER SAAT INI
+            useEffect(() => {
+                const stateRef = doc(db, 'workspace_data', folderId); 
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.tasksHistory) setTasksHistory(JSON.parse(data.tasksHistory));
+                        if (data.stickies) setStickies(JSON.parse(data.stickies));
+                        if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
+                        if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
+                        if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
+                        if (data.columnNames) setColumnNames(JSON.parse(data.columnNames));
+                        if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
+                    }
+                    setIsDataReady(true);
+                }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
+                return () => unsubscribe();
+            }, [folderId]);
+
+            // FETCH LIST FOLDER (Untuk Kotak Surat)
+            useEffect(() => {
+                const q = query(collection(db, 'folders'));
+                const unsub = onSnapshot(q, (snap) => {
+                    const f = [];
+                    snap.forEach(doc => { 
+                        if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name });
+                    });
+                    setAvailableFolders(f);
+                });
+                return () => unsub();
+            }, [folderId]);
+
+            useEffect(() => {
+                if (!isDataReady) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'workspace_data', folderId);
+                    const payload = {
+                        tasksHistory: JSON.stringify(tasksHistory), stickies: JSON.stringify(stickies),
+                        archivedStickies: JSON.stringify(archivedStickies), customStickersRepo: JSON.stringify(customStickersRepo),
+                        placedStickers: JSON.stringify(placedStickers), columnNames: JSON.stringify(columnNames),
+                        customBackground: customBackground || null
+                    };
+                    try { await setDoc(stateRef, payload, { merge: true }); } catch (err) { console.error("Gagal menyimpan data:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, columnNames, customBackground, isDataReady, folderId]);
+
+            useEffect(() => {
+                if (!isDataReady) return; 
+                const checkAndShiftDay = () => {
+                    setTasksHistory(prevHistory => {
+                        const historyKeys = Object.keys(prevHistory).sort();
+                        if (!prevHistory[todayKey]) {
+                            const lastDateKey = historyKeys[historyKeys.length - 1];
+                            let carryOverTasks = [];
+                            if (lastDateKey && prevHistory[lastDateKey]) {
+                                carryOverTasks = prevHistory[lastDateKey].filter(task => task.status !== 'done').map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
+                            }
+                            return { ...prevHistory, [todayKey]: carryOverTasks };
+                        }
+                        return prevHistory;
+                    });
+                    setViewDate(todayKey);
+                };
+                checkAndShiftDay();
+            }, [todayKey, isDataReady]);
+
+            if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
+
+            // LOGIKA KOTAK SURAT (MAILBOX)
+            const handleMailboxDrop = (e) => {
+                e.preventDefault();
+                setIsMailboxHovered(false);
+                const dataStr = e.dataTransfer.getData('application/json');
+                if (dataStr) {
+                    const data = JSON.parse(dataStr);
+                    setMailboxTargetItem(data);
+                    setIsMailboxModalOpen(true);
+                }
+            };
+
+            const executeMailboxMove = async () => {
+                if (!selectedTargetFolder || !mailboxTargetItem) return;
+                
+                // 1. Hapus dari folder saat ini
+                if (mailboxTargetItem.type === 'task') {
+                    deleteTask(mailboxTargetItem.id);
+                } else if (mailboxTargetItem.type === 'sticky') {
+                    deleteSticky(mailboxTargetItem.id);
+                }
+
+                // 2. Tambahkan ke folder target via Firebase API langsung
+                const targetRef = doc(db, 'workspace_data', selectedTargetFolder);
+                const snap = await getDoc(targetRef);
+                let targetData = snap.exists() ? snap.data() : {};
+                
+                if (mailboxTargetItem.type === 'task') {
+                    const history = targetData.tasksHistory ? JSON.parse(targetData.tasksHistory) : {};
+                    const today = getTodayKey(); // Kirim ke hari ini di folder target
+                    if (!history[today]) history[today] = [];
+                    history[today].unshift({
+                        id: `moved-${Date.now()}`,
+                        content: mailboxTargetItem.content,
+                        status: 'todo', // Selalu masuk ke kolom To Do agar tim lain notice
+                        dueDate: mailboxTargetItem.dueDate
+                    });
+                    await setDoc(targetRef, { tasksHistory: JSON.stringify(history) }, { merge: true });
+                } else if (mailboxTargetItem.type === 'sticky') {
+                    const sticks = targetData.stickies ? JSON.parse(targetData.stickies) : [];
+                    sticks.push({
+                        id: `moved-${Date.now()}`,
+                        color: mailboxTargetItem.color,
+                        title: mailboxTargetItem.title,
+                        content: mailboxTargetItem.content
+                    });
+                    await setDoc(targetRef, { stickies: JSON.stringify(sticks) }, { merge: true });
+                }
+                
+                // Reset Modal
+                setIsMailboxModalOpen(false);
+                setMailboxTargetItem(null);
+                setSelectedTargetFolder('');
+            };
+
+            const handleUploadSticker = async (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const resizedBase64 = await resizeImage(file);
+                setCustomStickersRepo(prev => [...(prev || []), { id: `custom-${Date.now()}`, type: 'image', content: resizedBase64 }]);
+                e.target.value = ''; 
+            };
+            
+            const spawnSticker = (stickerTemplate) => {
+                const container = document.getElementById('sticker-canvas');
+                const rect = container ? container.getBoundingClientRect() : { top: 0 };
+                const scrollY = -rect.top;
+                const viewportCenterY = window.innerHeight / 2;
+                setPlacedStickers(prev => [...(prev || []), {
+                    id: `placed-${Date.now()}-${Math.random()}`, type: stickerTemplate.type, content: stickerTemplate.content,
+                    x: 50 + (Math.random() * 10 - 5), y: scrollY + viewportCenterY + (Math.random() * 40 - 20),
+                    isPercentX: true, isPixelY: true, rotation: Math.random() * 20 - 10, scale: 1, flipX: false
+                }]);
+            };
+            
+            const updatePlacedStickerPosition = (id, newX, newY, flags = {}) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, x: newX, y: newY, ...flags } : s));
+            const updatePlacedStickerScale = (id, newScale) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, scale: newScale } : s));
+            const updatePlacedStickerFlip = (id, newFlip) => setPlacedStickers(prev => prev.map(s => s.id === id ? { ...s, flipX: newFlip } : s));
+            const deletePlacedSticker = (id) => setPlacedStickers(prev => prev.filter(s => s.id !== id));
+            const deleteCustomStickerRepo = (id, e) => { e.stopPropagation(); setCustomStickersRepo(prev => prev.filter(s => s.id !== id)); }
+
+            const currentTasks = tasksHistory[viewDate] || [];
+            
+            // Drag untuk Pindah Kolom (Task) ATAU Kotak Surat
+            const handleDragStart = (e, task) => { 
+                setDraggedTaskId(task.id); 
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'task', id: task.id, content: task.content, status: task.status, dueDate: task.dueDate
+                }));
+                setTimeout(() => { e.target.style.opacity = '0.4'; }, 0); 
+            };
+            const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
+            const handleDragOver = (e) => e.preventDefault();
+            const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
+            
+            const addTask = (e) => { 
+                e.preventDefault(); 
+                if (!newTaskInput.trim()) return; 
+                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
+                setNewTaskInput(''); 
+            };
+            const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
+            const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+            
+            const startEditingTask = (task) => { setEditingTaskId(task.id); setEditingTaskContent(task.content); };
+            const saveEditingTask = () => {
+                if (editingTaskContent.trim()) { setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content: editingTaskContent.trim() } : t) })); }
+                setEditingTaskId(null);
+            };
+
+            const startEditingColumn = (colId, currentName) => { setEditingColumnId(colId); setEditingColumnName(currentName); };
+            const saveEditingColumn = () => {
+                if (editingColumnName.trim()) { setColumnNames(prev => ({ ...prev, [editingColumnId]: editingColumnName.trim() })); }
+                setEditingColumnId(null);
+            };
+
+            const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
+            const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
+
+            const updateSticky = (id, title, content) => setStickies(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
+            const archiveSticky = (stickyData) => setArchivedStickies(prev => [stickyData, ...(prev || [])]);
+            const deleteSticky = (id) => setStickies(prev => prev.filter(s => s.id !== id));
+            const addSticky = () => {
+                const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
+                setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]);
+            };
+            const updateArchivedSticky = (archiveId, title, content) => { setArchivedStickies(prev => prev.map(a => (a.archiveId || a.tornAt) === archiveId ? { ...a, title, content } : a)); };
+            const deleteArchivedSticky = (archiveId) => { if(window.confirm("Hapus kertas dari arsip selamanya?")) { setArchivedStickies(prev => prev.filter(a => (a.archiveId || a.tornAt) !== archiveId)); } };
+
+            const columns = [
+                { id: 'todo', stateId: 'todo', defaultTitle: 'To Do', color: 'bg-amber-100 dark:bg-amber-900/40', borderColor: 'border-amber-400 dark:border-amber-600', textColor: 'text-amber-800 dark:text-amber-200' },
+                { id: 'in-progress', stateId: 'inProgress', defaultTitle: 'In Progress', color: 'bg-sky-100 dark:bg-sky-900/40', borderColor: 'border-sky-400 dark:border-sky-600', textColor: 'text-sky-800 dark:text-sky-200' },
+                { id: 'done', stateId: 'done', defaultTitle: 'Done', color: 'bg-emerald-100 dark:bg-emerald-900/40', borderColor: 'border-emerald-400 dark:border-emerald-600', textColor: 'text-emerald-800 dark:text-emerald-200' }
+            ];
+
+            return (
+                <div className={isDarkMode ? 'dark' : ''}>
+                    {/* DIMMING OVERLAY POMODORO */}
+                    <div className={`fixed inset-0 bg-black transition-opacity duration-1000 z-0 pointer-events-none ${isPomoActive && pomoMode === 'focus' ? 'opacity-50' : 'opacity-0'}`}></div>
+
+                    <div 
+                        className={`min-h-screen bg-gradient-to-br from-[#d4f0df] via-[#e2ddf8] to-[#d4f0df] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 font-sans pb-8 overflow-x-hidden relative transition-colors duration-500 text-gray-800 dark:text-gray-200 ${customBackground ? 'bg-cover-fixed' : ''}`}
+                        style={customBackground ? { backgroundImage: `url(${customBackground})`, backgroundBlendMode: (isPomoActive && pomoMode === 'focus') ? 'darken' : 'normal' } : {}}
+                    >
+                        {/* CANVAS STIKER */}
+                        <div className="absolute inset-0 pointer-events-none z-40 flex justify-center">
+                            <div id="sticker-canvas" className="w-full max-w-7xl h-full relative">
+                                {placedStickers.map(sticker => (
+                                    <DraggableSticker 
+                                        key={sticker.id} sticker={sticker} onMove={updatePlacedStickerPosition} onDelete={deletePlacedSticker} onResize={updatePlacedStickerScale} onFlip={updatePlacedStickerFlip}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Arsip Editable */}
+                        {isArchiveOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsArchiveOpen(false)}></div>
+                                <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md w-full max-w-4xl max-h-[80vh] rounded-3xl shadow-2xl relative flex flex-col z-10 border border-white dark:border-gray-700 pop-in-animation pointer-events-auto">
+                                    <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50 rounded-t-3xl">
+                                        <h2 className="text-2xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100"><Archive className="text-purple-500 dark:text-purple-400"/> Arsip Kertas</h2>
+                                        <button onClick={() => setIsArchiveOpen(false)} className="p-2 bg-gray-200 dark:bg-gray-700 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 hover:text-red-600 dark:hover:text-red-400"><X size={20} /></button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto flex-1 hide-scrollbar">
+                                        {archivedStickies.length === 0 ? <div className="text-center text-gray-500 py-10">Belum ada kertas yang disobek.</div> : 
+                                        (<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            {archivedStickies.map((archive, i) => (
+                                                <div key={archive.archiveId || archive.tornAt} className={`${archive.color} p-4 rounded-br-[2rem] shadow-md transform rotate-[-2deg] opacity-90 hover:opacity-100 transition-all group flex flex-col min-h-[150px]`}>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-500 mb-2 border-b border-black/10 dark:border-white/10 pb-1 flex justify-between items-center">
+                                                        <span>Disobek: {new Date(archive.tornAt).toLocaleDateString('id-ID')}</span>
+                                                        <button onClick={() => deleteArchivedSticky(archive.archiveId || archive.tornAt)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity hover:scale-110" title="Hapus Permanen">
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                    <input type="text" value={archive.title} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, e.target.value, archive.content)} className="font-bold text-gray-900 mb-2 bg-transparent outline-none w-full placeholder-gray-600" placeholder="Judul (Bisa diedit)..." />
+                                                    <textarea value={archive.content} onChange={(e) => updateArchivedSticky(archive.archiveId || archive.tornAt, archive.title, e.target.value)} className="text-gray-900 whitespace-pre-wrap text-sm bg-transparent outline-none resize-none flex-1 hide-scrollbar placeholder-gray-600" placeholder="Isi catatan (Bisa diedit)..." />
+                                                </div>
+                                            ))}
+                                        </div>)}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-between items-start mb-6 relative z-10 max-w-7xl mx-auto w-full pt-6 px-4">
+                            <div className="w-auto flex justify-start pt-2 pl-2 gap-3 pointer-events-auto">
+                                <button onClick={onBack} className="flex flex-col items-center group">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Beranda</span>
+                                </button>
+                                
+                                {/* Tombol Pomodoro */}
+                                <div className="flex flex-col items-center group relative pointer-events-auto">
+                                    <button onClick={togglePomodoro} className={`bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 hover:scale-110 transition-all duration-300 relative ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'ring-4 ring-red-400' : 'ring-4 ring-emerald-400') : (isPomoPaused ? 'ring-4 ring-yellow-400' : '')}`}>
+                                        <div className="text-2xl drop-shadow-md leading-none w-6 h-6 flex items-center justify-center">🍅</div>
+                                    </button>
+                                    
+                                    {(isPomoActive || isPomoPaused) && (
+                                        <button onClick={resetPomodoro} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" title="Reset Timer">
+                                            <RotateCcw size={12} />
+                                        </button>
+                                    )}
+
+                                    <span className={`text-xs font-bold mt-2 px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm border border-white/50 dark:border-gray-700/50 transition-colors duration-300 ${isPomoActive && !isPomoPaused ? (pomoMode === 'focus' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white') : (isPomoPaused ? 'bg-yellow-400 text-gray-900' : 'bg-white/50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400')}`}>
+                                        {isPomoActive || isPomoPaused ? formatPomoDisplay() : "Timer"}
+                                    </span>
+                                </div>
+
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="flex flex-col items-center group hidden sm:flex">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Sun size={24} className={isDarkMode ? "hidden" : "block text-yellow-500"} /><Moon size={24} className={isDarkMode ? "block text-blue-400" : "hidden"} /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Tema</span>
+                                </button>
+                                <div className="flex flex-col items-center group hidden sm:flex relative">
+                                    <label className="cursor-pointer bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform">
+                                        <ImageIcon size={24} className="text-emerald-500 dark:text-emerald-400" />
+                                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                            const file = e.target.files[0]; if(!file) return;
+                                            const bg = await resizeImage(file, 1920, 0.6);
+                                            setCustomBackground(bg);
+                                            e.target.value = '';
+                                        }} />
+                                    </label>
+                                    {customBackground && (
+                                        <button onClick={(e) => { e.stopPropagation(); setCustomBackground(null); }} className="absolute -top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10" title="Hapus Background"><X size={10} /></button>
+                                    )}
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Background</span>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col items-center flex-1 px-4">
+                                <div className="bg-pink-200/80 dark:bg-pink-900/50 backdrop-blur-md px-6 py-3 md:px-12 md:py-4 rounded-3xl shadow-xl border border-pink-300 dark:border-pink-800 transform -rotate-2 hover:rotate-0 transition-transform duration-300 mb-4 text-center w-full max-w-md pointer-events-auto">
+                                    <h1 className="text-2xl md:text-4xl lg:text-5xl font-black text-gray-800 dark:text-gray-100 tracking-wide truncate" style={{ fontFamily: '"Comic Sans MS", cursive, sans-serif' }}>
+                                        {folderName}
+                                    </h1>
+                                </div>
+                            </div>
+                            
+                            <div className="w-auto flex justify-end pt-2 pr-2 pointer-events-auto">
+                                <button onClick={() => setIsArchiveOpen(true)} className="flex flex-col items-center group">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Archive size={24} className="text-purple-600 dark:text-purple-400" /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Arsip</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
+                            <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
+                                <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
+                                    {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                    <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2"><Plus size={20}/> Kertas Baru</button>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-6 glass-panel rounded-[2rem] p-6 shadow-2xl flex flex-col min-h-[500px] z-10">
+                                <div className="flex items-center justify-between mb-6 bg-white/60 dark:bg-gray-800/60 rounded-full py-2 px-4 shadow-sm border border-white dark:border-gray-700">
+                                    <button onClick={handlePrevDay} disabled={Object.keys(tasksHistory).sort().indexOf(viewDate) === 0} className="p-2 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 disabled:opacity-30"><ChevronLeft size={20} /></button>
+                                    <div className="flex items-center gap-2 font-bold text-gray-700 dark:text-gray-200"><Calendar size={18} className="text-purple-500 dark:text-purple-400"/> {viewDate === todayKey ? "Hari Ini" : formatDateDisplay(viewDate)}</div>
+                                    <button onClick={handleNextDay} disabled={Object.keys(tasksHistory).sort().indexOf(viewDate) === Object.keys(tasksHistory).length - 1} className="p-2 rounded-full hover:bg-purple-200 dark:hover:bg-purple-900/50 disabled:opacity-30"><ChevronRight size={20} /></button>
+                                </div>
+                                {viewDate === todayKey ? (
+                                    <form onSubmit={addTask} className="mb-6 relative">
+                                        <input type="text" value={newTaskInput} onChange={(e) => setNewTaskInput(e.target.value)} placeholder="Tambahkan tugas..." className="w-full bg-white/70 dark:bg-gray-800/70 border-2 border-white dark:border-gray-700 focus:border-purple-300 dark:focus:border-purple-500 rounded-full py-3 px-6 pr-12 outline-none shadow-inner text-gray-700 dark:text-gray-200 font-medium"/>
+                                        <button type="submit" className="absolute right-2 top-2 bottom-2 bg-gradient-to-r from-purple-400 to-pink-400 text-white rounded-full p-2 hover:scale-110 shadow-md"><Plus size={20} /></button>
+                                    </form>
+                                ) : ( <div className="mb-6 p-3 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-xl text-center text-sm font-medium text-yellow-800 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800/50">Melihat histori tanggal {formatDateDisplay(viewDate)}.</div> )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+                                    {columns.map(col => {
+                                        const currentTitle = columnNames[col.stateId] || col.defaultTitle;
+                                        return (
+                                        <div key={col.id} className="flex flex-col h-full min-h-[250px]" onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, col.id)}>
+                                            <div className={`group/header flex items-center justify-between px-4 py-3 bg-white/80 dark:bg-gray-800/80 rounded-t-2xl border-t-4 ${col.borderColor} shadow-sm mb-3 relative`}>
+                                                {editingColumnId === col.stateId ? (
+                                                    <input autoFocus type="text" value={editingColumnName} onChange={(e) => setEditingColumnName(e.target.value)} onBlur={saveEditingColumn} onKeyDown={(e) => e.key === 'Enter' && saveEditingColumn()} className={`font-bold ${col.textColor} text-sm bg-transparent outline-none border-b border-gray-400 w-full`}/>
+                                                ) : (
+                                                    <div className="flex items-center gap-1">
+                                                        <h3 className={`font-bold ${col.textColor} text-sm cursor-pointer`}>{currentTitle}</h3>
+                                                        <button onClick={() => startEditingColumn(col.stateId, currentTitle)} className="opacity-0 group-hover/header:opacity-100 text-blue-500 hover:text-blue-700 transition-opacity p-1"><PencilIcon size={12} /></button>
+                                                    </div>
+                                                )}
+                                                <span className={`text-xs font-bold bg-white dark:bg-gray-700 px-2 py-1 rounded-full shadow-sm ${col.textColor}`}>{currentTasks.filter(t => t.status === col.id).length}</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto hide-scrollbar space-y-3 pb-4">
+                                                {currentTasks.filter(t => t.status === col.id).map(task => (
+                                                    <div key={task.id} draggable={viewDate === todayKey && editingTaskId !== task.id} onDragStart={(e) => handleDragStart(e, task)} onDragEnd={handleDragEnd} className={`bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md hover:-translate-y-1 transition-all group relative cursor-grab active:cursor-grabbing`}>
+                                                        <div className="flex flex-col gap-2">
+                                                            <div className="flex items-start gap-2">
+                                                                {viewDate === todayKey && <div className="mt-1 text-gray-400 cursor-grab"><GripVertical size={14} /></div>}
+                                                                {editingTaskId === task.id ? (
+                                                                    <textarea autoFocus value={editingTaskContent} onChange={(e) => setEditingTaskContent(e.target.value)} onBlur={saveEditingTask} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEditingTask(); } }} className="flex-1 text-sm font-medium bg-gray-50 dark:bg-gray-700 p-1 rounded outline-none border border-blue-300 resize-none" />
+                                                                ) : (
+                                                                    <p className={`flex-1 text-sm font-medium whitespace-pre-wrap ${col.id === 'done' ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>{task.content}</p>
+                                                                )}
+                                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <button onClick={() => startEditingTask(task)} className="text-gray-300 hover:text-blue-500"><PencilIcon size={14} /></button>
+                                                                    <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between mt-1 pl-6">
+                                                                <label 
+                                                                    onMouseDown={(e) => e.stopPropagation()} 
+                                                                    onTouchStart={(e) => e.stopPropagation()} 
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                                                    className={`flex items-center gap-1.5 text-xs group/date relative overflow-hidden transition-colors px-2.5 py-1 rounded-md border shadow-sm cursor-pointer ${getDueDateColor(task.dueDate, currentTime)}`}
+                                                                >
+                                                                    <ClockIcon size={12} />
+                                                                    <span className="whitespace-nowrap">{formatShortDateTime(task.dueDate)}</span>
+                                                                    <input 
+                                                                        type="datetime-local" 
+                                                                        value={task.dueDate || ''} 
+                                                                        onChange={(e) => updateTaskDueDate(task.id, e.target.value)} 
+                                                                        className="date-input-hidden" 
+                                                                        title="Set Batas Waktu" 
+                                                                    />
+                                                                </label>
+                                                                {task.dueDate && (
+                                                                    <button onClick={(e) => { e.stopPropagation(); updateTaskDueDate(task.id, ''); }} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1 z-20 ml-1" title="Hapus Batas Waktu"><X size={14} /></button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {currentTasks.filter(t => t.status === col.id).length === 0 && <div className="border-2 border-dashed border-gray-300/50 dark:border-gray-600/50 rounded-xl h-16 flex items-center justify-center text-gray-400 text-xs font-medium">Kosong</div>}
+                                            </div>
+                                        </div>
+                                    )})}
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
+                                <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
+                                    {stickies.filter((_, i) => i % 2 !== 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tampilan Mobile: Sticky Notes */}
+                        <div className="max-w-7xl mx-auto col-span-1 lg:hidden mt-4 space-y-6 px-4 pb-32 relative z-10 pointer-events-auto">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {stickies.map((sticky) => (
+                                <TearableStickyNote key={`mobile-${sticky.id}`} {...sticky} initialColor={sticky.color} initialTitle={sticky.title} initialText={sticky.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />
+                            ))}
+                            </div>
+                            <button onClick={addSticky} className="w-full py-4 border-2 border-dashed border-gray-400/50 dark:border-gray-600/50 rounded-2xl text-gray-500 dark:text-gray-400 font-bold hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors flex items-center justify-center gap-2 shadow-sm"><Plus size={20}/> Kertas Baru</button>
+                        </div>
+
+                        {/* Dock Stempel */}
+                        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white/70 dark:bg-gray-800/70 backdrop-blur-xl px-4 py-3 rounded-2xl shadow-[0_20px_50px_rgba(8,_112,_184,_0.2)] dark:shadow-[0_20px_50px_rgba(0,_0,_0,_0.5)] border border-white/60 dark:border-gray-600/50 flex items-center gap-3 z-50 transition-all overflow-x-auto max-w-[90vw] hide-scrollbar pointer-events-auto">
+                            <span className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mr-1 hidden sm:block">Stempel:</span>
+                            {defaultStickers.map(sticker => (<button key={sticker.id} onClick={() => spawnSticker(sticker)} className="text-3xl hover:scale-125 transition-transform hover:-translate-y-2 focus:outline-none drop-shadow-sm">{sticker.content}</button>))}
+                            <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                            {customStickersRepo.map(sticker => (
+                                <div key={sticker.id} className="relative group">
+                                    <button onClick={() => spawnSticker(sticker)} className="w-10 h-10 rounded-lg overflow-hidden hover:scale-125 transition-transform hover:-translate-y-2 border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-500 shadow-sm bg-white dark:bg-gray-700 flex items-center justify-center"><img src={sticker.content} className="w-full h-full object-cover" /></button>
+                                    <button onClick={(e) => deleteCustomStickerRepo(sticker.id, e)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 shadow-md hover:scale-110 z-10"><X size={10} /></button>
+                                </div>
+                            ))}
+                            <label className="cursor-pointer hover:scale-110 transition-transform flex items-center justify-center w-10 h-10 bg-purple-100 dark:bg-purple-900/50 rounded-xl text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-700/50 shadow-inner hover:-translate-y-1">
+                                <input type="file" accept="image/*" className="hidden" onChange={handleUploadSticker} /><Plus size={20} />
+                            </label>
+                        </div>
+
+                        {/* KOTAK SURAT (MAILBOX) LINTAS DIVISI */}
+                        <div className={`fixed bottom-8 left-8 z-50 transition-all duration-300 ${isMailboxHovered ? 'mailbox-hover' : 'hover:scale-110'}`} onDragOver={(e) => { e.preventDefault(); setIsMailboxHovered(true); }} onDragLeave={() => setIsMailboxHovered(false)} onDrop={handleMailboxDrop}>
+                            <div className="relative group flex flex-col items-center">
+                                <div className={`w-16 h-16 rounded-3xl flex items-center justify-center shadow-xl border-4 transition-colors ${isMailboxHovered ? 'bg-yellow-400 border-yellow-200 text-yellow-900' : 'bg-gradient-to-br from-blue-400 to-indigo-600 border-white dark:border-gray-700 text-white'}`}><SendIcon size={28} /></div>
+                                <span className="absolute -top-10 opacity-0 group-hover:opacity-100 bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition-opacity pointer-events-none drop-shadow-md">Seret tugas kesini!</span>
+                            </div>
+                        </div>
+
+                        {/* MODAL KOTAK SURAT */}
+                        {isMailboxModalOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setIsMailboxModalOpen(false); setMailboxTargetItem(null); }}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10 border-2 border-indigo-200 dark:border-indigo-900">
+                                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center mb-4 text-indigo-500"><SendIcon size={32} /></div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Kirim Surat! 📬</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Pindahkan {mailboxTargetItem?.type === 'task' ? 'tugas' : 'catatan'} ini ke divisi lain.</p>
+                                    <div className="w-full mb-6">
+                                        <select value={selectedTargetFolder} onChange={(e) => setSelectedTargetFolder(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border-2 border-transparent focus:border-indigo-400 text-gray-800 dark:text-gray-100 font-bold py-3 px-4 rounded-xl outline-none appearance-none cursor-pointer text-center">
+                                            <option value="" disabled>-- Pilih Divisi / Folder --</option>
+                                            {availableFolders.map(f => (<option key={f.id} value={f.id}>{f.name}</option>))}
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-3 w-full">
+                                        <button onClick={() => { setIsMailboxModalOpen(false); setMailboxTargetItem(null); }} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                        <button onClick={executeMailboxMove} disabled={!selectedTargetFolder} className="flex-1 py-3 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">Kirim</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
+        // ==========================================
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode }) => {
+            const [folders, setFolders] = useState([]);
+            const [homeBackground, setHomeBackground] = useState(null); 
+            
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingId, setEditingId] = useState(null); 
+            const [newFolderName, setNewFolderName] = useState('');
+            const [selectedAvatar, setSelectedAvatar] = useState('boy');
+            const [selectedGradient, setSelectedGradient] = useState(Gradients[0]);
+            
+            const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('flAdmin') === 'true');
+            const [showAdminLogin, setShowAdminLogin] = useState(false);
+            const [adminPassword, setAdminPassword] = useState('');
+            const [adminError, setAdminError] = useState(false);
+
+            const [folderPin, setFolderPin] = useState('');
+            const [showPinInput, setShowPinInput] = useState(false);
+            const [unlockingFolder, setUnlockingFolder] = useState(null);
+            const [unlockPin, setUnlockPin] = useState('');
+            const [unlockError, setUnlockError] = useState(false);
+
+            // --- STATE UNTUK BOARD WEEKEND (TITIPAN STICKY NOTES) ---
+            const [weekendNotes, setWeekendNotes] = useState([]);
+            const [isWeekendDataReady, setIsWeekendDataReady] = useState(false);
+
+            useEffect(() => { sessionStorage.setItem('flAdmin', isAdmin); }, [isAdmin]);
+
+            // FETCH FOLDER
+            useEffect(() => {
+                const q = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const f = []; snapshot.forEach(doc => f.push({ id: doc.id, ...doc.data() })); setFolders(f);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // FETCH WEEKEND BOARD & LOGIKA RESET HARI SENIN
+            useEffect(() => {
+                const boardRef = doc(db, 'shared_data', 'weekend_board_notes');
+                const unsubscribe = onSnapshot(boardRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const notes = data.notes ? JSON.parse(data.notes) : [];
+                        const lastReset = data.lastReset || '';
+
+                        const today = new Date();
+                        const isMonday = today.getDay() === 1; // 1 = Senin
+                        const todayStr = today.toISOString().split('T')[0];
+
+                        // Jika hari ini Senin, dan belum direset di Senin ini, bersihkan!
+                        if (isMonday && lastReset !== todayStr) {
+                            setDoc(boardRef, { notes: '[]', lastReset: todayStr }, { merge: true });
+                            setWeekendNotes([]);
+                        } else {
+                            setWeekendNotes(notes);
+                        }
+                        setIsWeekendDataReady(true);
+                    } else {
+                        setDoc(boardRef, { notes: '[]', lastReset: '' });
+                        setIsWeekendDataReady(true);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // DELAYED SYNC UNTUK WEEKEND NOTES
+            useEffect(() => {
+                if (!isWeekendDataReady) return;
+                const timer = setTimeout(async () => {
+                    try { await setDoc(doc(db, 'shared_data', 'weekend_board_notes'), { notes: JSON.stringify(weekendNotes) }, { merge: true }); } 
+                    catch (err) { console.error("Save weekend notes failed", err); }
+                }, 1000);
+                return () => clearTimeout(timer);
+            }, [weekendNotes, isWeekendDataReady]);
+
+            // FUNGSI WEEKEND NOTES
+            const addWeekendNote = () => {
+                const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
+                setWeekendNotes(prev => [{ id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }, ...prev]);
+            };
+            const updateWeekendNote = (id, title, content) => {
+                setWeekendNotes(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
+            };
+            const deleteWeekendNote = (id) => setWeekendNotes(prev => prev.filter(s => s.id !== id));
+
+            const handleFolderClick = (folder) => {
+                if (folder.pin && folder.pin.trim() !== '' && !isAdmin) { setUnlockingFolder(folder); setUnlockPin(''); setUnlockError(false); } 
+                else { onSelectFolder(folder.id, folder.name); }
+            };
+
+            const openCreateModal = () => { setEditingId(null); setNewFolderName(''); setSelectedAvatar('boy'); setSelectedGradient(Gradients[0]); setFolderPin(''); setShowPinInput(false); setIsModalOpen(true); };
+            const openEditModal = (e, folder) => { e.stopPropagation(); setEditingId(folder.id); setNewFolderName(folder.name); setSelectedAvatar(folder.avatarId || 'boy'); const grad = Gradients.find(g => g.classes === folder.gradient) || Gradients[0]; setSelectedGradient(grad); setFolderPin(folder.pin || ''); setShowPinInput(!!folder.pin); setIsModalOpen(true); };
+            const handleSaveFolder = async (e) => {
+                e.preventDefault(); if (!newFolderName.trim()) return;
+                try {
+                    if (editingId) { await updateDoc(doc(db, 'folders', editingId), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin }); } 
+                    else { await addDoc(collection(db, 'folders'), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin, createdAt: serverTimestamp() }); }
+                    setIsModalOpen(false);
+                } catch (err) { console.error("Gagal simpan folder", err); }
+            };
+            const handleDeleteFolder = async (e, id) => { e.stopPropagation(); if (window.confirm("Yakin ingin menghapus folder/karakter ini selamanya?")) { await deleteDoc(doc(db, 'folders', id)); } };
+
+            useEffect(() => {
+                const authUser = auth.currentUser; if (!authUser) return;
+                const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                const unsubscribe = onSnapshot(stateRef, (docSnap) => { if (docSnap.exists() && docSnap.data().homeBackground !== undefined) { setHomeBackground(docSnap.data().homeBackground); } });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                const authUser = auth.currentUser; if (!authUser) return;
+                const timer = setTimeout(async () => {
+                    const stateRef = doc(db, 'users', authUser.uid, 'appState', 'homeData');
+                    try { await setDoc(stateRef, { homeBackground: homeBackground || null }, { merge: true }); } catch (err) { console.error("Gagal simpan bg home:", err); }
+                }, 1000); 
+                return () => clearTimeout(timer);
+            }, [homeBackground]);
+
+            return (
+                <div className={isDarkMode ? 'dark' : ''}>
+                    <div 
+                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
+                        style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
+                    >
+                        <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
+
+                        <div className="flex justify-between items-center relative z-10 w-full max-w-[1500px] mx-auto">
+                            <h1 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                                <span className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-1 rounded-md text-2xl">FL</span> Workspace
+                            </h1>
+                            <div className="flex gap-3">
+                                
+                                {/* Tombol Link Hitung Nota */}
+                                <a 
+                                    href="https://hitung-nota.vercel.app/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Notepad Hitung Nota"
+                                >
+                                    <NotepadIcon size={20} className="text-blue-500 dark:text-blue-400" />
+                                </a>
+
+                                {/* Tombol Link Hitung Compro */}
+                                <a 
+                                    href="https://hitung-compro.vercel.app/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Hitung Compro"
+                                >
+                                    <CalculatorIcon size={20} className="text-rose-500 dark:text-rose-400" />
+                                </a>
+
+                                {/* Tombol Link Garis Cetak */}
+                                <a 
+                                    href="https://gariscetak.vercel.app/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Garis Cetak"
+                                >
+                                    <PrinterIcon size={20} className="text-purple-500 dark:text-purple-400" />
+                                </a>
+
+                                {/* Tombol Link Ruang Pola */}
+                                <a 
+                                    href="https://ruangpola.vercel.app/" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Ruang Pola"
+                                >
+                                    <PatternIcon size={20} className="text-cyan-500 dark:text-cyan-400" />
+                                </a>
+
+                                <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
+                                    <KeyIcon size={20} className={isAdmin ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"} />
+                                </button>
+                                {isAdmin && (
+                                    <div className="relative group flex items-center">
+                                        <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
+                                            <ImageIcon size={20} className="text-emerald-500" />
+                                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                                                const file = e.target.files[0]; if(!file) return;
+                                                const bg = await resizeImage(file, 1920, 0.6); 
+                                                setHomeBackground(bg);
+                                                e.target.value = '';
+                                            }} />
+                                        </label>
+                                        {homeBackground && (
+                                            <button onClick={(e) => { e.stopPropagation(); setHomeBackground(null); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:scale-110 opacity-0 group-hover:opacity-100 transition-opacity z-10"><X size={10} /></button>
+                                        )}
+                                    </div>
+                                )}
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
+                                    <Sun size={20} className={isDarkMode ? "hidden" : "block text-yellow-500"} />
+                                    <Moon size={20} className={isDarkMode ? "block text-blue-400" : "hidden"} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* KONTAINER UTAMA: GRID FOLDER (KIRI) & BOARD WEEKEND (KANAN) */}
+                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-4 pt-24 pb-32 flex flex-col xl:flex-row gap-8 items-start">
+                            
+                            {/* BAGIAN KIRI: GRID FOLDER */}
+                            <div className="flex-1 w-full">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-6 gap-y-28 justify-items-center">
+                                    {isAdmin && (
+                                        <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
+                                            <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                                                <Plus size={32} className="text-purple-500" />
+                                            </div>
+                                            <span className="font-bold text-gray-500 dark:text-gray-400">Buat Workspace</span>
+                                        </button>
+                                    )}
+
+                                    {folders.map(folder => {
+                                        const AvatarComp = Avatars[folder.avatarId || 'boy'];
+                                        const gradClass = folder.gradient || Gradients[0].classes;
+                                        
+                                        return (
+                                            <div key={folder.id} onClick={() => handleFolderClick(folder)} className="relative character-card cursor-pointer group w-56 h-72">
+                                                <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
+                                                    {isAdmin && (
+                                                        <>
+                                                            <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace"><EditIcon size={16} /></button>
+                                                            <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace"><Trash2 size={16} /></button>
+                                                        </>
+                                                    )}
+                                                    <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{folder.name}</h3>
+                                                    <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">Workspace Active</p>
+                                                </div>
+                                                <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">
+                                                    {AvatarComp ? <AvatarComp /> : <Avatars.boy />}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                </div>
+                            </div>
+
+                            {/* BAGIAN KANAN: SIDEBAR TITIPAN WEEKEND BERUPA STICKY NOTES */}
+                            <div className="w-full xl:w-[350px] shrink-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white dark:border-gray-700 rounded-3xl p-5 shadow-2xl flex flex-col min-h-[500px] xl:sticky top-12">
+                                <div className="flex items-center gap-3 mb-6 border-b-2 border-dashed border-indigo-200 dark:border-gray-600 pb-4">
+                                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl text-indigo-600 dark:text-indigo-400">
+                                        <ListIcon size={24} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black text-gray-800 dark:text-gray-100 leading-none">Titipan Weekend</h2>
+                                        <p className="text-[10px] font-bold text-rose-500 mt-1 uppercase tracking-wider">Otomatis bersih tiap Senin!</p>
+                                    </div>
+                                </div>
+                                
+                                <button onClick={addWeekendNote} className="w-full py-3 mb-6 border-2 border-dashed border-indigo-300 dark:border-indigo-600/50 rounded-2xl text-indigo-500 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/40 transition-colors flex items-center justify-center gap-2 shadow-sm">
+                                    <Plus size={20}/> Buat Titipan Baru
+                                </button>
+
+                                <div className="flex-1 overflow-y-auto hide-scrollbar space-y-4 pr-1">
+                                    {weekendNotes.length === 0 ? (
+                                        <div className="h-40 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-4 text-center mt-2">
+                                            <span className="text-3xl mb-2">🏖️</span>
+                                            <p className="text-xs font-medium">Belum ada titipan.<br/>Silakan buat untuk dikerjakan weekend!</p>
+                                        </div>
+                                    ) : (
+                                        weekendNotes.map((note) => (
+                                            <TearableStickyNote 
+                                                key={note.id} 
+                                                id={note.id}
+                                                initialColor={note.color} 
+                                                initialTitle={note.title} 
+                                                initialText={note.content} 
+                                                onUpdate={updateWeekendNote} 
+                                                onDelete={deleteWeekendNote}
+                                                onTear={() => deleteWeekendNote(note.id)} 
+                                            />
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                            
+                        </div>
+
+                        {showAdminLogin && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowAdminLogin(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
+                                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4"><KeyIcon size={32} className="text-blue-500" /></div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Akses Admin</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan password untuk mengedit dan membuat workspace.</p>
+                                    <form onSubmit={(e) => { e.preventDefault(); if (adminPassword === 'ciptadigi') { setIsAdmin(true); setShowAdminLogin(false); setAdminPassword(''); setAdminError(false); } else { setAdminError(true); setAdminPassword(''); } }} className="w-full">
+                                        <input autoFocus type="password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }} placeholder="Password..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${adminError ? 'border-red-500' : 'border-transparent focus:border-blue-400'}`}/>
+                                        <div className="h-6 mb-4 flex items-center justify-center">{adminError && <span className="text-red-500 text-xs font-bold pop-in-animation">Password Salah!</span>}</div>
+                                        <div className="flex gap-3 w-full">
+                                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-md">Masuk</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {isModalOpen && isAdmin && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10">
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-4">{editingId ? "Edit Workspace" : "Pilih Karaktermu"}</h2>
+                                    <div className="grid grid-cols-4 md:grid-cols-4 gap-3 mb-4 w-full max-h-48 overflow-y-auto p-2 hide-scrollbar border border-gray-100 dark:border-gray-700 rounded-xl">
+                                        {Object.keys(Avatars).map(avKey => {
+                                            const AvatarC = Avatars[avKey];
+                                            return (
+                                                <button key={avKey} type="button" onClick={() => setSelectedAvatar(avKey)} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === avKey ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}><div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><AvatarC /></div></button>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex flex-wrap justify-center gap-2 mb-6 w-full max-h-24 overflow-y-auto p-2 hide-scrollbar">
+                                        {Gradients.map(g => (<button key={g.id} type="button" onClick={() => setSelectedGradient(g)} className={`w-8 h-8 rounded-full bg-gradient-to-b ${g.classes} transition-transform border-2 ${selectedGradient.id === g.id ? 'scale-125 border-gray-800 dark:border-white shadow-md' : 'border-transparent hover:scale-110'}`}></button>))}
+                                    </div>
+                                    <form onSubmit={handleSaveFolder} className="w-full">
+                                        <div className="relative w-full mb-4">
+                                            <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 pl-6 pr-12 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 border-2 border-transparent focus:border-purple-400"/>
+                                            <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia"><LockIcon size={18} /></button>
+                                        </div>
+                                        {showPinInput && (
+                                            <div className="w-full mb-4 pop-in-animation">
+                                                <input type="password" value={folderPin} onChange={(e) => setFolderPin(e.target.value)} placeholder="PIN Rahasia (Kosongkan jika tidak mau)..." className="w-full bg-purple-50 dark:bg-gray-800 border-2 border-purple-200 dark:border-gray-600 px-6 py-4 rounded-2xl outline-none text-center font-bold text-purple-700 dark:text-purple-300 focus:border-purple-500" />
+                                            </div>
+                                        )}
+                                        <div className="flex gap-3 w-full">
+                                            <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow-md">Simpan</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {unlockingFolder && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setUnlockingFolder(null)}></div>
+                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
+                                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4"><LockIcon size={32} className="text-red-500" /></div>
+                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Folder Terkunci</h2>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan PIN untuk membuka <br/><b>{unlockingFolder.name}</b></p>
+                                    <form onSubmit={(e) => { e.preventDefault(); if (unlockPin === unlockingFolder.pin) { const target = unlockingFolder; setUnlockingFolder(null); onSelectFolder(target.id, target.name); } else { setUnlockError(true); setUnlockPin(''); } }} className="w-full">
+                                        <input autoFocus type="password" value={unlockPin} onChange={(e) => { setUnlockPin(e.target.value); setUnlockError(false); }} placeholder="Masukkan PIN..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${unlockError ? 'border-red-500' : 'border-transparent focus:border-red-400'}`}/>
+                                        <div className="h-6 mb-4 flex items-center justify-center">{unlockError && <span className="text-red-500 text-xs font-bold pop-in-animation">PIN Salah! Silakan coba lagi.</span>}</div>
+                                        <div className="flex gap-3 w-full">
+                                            <button type="button" onClick={() => setUnlockingFolder(null)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
+                                            <button type="submit" className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 shadow-md">Buka</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                        
+                    </div>
+                </div>
+            );
+        };
+
+        function App() {
+            const [authReady, setAuthReady] = useState(false);
+            const [user, setUser] = useState(null);
+            const [currentFolder, setCurrentFolder] = useState(null); 
+            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
+
+            useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
+
+            useEffect(() => {
+                signInAnonymously(auth).catch(e => console.error("Auth failed:", e));
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    if (currentUser) {
+                        setUser(currentUser);
+                        setAuthReady(true);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            if (!authReady) {
+                return (
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="min-h-screen flex flex-col items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 text-purple-600 dark:text-purple-400 font-bold text-xl gap-4">
+                            <Loader size={48} className="animate-spin" />
+                            <p className="animate-pulse">Menghubungkan ke Awan...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (currentFolder) {
+                return (
+                    <BoardScreen 
+                        folderId={currentFolder.id} 
+                        folderName={currentFolder.name} 
+                        onBack={() => setCurrentFolder(null)}
+                        isDarkMode={isDarkMode}
+                        setIsDarkMode={setIsDarkMode}
+                    />
+                );
+            }
+
+            return (
+                <HomeScreen 
+                    onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
+                    isDarkMode={isDarkMode}
+                    setIsDarkMode={setIsDarkMode}
+                />
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
