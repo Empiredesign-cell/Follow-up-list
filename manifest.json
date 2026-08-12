@@ -1,0 +1,22 @@
+{
+  "name": "Follow Up List Workspace",
+  "short_name": "Follow Up",
+  "description": "Follow Up List dengan pengingat absen pulang per perangkat.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f3ff",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "./absen-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./absen-reminder.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
