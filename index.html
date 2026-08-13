@@ -96,7 +96,9 @@
         // --- PENGINGAT ABSEN PULANG / WEB PUSH ---
         // Isi public VAPID key dari Firebase Console > Project Settings > Cloud Messaging > Web Push certificates.
         // Tanpa key ini fitur alarm lokal tetap jalan, tetapi push saat browser tertutup belum aktif.
-        const FCM_VAPID_PUBLIC_KEY = 'BKwCMeiI5TV24_m4O104Ox4OojnLt0K_ijd42HQq31JMRvXuO5zE9s9e1Ot3Zgtqaki8FykOsG0Drb-h8mZ4D2M';
+        const FCM_VAPID_PUBLIC_KEY = 'PASTE_VAPID_PUBLIC_KEY_HERE';
+        const ATTENDANCE_REMINDER_VERSION = 'v4.1';
+        const ATTENDANCE_SW_URL = `./firebase-messaging-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
         const Icon = ({ size = 24, className = "", children }) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
@@ -1021,8 +1023,12 @@
             const [permission, setPermission] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
             const [pushStatus, setPushStatus] = useState('local');
             const [statusText, setStatusText] = useState('Alarm lokal siap');
+            const [audioStatus, setAudioStatus] = useState('Suara belum diaktifkan');
+            const [lastCheckText, setLastCheckText] = useState('Belum dicek');
             const alarmTimerRef = useRef(null);
+            const exactAlarmTimerRef = useRef(null);
             const audioCtxRef = useRef(null);
+            const alarmAudioRef = useRef(null);
             const beepIntervalRef = useRef(null);
 
             const dayOptions = [
@@ -1047,54 +1053,133 @@
 
             const patchSettings = (patch) => saveSettings({ ...settings, ...patch });
 
-            const unlockAudio = async () => {
+            const getAlarmAudio = () => {
+                if (!alarmAudioRef.current) {
+                    const audio = new Audio('./absen-alarm.mp3');
+                    audio.preload = 'auto';
+                    audio.loop = true;
+                    audio.volume = 1;
+                    alarmAudioRef.current = audio;
+                }
+                return alarmAudioRef.current;
+            };
+
+            const resumeAudioContext = async () => {
                 try {
                     if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                     if (audioCtxRef.current.state === 'suspended') await audioCtxRef.current.resume();
-                } catch (e) { console.warn('AudioContext tidak tersedia', e); }
+                    return audioCtxRef.current;
+                } catch (e) {
+                    console.warn('AudioContext tidak tersedia', e);
+                    return null;
+                }
+            };
+
+            // Browser membatasi autoplay. Fungsi ini dipanggil dari klik pengguna agar
+            // audio "di-arm" lebih dulu; file alarm punya silence di awal sehingga proses
+            // arming tidak menimbulkan bunyi yang mengganggu.
+            const unlockAudio = async () => {
+                let armed = false;
+                try {
+                    await resumeAudioContext();
+                    const audio = getAlarmAudio();
+                    const previousVolume = audio.volume;
+                    audio.volume = 0.001;
+                    audio.currentTime = 0;
+                    await audio.play();
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = previousVolume;
+                    armed = true;
+                } catch (e) {
+                    console.warn('Audio belum bisa di-arm', e);
+                }
+                setAudioStatus(armed ? 'Suara siap' : 'Suara diblokir — klik Test Alarm sekali');
+                return armed;
             };
 
             const stopAlarmSound = () => {
                 if (beepIntervalRef.current) clearInterval(beepIntervalRef.current);
                 beepIntervalRef.current = null;
+                if (alarmAudioRef.current) {
+                    try {
+                        alarmAudioRef.current.pause();
+                        alarmAudioRef.current.currentTime = 0;
+                    } catch {}
+                }
+                if (alarmOpen) setAudioStatus('Suara siap');
             };
 
             const beepOnce = async () => {
                 try {
-                    await unlockAudio();
-                    const ctx = audioCtxRef.current;
-                    if (!ctx) return;
+                    const ctx = await resumeAudioContext();
+                    if (!ctx || ctx.state !== 'running') return false;
                     const now = ctx.currentTime;
                     [0, 0.18, 0.36].forEach((offset, i) => {
                         const osc = ctx.createOscillator();
                         const gain = ctx.createGain();
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(i === 1 ? 980 : 760, now + offset);
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(i === 1 ? 1100 : 820, now + offset);
                         gain.gain.setValueAtTime(0.0001, now + offset);
-                        gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
                         gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.14);
-                        osc.connect(gain); gain.connect(ctx.destination);
-                        osc.start(now + offset); osc.stop(now + offset + 0.16);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now + offset);
+                        osc.stop(now + offset + 0.16);
                     });
-                } catch (e) { console.warn('Alarm audio gagal', e); }
+                    return true;
+                } catch (e) {
+                    console.warn('Fallback beep gagal', e);
+                    return false;
+                }
             };
 
-            const startAlarmSound = () => {
+            const startAlarmSound = async () => {
                 stopAlarmSound();
-                beepOnce();
-                beepIntervalRef.current = setInterval(beepOnce, 1800);
+                let played = false;
+                try {
+                    const audio = getAlarmAudio();
+                    audio.volume = 1;
+                    audio.currentTime = 0;
+                    await audio.play();
+                    played = true;
+                    setAudioStatus('Alarm berdering');
+                } catch (e) {
+                    console.warn('Audio file diblokir, gunakan fallback WebAudio', e);
+                }
+
+                if (!played) {
+                    const fallbackPlayed = await beepOnce();
+                    if (fallbackPlayed) {
+                        beepIntervalRef.current = setInterval(beepOnce, 1800);
+                        setAudioStatus('Alarm berdering (fallback)');
+                    } else {
+                        setAudioStatus('Suara diblokir browser — klik halaman lalu Test Alarm');
+                    }
+                }
+                return played;
             };
 
             const showNativeNotification = async () => {
-                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+                if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+                const defaultReminderUrl = new URL('./absen-reminder.png', window.location.href).href;
+                const badgeUrl = new URL('./absen-icon.png', window.location.href).href;
+                // Untuk desktop, icon lebih konsisten tampil daripada hero `image`.
+                // Tetap kirim keduanya supaya browser/OS yang mendukung dapat menampilkan gambar besar.
+                const notificationVisual = defaultReminderUrl;
                 const options = {
                     body: settings.message || DEFAULTS.message,
-                    icon: './absen-icon.png',
-                    badge: './absen-icon.png',
-                    image: './absen-reminder.png',
-                    tag: 'absen-pulang',
+                    icon: notificationVisual,
+                    badge: badgeUrl,
+                    image: notificationVisual,
+                    tag: `absen-pulang-${todayKeyLocal()}`,
                     renotify: true,
                     requireInteraction: true,
+                    silent: false,
+                    timestamp: Date.now(),
+                    vibrate: [250, 100, 250, 100, 450],
                     data: { url: './?attendance=done' }
                 };
                 try {
@@ -1104,22 +1189,31 @@
                     } else {
                         new Notification('⏰ Waktunya Absen Pulang!', options);
                     }
-                } catch (e) { console.warn('Native notification gagal', e); }
+                    return true;
+                } catch (e) {
+                    console.warn('Native notification gagal', e);
+                    return false;
+                }
             };
 
-            const triggerAlarm = async (source = 'local') => {
+            const triggerAlarm = async (source = 'local', { nativeNotification = true } = {}) => {
                 setAlarmOpen(true);
-                startAlarmSound();
-                await showNativeNotification();
+                await startAlarmSound();
+                if (nativeNotification) await showNativeNotification();
                 if (source !== 'test') {
-                    const next = { ...settings, lastTriggeredDate: todayKeyLocal(), snoozeUntil: '' };
+                    const today = todayKeyLocal();
+                    const next = { ...settings, lastTriggeredDate: today, snoozeUntil: '' };
                     saveSettings(next);
                     if (user) {
-                        setDoc(doc(db, 'attendance_reminders', user.uid), {
-                            lastTriggeredDate: todayKeyLocal(),
+                        const cloudPatch = {
+                            lastTriggeredDate: today,
                             lastTriggeredAt: serverTimestamp(),
                             lastSource: source
-                        }, { merge: true }).catch(console.warn);
+                        };
+                        // Jika alarm lokal sudah tampil, tandai push hari ini sebagai handled agar
+                        // scheduler cloud tidak mengirim duplikat beberapa detik kemudian.
+                        if (source === 'local-scheduler') cloudPatch.lastPushDate = today;
+                        setDoc(doc(db, 'attendance_reminders', user.uid), cloudPatch, { merge: true }).catch(console.warn);
                     }
                 }
             };
@@ -1151,6 +1245,7 @@
                         fcmToken: token || '',
                         platform: navigator.platform || 'Unknown',
                         userAgent: navigator.userAgent,
+                        clientVersion: ATTENDANCE_REMINDER_VERSION,
                         updatedAt: serverTimestamp()
                     }, { merge: true });
                 } catch (e) {
@@ -1184,7 +1279,8 @@
                 }
 
                 try {
-                    const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+                    const registration = await navigator.serviceWorker.register(ATTENDANCE_SW_URL, { updateViaCache: 'none' });
+                    await registration.update().catch(() => {});
                     setStatusText('Notifikasi Windows aktif');
 
                     const supported = await isMessagingSupported();
@@ -1257,12 +1353,45 @@
                 e.target.value = '';
             };
 
-            // Register SW early so native notification can work while tab is minimized.
+            // Register/update SW early. updateViaCache:none mencegah browser terus memakai
+            // worker lama setelah file firebase-messaging-sw.js diperbarui.
             useEffect(() => {
                 if ('serviceWorker' in navigator && window.isSecureContext) {
-                    navigator.serviceWorker.register('./firebase-messaging-sw.js').catch(() => {});
+                    navigator.serviceWorker.register(ATTENDANCE_SW_URL, { updateViaCache: 'none' })
+                        .then(reg => reg.update().catch(() => {}))
+                        .catch(() => {});
                 }
             }, []);
+
+            // Setelah reload browser, token FCM bisa berubah. Refresh otomatis jika izin sudah granted.
+            useEffect(() => {
+                if (!settings.enabled || !user || !('Notification' in window) || Notification.permission !== 'granted') return;
+                let cancelled = false;
+                (async () => {
+                    try {
+                        const token = await ensureBackgroundCapability();
+                        if (!cancelled && token) {
+                            const next = { ...settings, fcmToken: token };
+                            saveSettings(next);
+                            await syncReminderToCloud(next, token);
+                        }
+                    } catch (e) { console.warn('Refresh FCM token gagal', e); }
+                })();
+                return () => { cancelled = true; };
+            }, [user?.uid, settings.enabled]);
+
+            // Browser mengharuskan interaksi pengguna untuk autoplay audio. Jika reminder aktif
+            // setelah reload, interaksi pertama di halaman akan otomatis meng-arm suara.
+            useEffect(() => {
+                if (!settings.enabled) return;
+                const arm = () => { unlockAudio(); };
+                document.addEventListener('pointerdown', arm, { capture: true, once: true });
+                document.addEventListener('keydown', arm, { capture: true, once: true });
+                return () => {
+                    document.removeEventListener('pointerdown', arm, { capture: true });
+                    document.removeEventListener('keydown', arm, { capture: true });
+                };
+            }, [settings.enabled]);
 
             // Handle foreground FCM messages. The server version uses the same trigger path.
             useEffect(() => {
@@ -1278,33 +1407,91 @@
                 return () => { if (typeof unsub === 'function') unsub(); };
             }, [settings.enabled]);
 
-            // Local scheduler: reliable while page/PWA process is alive; catches late ticks by checking >= scheduled time.
+            // Jika push diterima oleh service worker saat tab Follow Up sedang di background,
+            // worker mengirim pesan ke tab agar popup + alarm lokal ikut menyala. Native
+            // notification sudah dibuat oleh worker, jadi jangan buat notification kedua.
             useEffect(() => {
+                if (!('serviceWorker' in navigator)) return;
+                const handler = (event) => {
+                    const data = event.data || {};
+                    if (data.type === 'ATTENDANCE_PUSH') {
+                        triggerAlarm('fcm-background-client', { nativeNotification: false });
+                    }
+                };
+                navigator.serviceWorker.addEventListener('message', handler);
+                return () => navigator.serviceWorker.removeEventListener('message', handler);
+            }, [settings.enabled, settings.message, settings.lastTriggeredDate]);
+
+            // Local scheduler untuk tab yang masih hidup. Kita memakai setTimeout ke waktu target
+            // (lebih tepat saat tab aktif) + heartbeat recovery. Saat tab lain sedang dibuka,
+            // FCM/service worker menjadi jalur utama karena browser dapat men-throttle timer tab background.
+            useEffect(() => {
+                const clearTimers = () => {
+                    if (alarmTimerRef.current) clearInterval(alarmTimerRef.current);
+                    if (exactAlarmTimerRef.current) clearTimeout(exactAlarmTimerRef.current);
+                    alarmTimerRef.current = null;
+                    exactAlarmTimerRef.current = null;
+                };
+
+                const getNextTargetTs = () => {
+                    if (!settings.enabled || !settings.time || !settings.days.length) return null;
+                    if (settings.snoozeUntil) return new Date(settings.snoozeUntil).getTime();
+                    const now = new Date();
+                    const [hh, mm] = settings.time.split(':').map(Number);
+                    const target = new Date(now);
+                    target.setHours(hh, mm, 0, 0);
+                    return target.getTime();
+                };
+
                 const check = () => {
+                    setLastCheckText(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                     if (!settings.enabled || !settings.time || !settings.days.length) return;
                     const now = new Date();
                     const day = now.getDay();
                     if (!settings.days.includes(day)) return;
+
                     if (settings.snoozeUntil) {
                         const snoozeTs = new Date(settings.snoozeUntil).getTime();
-                        if (Date.now() >= snoozeTs) triggerAlarm('snooze');
+                        if (Number.isFinite(snoozeTs) && Date.now() >= snoozeTs) triggerAlarm('snooze');
                         return;
                     }
+
                     if (settings.lastTriggeredDate === todayKeyLocal()) return;
                     const [hh, mm] = settings.time.split(':').map(Number);
                     const target = new Date(now);
                     target.setHours(hh, mm, 0, 0);
                     if (now.getTime() >= target.getTime()) triggerAlarm('local-scheduler');
                 };
+
+                const scheduleExact = () => {
+                    if (exactAlarmTimerRef.current) clearTimeout(exactAlarmTimerRef.current);
+                    const targetTs = getNextTargetTs();
+                    if (!targetTs || settings.lastTriggeredDate === todayKeyLocal()) return;
+                    const delay = targetTs - Date.now();
+                    if (delay > 0 && delay <= 24 * 60 * 60 * 1000) {
+                        exactAlarmTimerRef.current = setTimeout(() => {
+                            check();
+                            scheduleExact();
+                        }, Math.max(0, delay + 50));
+                    }
+                };
+
                 check();
-                alarmTimerRef.current = setInterval(check, 15000);
-                const onVisible = () => check();
-                document.addEventListener('visibilitychange', onVisible);
-                window.addEventListener('focus', onVisible);
+                scheduleExact();
+                // Heartbeat hanya fallback/recovery; bukan sumber timing utama.
+                alarmTimerRef.current = setInterval(check, 30000);
+
+                const recover = () => { check(); scheduleExact(); };
+                document.addEventListener('visibilitychange', recover);
+                window.addEventListener('focus', recover);
+                window.addEventListener('pageshow', recover);
+                window.addEventListener('online', recover);
                 return () => {
-                    if (alarmTimerRef.current) clearInterval(alarmTimerRef.current);
-                    document.removeEventListener('visibilitychange', onVisible);
-                    window.removeEventListener('focus', onVisible);
+                    clearTimers();
+                    document.removeEventListener('visibilitychange', recover);
+                    window.removeEventListener('focus', recover);
+                    window.removeEventListener('pageshow', recover);
+                    window.removeEventListener('online', recover);
                 };
             }, [settings.enabled, settings.time, JSON.stringify(settings.days), settings.lastTriggeredDate, settings.snoozeUntil]);
 
@@ -1319,7 +1506,14 @@
                 }
             }, []);
 
-            useEffect(() => () => stopAlarmSound(), []);
+            useEffect(() => () => {
+                stopAlarmSound();
+                if (alarmAudioRef.current) {
+                    alarmAudioRef.current.src = '';
+                    alarmAudioRef.current = null;
+                }
+                if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
+            }, []);
 
             const permissionBadge = permission === 'granted' ? 'Notifikasi diizinkan' : permission === 'denied' ? 'Notifikasi diblokir' : permission === 'unsupported' ? 'Tidak didukung' : 'Belum diizinkan';
 
@@ -1359,6 +1553,7 @@
                                         <div>
                                             <div className="font-black text-gray-800 dark:text-gray-100">Status pengingat</div>
                                             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{statusText} • {permissionBadge}</div>
+                                            <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">🔊 {audioStatus} • cek terakhir {lastCheckText}</div>
                                         </div>
                                         <button onClick={toggleEnabled} className={`px-5 py-2.5 rounded-full font-black text-sm transition-all ${settings.enabled ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-violet-100 dark:hover:bg-violet-900/40'}`}>
                                             {settings.enabled ? 'AKTIF' : 'AKTIFKAN'}
@@ -1374,8 +1569,8 @@
                                         </div>
                                         <div>
                                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Alarm</label>
-                                            <button onClick={() => triggerAlarm('test')} className="w-full h-[54px] rounded-2xl border-2 border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-black flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
-                                                <VolumeIcon size={18}/> Test Alarm Sekarang
+                                            <button onClick={async () => { await unlockAudio(); await triggerAlarm('test'); }} className="w-full h-[54px] rounded-2xl border-2 border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-black flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
+                                                <VolumeIcon size={18}/> Test & Aktifkan Suara
                                             </button>
                                         </div>
                                     </div>
@@ -1410,7 +1605,7 @@
                                     </div>
 
                                     <div className={`rounded-2xl p-4 border text-sm ${pushStatus === 'cloud' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'}`}>
-                                        <b>Mode background:</b> {pushStatus === 'cloud' ? 'FCM aktif — notifikasi dapat diterima saat tab tidak dibuka.' : 'Alarm lokal + native notification aktif ketika proses web/PWA masih hidup. Untuk menerima push ketika browser benar-benar ditutup, pasang VAPID key dan backend scheduler yang disertakan di paket.'}
+                                        <b>Mode background:</b> {pushStatus === 'cloud' ? 'FCM aktif — service worker menjadi jalur utama saat kamu sedang membuka website/aplikasi lain. Artwork reminder dipakai sebagai icon notifikasi dan, jika browser/OS mendukung, juga sebagai gambar besar.' : 'Alarm lokal aktif ketika proses web/PWA hidup. Agar notifikasi tetap datang tepat waktu saat tab Follow Up berada di background, aktifkan VAPID + Firebase scheduler.'}
                                     </div>
 
                                     <div className="flex gap-3 pt-1">
