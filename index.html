@@ -94,7 +94,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v5-local';
+        const ATTENDANCE_REMINDER_VERSION = 'v6-cross-tab-image';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -1164,17 +1164,20 @@
 
             const showNativeNotification = async () => {
                 if (!('Notification' in window) || Notification.permission !== 'granted') return false;
-                const iconUrl = new URL('./absen-icon.png', window.location.href).href;
-                const imageUrl = new URL('./absen-reminder.png', window.location.href).href;
+                const reminderImageUrl = new URL('./absen-reminder.png', window.location.href).href;
+                const badgeUrl = new URL('./absen-icon.png', window.location.href).href;
+                // Windows/Chrome tidak selalu merender NotificationOptions.image sebagai gambar besar.
+                // Karena itu artwork reminder juga dipakai sebagai icon agar tetap terlihat lintas-tab.
                 const options = {
                     body: settings.message || DEFAULTS.message,
-                    icon: iconUrl,
-                    badge: iconUrl,
-                    image: imageUrl,
+                    icon: reminderImageUrl,
+                    badge: badgeUrl,
+                    image: reminderImageUrl,
                     tag: `absen-pulang-${localDateKey()}`,
                     renotify: true,
                     requireInteraction: true,
                     silent: false,
+                    timestamp: Date.now(),
                     data: { url: window.location.href.split('?')[0] }
                 };
                 try {
