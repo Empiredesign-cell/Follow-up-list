@@ -1981,6 +1981,21 @@
                                     <PatternIcon size={20} className="text-cyan-500 dark:text-cyan-400" />
                                 </a>
 
+                                {/* Shortcut Jadwal / TeamShift */}
+                                <a 
+                                    href="https://jadwal.ciptagrafika.com/cg" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" 
+                                    title="Buka Jadwal TeamShift"
+                                >
+                                    <img 
+                                        src="./jadwal-icon.png" 
+                                        alt="Jadwal TeamShift" 
+                                        className="w-5 h-5 object-contain"
+                                    />
+                                </a>
+
                                 {/* Launcher pengingat absensi. Engine alarm ada di level App agar tidak mati saat masuk workspace. */}
                                 <button
                                     onClick={() => window.dispatchEvent(new CustomEvent('open-attendance-reminder'))}
