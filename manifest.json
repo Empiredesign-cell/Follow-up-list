@@ -1,7 +1,7 @@
 {
   "name": "Follow Up List Workspace",
   "short_name": "Follow Up",
-  "description": "Follow Up List dengan pengingat absen pulang per perangkat.",
+  "description": "Follow Up List dengan pengingat absen masuk dan pulang per perangkat.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

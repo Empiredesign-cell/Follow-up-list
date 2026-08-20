@@ -1,57 +1,57 @@
-FOLLOW UP LIST V7 - DUAL ABSEN + FIX LIST HILANG
-=================================================
+FOLLOW UP LIST V8 - DUAL ALARM SOUND + FIX LIST
+===============================================
 
-UPDATE UTAMA
-1. Fix bug task/list tampil saat workspace dibuka lalu hilang beberapa saat kemudian.
-   - Sinkronisasi workspace dinaikkan ke workspaceVersion 2.
-   - Snapshot Firebase tidak lagi otomatis ditulis balik.
-   - Backup lokal per workspace dibuat di browser.
-   - Ada recovery data legacy saat cache berisi list tetapi snapshot server lama/kosong.
-   - Auto-save dipercepat menjadi debounce 450ms setelah perubahan lokal.
+SIAP PUBLISH - TANPA NODE.JS / FIREBASE FUNCTIONS
 
-2. Pengingat absensi sekarang ada 2 secara terpisah:
-   - Absen Masuk Kerja (default 08:00)
-   - Absen Pulang Kerja (default 17:00)
+UPDATE V8
+1. Bug list/task sempat muncul lalu hilang tetap menggunakan fix sinkronisasi V7.
+2. Pengingat Masuk Kerja dan Pulang Kerja punya SOUND BERBEDA.
+3. Sound sudah disertakan dan sudah terhubung otomatis ke kode:
+   - alarm-masuk.mp3  = nada naik / energik untuk absen masuk.
+   - alarm-pulang.mp3 = nada turun / berbeda jelas untuk absen pulang.
+4. Tombol Test Alarm + Notif mengikuti tab yang sedang dipilih:
+   - Tab Masuk -> memainkan alarm-masuk.mp3
+   - Tab Pulang -> memainkan alarm-pulang.mp3
+5. Setting jam/hari/status tetap per PC / per browser.
 
-3. Setiap pengingat memiliki:
-   - ON/OFF sendiri
-   - Jam sendiri
-   - Hari aktif sendiri
-   - Pesan sendiri
-   - Gambar popup sendiri
-   - Test Alarm + Notif sendiri
-   - Snooze 10 menit
-
-4. Setting alarm tetap PER PC / PER BROWSER.
-   PC A boleh jam masuk 07:45 dan pulang 17:00.
-   PC B boleh jam masuk 08:00 dan pulang 17:30.
-   Tidak saling mengubah.
-
-5. Setting pengingat pulang dari V5/V6 otomatis dimigrasikan ke pengingat Pulang V7.
-
-CARA UPDATE
-===========
-Upload/replace SEMUA file ini pada root website:
+FILE YANG WAJIB DIPUBLISH KE ROOT WEBSITE
+=========================================
 - index.html
 - attendance-reminder-sw.js
 - manifest.json
-- absen-alarm.mp3
+- alarm-masuk.mp3
+- alarm-pulang.mp3
 - absen-icon.png
 - absen-reminder.png
 
-Setelah deploy:
-1. Buka website.
-2. Tekan Ctrl + F5.
-3. Masuk salah satu workspace dan pastikan list tidak hilang setelah 5-10 detik.
-4. Kembali ke halaman utama.
-5. Klik icon lonceng.
-6. Atur tab Masuk Kerja dan Pulang Kerja.
-7. Aktifkan masing-masing yang dibutuhkan.
-8. Klik Test Alarm + Notif minimal sekali agar browser mengizinkan suara/notifikasi.
+CARA PUBLISH
+============
+1. Backup website lama.
+2. Upload/replace SEMUA file di atas ke ROOT website yang sama.
+3. Pastikan file MP3 berada sejajar dengan index.html, jangan dimasukkan ke subfolder lain.
+4. Publish/deploy.
+5. Buka website lalu tekan Ctrl + F5.
+6. Klik icon lonceng Pengingat Absensi.
+7. Pilih tab Masuk Kerja -> klik Test Alarm + Notif. Harus terdengar sound masuk.
+8. Pilih tab Pulang Kerja -> klik Test Alarm + Notif. Harus terdengar sound pulang yang berbeda.
+9. Atur jam masing-masing lalu aktifkan.
+
+CONTOH STRUKTUR HOSTING
+=======================
+/root-website/
+  index.html
+  attendance-reminder-sw.js
+  manifest.json
+  alarm-masuk.mp3
+  alarm-pulang.mp3
+  absen-icon.png
+  absen-reminder.png
 
 CATATAN
 =======
 - Tidak perlu Node.js.
 - Tidak perlu Firebase Functions.
-- Agar alarm lokal tetap bekerja saat user membuka website lain, tab Follow Up harus tetap terbuka.
-- Native notification tetap mengikuti tampilan Windows/Chrome.
+- Tidak perlu VAPID Key.
+- Alarm lokal tetap membutuhkan tab Follow Up terbuka ketika pengguna sedang membuka website lain.
+- Browser harus pernah mengizinkan suara/notifikasi melalui interaksi pengguna (gunakan tombol Test Alarm + Notif).
+- Jika ingin mengganti suara sendiri nanti, cukup replace file alarm-masuk.mp3 atau alarm-pulang.mp3 dengan nama file yang sama.

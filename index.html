@@ -1239,7 +1239,7 @@
             const exactTimerRef = useRef(null);
             const heartbeatRef = useRef(null);
             const audioCtxRef = useRef(null);
-            const alarmAudioRef = useRef(null);
+            const alarmAudioRef = useRef({ arrival: null, departure: null });
             const beepIntervalRef = useRef(null);
 
             const TYPES = {
@@ -1249,7 +1249,8 @@
                     title: '⏰ Waktunya Absen Masuk!',
                     alarmLabel: 'Alarm Absen Masuk',
                     headline: 'Jangan Lupa Absen Masuk! 👋',
-                    accent: 'emerald'
+                    accent: 'emerald',
+                    sound: './alarm-masuk.mp3'
                 },
                 departure: {
                     label: 'Pulang Kerja',
@@ -1257,7 +1258,8 @@
                     title: '⏰ Waktunya Absen Pulang!',
                     alarmLabel: 'Alarm Absen Pulang',
                     headline: 'Jangan Lupa Absen Pulang! 👋',
-                    accent: 'violet'
+                    accent: 'violet',
+                    sound: './alarm-pulang.mp3'
                 }
             };
 
@@ -1286,15 +1288,15 @@
             const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
             const triggerKeyFor = (type, d, cfg) => `${type}@${localDateKey(d)}@${cfg.time}`;
 
-            const getAlarmAudio = () => {
-                if (!alarmAudioRef.current) {
-                    const audio = new Audio('./absen-alarm.mp3');
+            const getAlarmAudio = (type) => {
+                if (!alarmAudioRef.current[type]) {
+                    const audio = new Audio(TYPES[type].sound);
                     audio.preload = 'auto';
                     audio.loop = true;
                     audio.volume = 1;
-                    alarmAudioRef.current = audio;
+                    alarmAudioRef.current[type] = audio;
                 }
-                return alarmAudioRef.current;
+                return alarmAudioRef.current[type];
             };
 
             const resumeAudioContext = async () => {
@@ -1309,20 +1311,22 @@
                 let ready = false;
                 try {
                     await resumeAudioContext();
-                    const audio = getAlarmAudio();
-                    const oldVolume = audio.volume;
-                    audio.volume = 0.001;
-                    audio.currentTime = 0;
-                    await audio.play();
-                    await new Promise(r => setTimeout(r, 120));
-                    audio.pause();
-                    audio.currentTime = 0;
-                    audio.volume = oldVolume;
+                    for (const type of ['arrival', 'departure']) {
+                        const audio = getAlarmAudio(type);
+                        const oldVolume = audio.volume;
+                        audio.volume = 0.001;
+                        audio.currentTime = 0;
+                        await audio.play();
+                        await new Promise(r => setTimeout(r, 100));
+                        audio.pause();
+                        audio.currentTime = 0;
+                        audio.volume = oldVolume;
+                    }
                     ready = true;
                 } catch (e) {
                     console.warn('Audio unlock gagal', e);
                 }
-                setAudioStatus(ready ? 'Suara siap' : 'Klik Test Alarm untuk izinkan suara');
+                setAudioStatus(ready ? 'Suara masuk & pulang siap' : 'Klik Test Alarm untuk izinkan suara');
                 return ready;
             };
 
@@ -1349,20 +1353,21 @@
             const stopAlarmSound = () => {
                 if (beepIntervalRef.current) clearInterval(beepIntervalRef.current);
                 beepIntervalRef.current = null;
-                if (alarmAudioRef.current) {
-                    try { alarmAudioRef.current.pause(); alarmAudioRef.current.currentTime = 0; } catch {}
-                }
+                Object.values(alarmAudioRef.current).forEach(audio => {
+                    if (!audio) return;
+                    try { audio.pause(); audio.currentTime = 0; } catch {}
+                });
                 setAudioStatus('Suara siap');
             };
 
-            const startAlarmSound = async () => {
+            const startAlarmSound = async (type) => {
                 stopAlarmSound();
                 try {
-                    const audio = getAlarmAudio();
+                    const audio = getAlarmAudio(type);
                     audio.currentTime = 0;
                     audio.volume = 1;
                     await audio.play();
-                    setAudioStatus('Alarm berdering');
+                    setAudioStatus(type === 'arrival' ? 'Alarm masuk berdering' : 'Alarm pulang berdering');
                     return true;
                 } catch (e) {
                     console.warn('MP3 alarm diblokir', e);
@@ -1443,7 +1448,7 @@
 
                 setAlarmState({ type });
                 await showNativeNotification(type, cfg);
-                await startAlarmSound();
+                await startAlarmSound(type);
 
                 if (!forced) {
                     patchReminder(type, { lastTriggerKey: key, snoozeUntil: '' });
