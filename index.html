@@ -94,7 +94,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v6-cross-tab-image';
+        const ATTENDANCE_REMINDER_VERSION = 'v7-dual-alarm-fixed';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -448,6 +448,69 @@
             const [customBackground, setCustomBackground] = useState(null); 
             const [columnNames, setColumnNames] = useState({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
 
+
+            // --- SINKRONISASI WORKSPACE V2 (ANTI LIST HILANG / STALE SNAPSHOT) ---
+            // Masalah versi lama: snapshot cache/server dan auto-save bisa saling menimpa.
+            // Versi ini menyimpan backup lokal per workspace, memberi revision marker,
+            // dan tidak menulis balik snapshot remote yang baru saja diterima.
+            const workspaceHydratedRef = useRef(false);
+            const lastRemoteSignatureRef = useRef('');
+            const legacyCacheCandidateRef = useRef(null);
+            const workspaceSaveTimerRef = useRef(null);
+            const workspaceBackupKey = `flWorkspaceBackupV2:${folderId}`;
+
+            const safeJsonParse = (raw, fallback) => {
+                try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; }
+            };
+
+            const normalizeWorkspaceState = (data = {}) => ({
+                tasksHistory: safeJsonParse(data.tasksHistory, { [todayKey]: [] }),
+                stickies: safeJsonParse(data.stickies, [
+                    { id: 's1', color: 'bg-yellow-200', title: '', content: '' },
+                    { id: 's2', color: 'bg-rose-200', title: '', content: '' }
+                ]),
+                archivedStickies: safeJsonParse(data.archivedStickies, []),
+                customStickersRepo: safeJsonParse(data.customStickersRepo, []),
+                placedStickers: safeJsonParse(data.placedStickers, []),
+                columnNames: safeJsonParse(data.columnNames, { todo: 'To Do', inProgress: 'In Progress', done: 'Done' }),
+                customBackground: data.customBackground ?? null
+            });
+
+            const workspaceSignature = (state) => JSON.stringify({
+                tasksHistory: state.tasksHistory,
+                stickies: state.stickies,
+                archivedStickies: state.archivedStickies,
+                customStickersRepo: state.customStickersRepo,
+                placedStickers: state.placedStickers,
+                columnNames: state.columnNames,
+                customBackground: state.customBackground || null
+            });
+
+            const countWorkspaceTasks = (state) => Object.values(state?.tasksHistory || {}).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+
+            const applyWorkspaceState = (state) => {
+                setTasksHistory(state.tasksHistory || { [todayKey]: [] });
+                setStickies(Array.isArray(state.stickies) ? state.stickies : []);
+                setArchivedStickies(Array.isArray(state.archivedStickies) ? state.archivedStickies : []);
+                setCustomStickersRepo(Array.isArray(state.customStickersRepo) ? state.customStickersRepo : []);
+                setPlacedStickers(Array.isArray(state.placedStickers) ? state.placedStickers : []);
+                setColumnNames(state.columnNames || { todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
+                setCustomBackground(state.customBackground || null);
+            };
+
+            const readWorkspaceBackup = () => {
+                try {
+                    const raw = localStorage.getItem(workspaceBackupKey);
+                    return raw ? JSON.parse(raw) : null;
+                } catch { return null; }
+            };
+
+            const writeWorkspaceBackup = (state, savedAt = Date.now()) => {
+                try {
+                    localStorage.setItem(workspaceBackupKey, JSON.stringify({ savedAt, state }));
+                } catch (e) { console.warn('Backup workspace lokal gagal', e); }
+            };
+
             // --- STATE UNTUK POMODORO TIMER ---
             const [isPomoActive, setIsPomoActive] = useState(false);
             const [isPomoPaused, setIsPomoPaused] = useState(false);
@@ -528,22 +591,114 @@
                 return `${m}:${s}`;
             };
 
-            // FETCH DATA FOLDER SAAT INI
+            // FETCH DATA FOLDER SAAT INI - V2 ANTI STALE OVERWRITE
             useEffect(() => {
-                const stateRef = doc(db, 'workspace_data', folderId); 
-                const unsubscribe = onSnapshot(stateRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        if (data.tasksHistory) setTasksHistory(JSON.parse(data.tasksHistory));
-                        if (data.stickies) setStickies(JSON.parse(data.stickies));
-                        if (data.archivedStickies) setArchivedStickies(JSON.parse(data.archivedStickies));
-                        if (data.customStickersRepo) setCustomStickersRepo(JSON.parse(data.customStickersRepo));
-                        if (data.placedStickers) setPlacedStickers(JSON.parse(data.placedStickers));
-                        if (data.columnNames) setColumnNames(JSON.parse(data.columnNames));
-                        if (data.customBackground !== undefined) setCustomBackground(data.customBackground);
+                workspaceHydratedRef.current = false;
+                lastRemoteSignatureRef.current = '';
+                legacyCacheCandidateRef.current = null;
+                setIsDataReady(false);
+
+                const stateRef = doc(db, 'workspace_data', folderId);
+                const unsubscribe = onSnapshot(stateRef, { includeMetadataChanges: true }, async (docSnap) => {
+                    const data = docSnap.exists() ? docSnap.data() : {};
+                    const remoteState = normalizeWorkspaceState(data);
+                    const remoteSignature = workspaceSignature(remoteState);
+                    const remoteUpdatedAt = Number(data.clientUpdatedAt || 0);
+                    const isV2 = Number(data.workspaceVersion || 0) >= 2;
+                    const fromCache = !!docSnap.metadata?.fromCache;
+                    const backup = readWorkspaceBackup();
+
+                    // Simpan kandidat cache lama sekali saja. Ini membantu memulihkan data legacy
+                    // yang sempat terlihat lalu hilang ketika server mengirim snapshot kosong/stale.
+                    if (!isV2 && fromCache && countWorkspaceTasks(remoteState) > 0) {
+                        legacyCacheCandidateRef.current = {
+                            state: remoteState,
+                            signature: remoteSignature,
+                            taskCount: countWorkspaceTasks(remoteState)
+                        };
                     }
+
+                    // Jika ada perubahan lokal yang lebih baru daripada snapshot server,
+                    // jangan biarkan snapshot lama menghapus list yang baru saja diedit.
+                    if (backup?.state && Number(backup.savedAt || 0) > remoteUpdatedAt && isV2 && !fromCache) {
+                        const backupSig = workspaceSignature(backup.state);
+                        if (backupSig !== remoteSignature) {
+                            applyWorkspaceState(backup.state);
+                            lastRemoteSignatureRef.current = backupSig;
+                            workspaceHydratedRef.current = true;
+                            setIsDataReady(true);
+
+                            try {
+                                await setDoc(stateRef, {
+                                    tasksHistory: JSON.stringify(backup.state.tasksHistory),
+                                    stickies: JSON.stringify(backup.state.stickies),
+                                    archivedStickies: JSON.stringify(backup.state.archivedStickies),
+                                    customStickersRepo: JSON.stringify(backup.state.customStickersRepo),
+                                    placedStickers: JSON.stringify(backup.state.placedStickers),
+                                    columnNames: JSON.stringify(backup.state.columnNames),
+                                    customBackground: backup.state.customBackground || null,
+                                    workspaceVersion: 2,
+                                    clientUpdatedAt: backup.savedAt
+                                }, { merge: true });
+                            } catch (e) { console.warn('Restore backup workspace gagal', e); }
+                            return;
+                        }
+                    }
+
+                    // Recovery khusus data legacy: bila cache berisi task tetapi snapshot server
+                    // tiba-tiba lebih sedikit sebelum dokumen pernah dimigrasi ke V2, pertahankan
+                    // kandidat yang lebih lengkap dan migrasikan sekali ke format V2.
+                    if (!isV2 && !fromCache && legacyCacheCandidateRef.current) {
+                        const candidate = legacyCacheCandidateRef.current;
+                        const remoteCount = countWorkspaceTasks(remoteState);
+                        if (candidate.taskCount > remoteCount) {
+                            const restoredAt = Date.now();
+                            applyWorkspaceState(candidate.state);
+                            writeWorkspaceBackup(candidate.state, restoredAt);
+                            lastRemoteSignatureRef.current = candidate.signature;
+                            workspaceHydratedRef.current = true;
+                            setIsDataReady(true);
+                            try {
+                                await setDoc(stateRef, {
+                                    tasksHistory: JSON.stringify(candidate.state.tasksHistory),
+                                    stickies: JSON.stringify(candidate.state.stickies),
+                                    archivedStickies: JSON.stringify(candidate.state.archivedStickies),
+                                    customStickersRepo: JSON.stringify(candidate.state.customStickersRepo),
+                                    placedStickers: JSON.stringify(candidate.state.placedStickers),
+                                    columnNames: JSON.stringify(candidate.state.columnNames),
+                                    customBackground: candidate.state.customBackground || null,
+                                    workspaceVersion: 2,
+                                    clientUpdatedAt: restoredAt
+                                }, { merge: true });
+                            } catch (e) { console.warn('Migrasi workspace legacy gagal', e); }
+                            legacyCacheCandidateRef.current = null;
+                            return;
+                        }
+                    }
+
+                    applyWorkspaceState(remoteState);
+                    lastRemoteSignatureRef.current = remoteSignature;
+                    workspaceHydratedRef.current = true;
                     setIsDataReady(true);
-                }, (error) => { console.error("Gagal menarik data:", error); setIsDataReady(true); });
+
+                    // Migrasi dokumen lama tanpa mengubah isi.
+                    if (!isV2 && !fromCache) {
+                        const migratedAt = Date.now();
+                        writeWorkspaceBackup(remoteState, migratedAt);
+                        try {
+                            await setDoc(stateRef, { workspaceVersion: 2, clientUpdatedAt: migratedAt }, { merge: true });
+                        } catch (e) { console.warn('Marker migrasi workspace gagal', e); }
+                    } else if (!fromCache) {
+                        writeWorkspaceBackup(remoteState, remoteUpdatedAt || Date.now());
+                    }
+                }, (error) => {
+                    console.error('Gagal menarik data:', error);
+                    const backup = readWorkspaceBackup();
+                    if (backup?.state) applyWorkspaceState(backup.state);
+                    workspaceHydratedRef.current = true;
+                    setIsDataReady(true);
+                });
+
                 return () => unsubscribe();
             }, [folderId]);
 
@@ -552,7 +707,7 @@
                 const q = query(collection(db, 'folders'));
                 const unsub = onSnapshot(q, (snap) => {
                     const f = [];
-                    snap.forEach(doc => { 
+                    snap.forEach(doc => {
                         if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name });
                     });
                     setAvailableFolders(f);
@@ -560,39 +715,63 @@
                 return () => unsub();
             }, [folderId]);
 
+            // AUTOSAVE HANYA JIKA STATE BENAR-BENAR BERUBAH SECARA LOKAL.
             useEffect(() => {
-                if (!isDataReady) return;
-                const timer = setTimeout(async () => {
+                if (!isDataReady || !workspaceHydratedRef.current) return;
+
+                const state = {
+                    tasksHistory, stickies, archivedStickies, customStickersRepo,
+                    placedStickers, columnNames, customBackground: customBackground || null
+                };
+                const signature = workspaceSignature(state);
+
+                // Snapshot remote baru saja diaplikasikan: jangan echo-write ke Firestore.
+                if (signature === lastRemoteSignatureRef.current) return;
+
+                const savedAt = Date.now();
+                writeWorkspaceBackup(state, savedAt);
+
+                if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
+                workspaceSaveTimerRef.current = setTimeout(async () => {
                     const stateRef = doc(db, 'workspace_data', folderId);
-                    const payload = {
-                        tasksHistory: JSON.stringify(tasksHistory), stickies: JSON.stringify(stickies),
-                        archivedStickies: JSON.stringify(archivedStickies), customStickersRepo: JSON.stringify(customStickersRepo),
-                        placedStickers: JSON.stringify(placedStickers), columnNames: JSON.stringify(columnNames),
-                        customBackground: customBackground || null
-                    };
-                    try { await setDoc(stateRef, payload, { merge: true }); } catch (err) { console.error("Gagal menyimpan data:", err); }
-                }, 1000); 
-                return () => clearTimeout(timer);
+                    try {
+                        await setDoc(stateRef, {
+                            tasksHistory: JSON.stringify(state.tasksHistory),
+                            stickies: JSON.stringify(state.stickies),
+                            archivedStickies: JSON.stringify(state.archivedStickies),
+                            customStickersRepo: JSON.stringify(state.customStickersRepo),
+                            placedStickers: JSON.stringify(state.placedStickers),
+                            columnNames: JSON.stringify(state.columnNames),
+                            customBackground: state.customBackground || null,
+                            workspaceVersion: 2,
+                            clientUpdatedAt: savedAt
+                        }, { merge: true });
+                        lastRemoteSignatureRef.current = signature;
+                    } catch (err) {
+                        console.error('Gagal menyimpan data:', err);
+                    }
+                }, 450);
+
+                return () => {
+                    if (workspaceSaveTimerRef.current) clearTimeout(workspaceSaveTimerRef.current);
+                };
             }, [tasksHistory, stickies, archivedStickies, customStickersRepo, placedStickers, columnNames, customBackground, isDataReady, folderId]);
 
+            // SHIFT HARI: task yang belum selesai dibawa ke hari ini SATU KALI setelah hydration.
             useEffect(() => {
-                if (!isDataReady) return; 
-                const checkAndShiftDay = () => {
-                    setTasksHistory(prevHistory => {
-                        const historyKeys = Object.keys(prevHistory).sort();
-                        if (!prevHistory[todayKey]) {
-                            const lastDateKey = historyKeys[historyKeys.length - 1];
-                            let carryOverTasks = [];
-                            if (lastDateKey && prevHistory[lastDateKey]) {
-                                carryOverTasks = prevHistory[lastDateKey].filter(task => task.status !== 'done').map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }));
-                            }
-                            return { ...prevHistory, [todayKey]: carryOverTasks };
-                        }
-                        return prevHistory;
-                    });
-                    setViewDate(todayKey);
-                };
-                checkAndShiftDay();
+                if (!isDataReady || !workspaceHydratedRef.current) return;
+                setTasksHistory(prevHistory => {
+                    if (prevHistory[todayKey]) return prevHistory;
+                    const historyKeys = Object.keys(prevHistory).sort();
+                    const lastDateKey = historyKeys[historyKeys.length - 1];
+                    const carryOverTasks = lastDateKey && prevHistory[lastDateKey]
+                        ? prevHistory[lastDateKey]
+                            .filter(task => task.status !== 'done')
+                            .map(task => ({ ...task, id: `carry-${Date.now()}-${Math.random()}` }))
+                        : [];
+                    return { ...prevHistory, [todayKey]: carryOverTasks };
+                });
+                setViewDate(todayKey);
             }, [todayKey, isDataReady]);
 
             if (!isDataReady) return (<div className="min-h-screen flex flex-col items-center justify-center bg-purple-50 text-purple-600 font-bold text-xl gap-4"><Loader size={48} /><p className="animate-pulse">Membuka Folder...</p></div>);
@@ -996,11 +1175,23 @@
         };
 
         // ==========================================
-        // PENGINGAT ABSEN PULANG - PER PC / PER BROWSER
+        // PENGINGAT ABSENSI GANDA - MASUK & PULANG
+        // PER PC / PER BROWSER, TANPA FIREBASE FUNCTIONS
         // ==========================================
         const AttendanceReminder = ({ user, isDarkMode }) => {
-            const STORAGE_KEY = 'flAttendanceReminderLocalV5';
-            const DEFAULTS = {
+            const STORAGE_KEY = 'flAttendanceReminderDualV7';
+            const LEGACY_STORAGE_KEY = 'flAttendanceReminderLocalV5';
+
+            const ARRIVAL_DEFAULT = {
+                enabled: false,
+                time: '08:00',
+                days: [1, 2, 3, 4, 5],
+                message: 'Sebelum mulai kerja, jangan lupa absen masuk dulu ya!',
+                imageData: '',
+                snoozeUntil: '',
+                lastTriggerKey: ''
+            };
+            const DEPARTURE_DEFAULT = {
                 enabled: false,
                 time: '17:00',
                 days: [1, 2, 3, 4, 5],
@@ -1010,14 +1201,39 @@
                 lastTriggerKey: ''
             };
 
-            const [settings, setSettings] = useState(() => {
-                try { return { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')) }; }
-                catch { return DEFAULTS; }
+            const normalizeReminder = (base, raw = {}) => ({
+                ...base,
+                ...raw,
+                days: Array.isArray(raw.days) ? raw.days : base.days
             });
+
+            const [settings, setSettings] = useState(() => {
+                try {
+                    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+                    if (existing?.arrival || existing?.departure) {
+                        return {
+                            arrival: normalizeReminder(ARRIVAL_DEFAULT, existing.arrival),
+                            departure: normalizeReminder(DEPARTURE_DEFAULT, existing.departure)
+                        };
+                    }
+
+                    // Migrasi otomatis pengingat pulang versi lama agar setting user tidak hilang.
+                    const legacy = JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) || 'null');
+                    return {
+                        arrival: { ...ARRIVAL_DEFAULT },
+                        departure: normalizeReminder(DEPARTURE_DEFAULT, legacy || {})
+                    };
+                } catch {
+                    return { arrival: { ...ARRIVAL_DEFAULT }, departure: { ...DEPARTURE_DEFAULT } };
+                }
+            });
+
+            const settingsRef = useRef(settings);
             const [isOpen, setIsOpen] = useState(false);
-            const [alarmOpen, setAlarmOpen] = useState(false);
+            const [activeTab, setActiveTab] = useState('arrival');
+            const [alarmState, setAlarmState] = useState(null); // { type: 'arrival'|'departure' }
             const [permission, setPermission] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
-            const [statusText, setStatusText] = useState('Mode lokal • tanpa Firebase Functions');
+            const [statusText, setStatusText] = useState('Mode lokal • tab Follow Up tetap terbuka');
             const [audioStatus, setAudioStatus] = useState('Belum diaktifkan');
             const [nextAlarmText, setNextAlarmText] = useState('-');
             const exactTimerRef = useRef(null);
@@ -1025,6 +1241,25 @@
             const audioCtxRef = useRef(null);
             const alarmAudioRef = useRef(null);
             const beepIntervalRef = useRef(null);
+
+            const TYPES = {
+                arrival: {
+                    label: 'Masuk Kerja',
+                    shortLabel: 'Masuk',
+                    title: '⏰ Waktunya Absen Masuk!',
+                    alarmLabel: 'Alarm Absen Masuk',
+                    headline: 'Jangan Lupa Absen Masuk! 👋',
+                    accent: 'emerald'
+                },
+                departure: {
+                    label: 'Pulang Kerja',
+                    shortLabel: 'Pulang',
+                    title: '⏰ Waktunya Absen Pulang!',
+                    alarmLabel: 'Alarm Absen Pulang',
+                    headline: 'Jangan Lupa Absen Pulang! 👋',
+                    accent: 'violet'
+                }
+            };
 
             const dayOptions = [
                 { id: 1, short: 'Sen', label: 'Senin' },
@@ -1036,18 +1271,24 @@
                 { id: 0, short: 'Min', label: 'Minggu' }
             ];
 
-            const saveSettings = (next) => {
-                setSettings(next);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+            useEffect(() => {
+                settingsRef.current = settings;
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch {}
+            }, [settings]);
+
+            const patchReminder = (type, patch) => {
+                setSettings(prev => ({
+                    ...prev,
+                    [type]: { ...prev[type], ...patch }
+                }));
             };
-            const patchSettings = (patch) => saveSettings({ ...settings, ...patch });
 
             const localDateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            const triggerKeyFor = (d) => `${localDateKey(d)}@${settings.time}`;
+            const triggerKeyFor = (type, d, cfg) => `${type}@${localDateKey(d)}@${cfg.time}`;
 
             const getAlarmAudio = () => {
                 if (!alarmAudioRef.current) {
-                    const audio = new Audio('./absen-alarm.m4a');
+                    const audio = new Audio('./absen-alarm.mp3');
                     audio.preload = 'auto';
                     audio.loop = true;
                     audio.volume = 1;
@@ -1152,7 +1393,7 @@
                 if ('serviceWorker' in navigator && window.isSecureContext) {
                     try {
                         await navigator.serviceWorker.register(ATTENDANCE_SW_URL, { updateViaCache: 'none' });
-                        setStatusText('Siap • tab Follow Up harus tetap terbuka');
+                        setStatusText('Siap • pengingat tersimpan di PC/browser ini');
                     } catch {
                         setStatusText('Notifikasi aktif • service worker gagal, pakai fallback');
                     }
@@ -1162,145 +1403,181 @@
                 return true;
             };
 
-            const showNativeNotification = async () => {
+            const showNativeNotification = async (type, cfg) => {
                 if (!('Notification' in window) || Notification.permission !== 'granted') return false;
-                const reminderImageUrl = new URL('./absen-reminder.png', window.location.href).href;
+                const meta = TYPES[type];
+                const reminderImageUrl = cfg.imageData || new URL('./absen-reminder.png', window.location.href).href;
                 const badgeUrl = new URL('./absen-icon.png', window.location.href).href;
-                // Windows/Chrome tidak selalu merender NotificationOptions.image sebagai gambar besar.
-                // Karena itu artwork reminder juga dipakai sebagai icon agar tetap terlihat lintas-tab.
                 const options = {
-                    body: settings.message || DEFAULTS.message,
+                    body: cfg.message,
                     icon: reminderImageUrl,
                     badge: badgeUrl,
                     image: reminderImageUrl,
-                    tag: `absen-pulang-${localDateKey()}`,
+                    tag: `absen-${type}-${localDateKey()}`,
                     renotify: true,
                     requireInteraction: true,
                     silent: false,
                     timestamp: Date.now(),
-                    data: { url: window.location.href.split('?')[0] }
+                    data: { url: window.location.href.split('?')[0], reminderType: type }
                 };
                 try {
                     if ('serviceWorker' in navigator && window.isSecureContext) {
                         const reg = await navigator.serviceWorker.ready;
-                        await reg.showNotification('⏰ Waktunya Absen Pulang!', options);
+                        await reg.showNotification(meta.title, options);
                     } else {
-                        new Notification('⏰ Waktunya Absen Pulang!', options);
+                        new Notification(meta.title, options);
                     }
                     return true;
                 } catch (e) {
                     console.warn('Notification gagal', e);
-                    try { new Notification('⏰ Waktunya Absen Pulang!', options); return true; } catch { return false; }
+                    try { new Notification(meta.title, options); return true; } catch { return false; }
                 }
             };
 
-            const triggerAlarm = async (source = 'local', forced = false) => {
+            const triggerAlarm = async (type, source = 'local', forced = false) => {
+                const cfg = settingsRef.current[type];
+                if (!cfg) return;
                 const now = new Date();
-                const key = settings.snoozeUntil ? `snooze@${settings.snoozeUntil}` : triggerKeyFor(now);
-                if (!forced && settings.lastTriggerKey === key) return;
-                setAlarmOpen(true);
-                await showNativeNotification();
+                const key = cfg.snoozeUntil ? `${type}@snooze@${cfg.snoozeUntil}` : triggerKeyFor(type, now, cfg);
+                if (!forced && cfg.lastTriggerKey === key) return;
+
+                setAlarmState({ type });
+                await showNativeNotification(type, cfg);
                 await startAlarmSound();
-                if (!forced) saveSettings({ ...settings, lastTriggerKey: key, snoozeUntil: '' });
+
+                if (!forced) {
+                    patchReminder(type, { lastTriggerKey: key, snoozeUntil: '' });
+                }
             };
 
             const markDone = () => {
+                if (!alarmState?.type) return;
                 stopAlarmSound();
-                setAlarmOpen(false);
-                saveSettings({ ...settings, snoozeUntil: '' });
+                patchReminder(alarmState.type, { snoozeUntil: '' });
+                setAlarmState(null);
             };
 
             const snooze = (minutes = 10) => {
+                if (!alarmState?.type) return;
+                const type = alarmState.type;
                 stopAlarmSound();
-                setAlarmOpen(false);
-                const until = new Date(Date.now() + minutes * 60000).toISOString();
-                saveSettings({ ...settings, snoozeUntil: until, lastTriggerKey: '' });
+                setAlarmState(null);
+                patchReminder(type, {
+                    snoozeUntil: new Date(Date.now() + minutes * 60000).toISOString(),
+                    lastTriggerKey: ''
+                });
             };
 
-            const getNextTarget = () => {
-                if (!settings.enabled || !settings.time || !settings.days.length) return null;
-                if (settings.snoozeUntil) {
-                    const s = new Date(settings.snoozeUntil);
-                    if (Number.isFinite(s.getTime()) && s.getTime() > Date.now()) return s;
-                }
-                const [hh, mm] = settings.time.split(':').map(Number);
+            const getCandidates = () => {
+                const all = [];
                 const now = new Date();
-                for (let add = 0; add < 8; add++) {
-                    const candidate = new Date(now);
-                    candidate.setDate(now.getDate() + add);
-                    candidate.setHours(hh, mm, 0, 0);
-                    if (!settings.days.includes(candidate.getDay())) continue;
-                    if (candidate.getTime() <= now.getTime() + 500) continue;
-                    return candidate;
-                }
-                return null;
+                const currentSettings = settingsRef.current;
+
+                ['arrival', 'departure'].forEach(type => {
+                    const cfg = currentSettings[type];
+                    if (!cfg?.enabled || !cfg.time || !cfg.days?.length) return;
+
+                    if (cfg.snoozeUntil) {
+                        const snoozeDate = new Date(cfg.snoozeUntil);
+                        if (Number.isFinite(snoozeDate.getTime()) && snoozeDate.getTime() > Date.now()) {
+                            all.push({ type, date: snoozeDate });
+                            return;
+                        }
+                    }
+
+                    const [hh, mm] = cfg.time.split(':').map(Number);
+                    for (let add = 0; add < 8; add++) {
+                        const candidate = new Date(now);
+                        candidate.setDate(now.getDate() + add);
+                        candidate.setHours(hh, mm, 0, 0);
+                        if (!cfg.days.includes(candidate.getDay())) continue;
+                        if (candidate.getTime() <= now.getTime() + 500) continue;
+                        all.push({ type, date: candidate });
+                        break;
+                    }
+                });
+
+                return all.sort((a, b) => a.date - b.date);
             };
 
             const checkDue = () => {
-                if (!settings.enabled || !settings.time || !settings.days.length) return;
+                const currentSettings = settingsRef.current;
                 const now = new Date();
 
-                if (settings.snoozeUntil) {
-                    const snoozeTs = new Date(settings.snoozeUntil).getTime();
-                    if (Number.isFinite(snoozeTs) && Date.now() >= snoozeTs) triggerAlarm('snooze');
-                    return;
-                }
+                ['arrival', 'departure'].forEach(type => {
+                    const cfg = currentSettings[type];
+                    if (!cfg?.enabled || !cfg.time || !cfg.days?.length) return;
 
-                if (!settings.days.includes(now.getDay())) return;
-                const [hh, mm] = settings.time.split(':').map(Number);
-                const target = new Date(now);
-                target.setHours(hh, mm, 0, 0);
-                const diff = now.getTime() - target.getTime();
-                const key = triggerKeyFor(now);
-                // Catch-up window 10 menit: kalau browser menunda timer karena tab background,
-                // alarm tetap muncul saat browser memberi kesempatan JS berjalan lagi.
-                if (diff >= 0 && diff <= 10 * 60 * 1000 && settings.lastTriggerKey !== key) triggerAlarm('local');
+                    if (cfg.snoozeUntil) {
+                        const snoozeTs = new Date(cfg.snoozeUntil).getTime();
+                        if (Number.isFinite(snoozeTs) && Date.now() >= snoozeTs) triggerAlarm(type, 'snooze');
+                        return;
+                    }
+
+                    if (!cfg.days.includes(now.getDay())) return;
+                    const [hh, mm] = cfg.time.split(':').map(Number);
+                    const target = new Date(now);
+                    target.setHours(hh, mm, 0, 0);
+                    const diff = now.getTime() - target.getTime();
+                    const key = triggerKeyFor(type, now, cfg);
+
+                    // Catch-up 10 menit untuk mengatasi throttling tab background.
+                    if (diff >= 0 && diff <= 10 * 60 * 1000 && cfg.lastTriggerKey !== key) {
+                        triggerAlarm(type, 'local');
+                    }
+                });
             };
 
             const scheduleNext = () => {
                 if (exactTimerRef.current) clearTimeout(exactTimerRef.current);
-                const target = getNextTarget();
-                setNextAlarmText(target ? target.toLocaleString('id-ID', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '-');
-                if (!target) return;
-                const delay = Math.max(0, target.getTime() - Date.now());
+                const next = getCandidates()[0];
+                setNextAlarmText(next ? `${TYPES[next.type].shortLabel} • ${next.date.toLocaleString('id-ID', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : '-');
+                if (!next) return;
+                const delay = Math.max(0, next.date.getTime() - Date.now());
                 exactTimerRef.current = setTimeout(() => {
                     checkDue();
                     setTimeout(scheduleNext, 500);
                 }, delay + 50);
             };
 
-            const toggleEnabled = async () => {
-                if (!settings.enabled) {
+            const toggleEnabled = async (type) => {
+                const cfg = settingsRef.current[type];
+                if (!cfg.enabled) {
                     await ensureNotificationPermission();
                     await unlockAudio();
-                    const next = { ...settings, enabled: true, lastTriggerKey: '' };
-                    saveSettings(next);
-                    setStatusText('Aktif • biarkan tab Follow Up tetap terbuka');
+                    patchReminder(type, { enabled: true, lastTriggerKey: '' });
+                    setStatusText(`${TYPES[type].label} aktif • setting hanya untuk perangkat ini`);
                 } else {
-                    stopAlarmSound();
-                    setAlarmOpen(false);
-                    saveSettings({ ...settings, enabled: false, snoozeUntil: '' });
-                    setStatusText('Pengingat nonaktif');
+                    if (alarmState?.type === type) {
+                        stopAlarmSound();
+                        setAlarmState(null);
+                    }
+                    patchReminder(type, { enabled: false, snoozeUntil: '', lastTriggerKey: '' });
+                    setStatusText(`${TYPES[type].label} dinonaktifkan`);
                 }
             };
 
             const saveReminder = async () => {
                 await ensureNotificationPermission();
                 await unlockAudio();
-                saveSettings({ ...settings, lastTriggerKey: '' });
+                setSettings(prev => ({
+                    arrival: { ...prev.arrival, lastTriggerKey: '' },
+                    departure: { ...prev.departure, lastTriggerKey: '' }
+                }));
                 setIsOpen(false);
             };
 
-            const toggleDay = (day) => {
-                const days = settings.days.includes(day) ? settings.days.filter(d => d !== day) : [...settings.days, day];
-                patchSettings({ days, lastTriggerKey: '' });
+            const toggleDay = (type, day) => {
+                const cfg = settingsRef.current[type];
+                const days = cfg.days.includes(day) ? cfg.days.filter(d => d !== day) : [...cfg.days, day];
+                patchReminder(type, { days, lastTriggerKey: '' });
             };
 
-            const handleImageUpload = async (e) => {
+            const handleImageUpload = async (type, e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 const imageData = await resizeImage(file, 900, 0.82);
-                patchSettings({ imageData });
+                patchReminder(type, { imageData });
                 e.target.value = '';
             };
 
@@ -1311,7 +1588,8 @@
             }, []);
 
             useEffect(() => {
-                if (!settings.enabled) return;
+                const anyEnabled = settings.arrival.enabled || settings.departure.enabled;
+                if (!anyEnabled) return;
                 const arm = () => unlockAudio();
                 document.addEventListener('pointerdown', arm, { once: true, capture: true });
                 document.addEventListener('keydown', arm, { once: true, capture: true });
@@ -1319,90 +1597,107 @@
                     document.removeEventListener('pointerdown', arm, { capture: true });
                     document.removeEventListener('keydown', arm, { capture: true });
                 };
-            }, [settings.enabled]);
+            }, [settings.arrival.enabled, settings.departure.enabled]);
 
             useEffect(() => {
-                if (exactTimerRef.current) clearTimeout(exactTimerRef.current);
-                if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-                if (!settings.enabled) {
-                    setNextAlarmText('-');
-                    return;
-                }
                 checkDue();
                 scheduleNext();
-                heartbeatRef.current = setInterval(checkDue, 30000);
-                const recover = () => { checkDue(); scheduleNext(); };
-                document.addEventListener('visibilitychange', recover);
-                window.addEventListener('focus', recover);
-                window.addEventListener('pageshow', recover);
-                return () => {
-                    if (exactTimerRef.current) clearTimeout(exactTimerRef.current);
-                    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-                    document.removeEventListener('visibilitychange', recover);
-                    window.removeEventListener('focus', recover);
-                    window.removeEventListener('pageshow', recover);
+
+                if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+                heartbeatRef.current = setInterval(checkDue, 15000);
+
+                const wakeCheck = () => {
+                    checkDue();
+                    scheduleNext();
                 };
-            }, [settings.enabled, settings.time, JSON.stringify(settings.days), settings.snoozeUntil, settings.lastTriggerKey]);
+                window.addEventListener('focus', wakeCheck);
+                document.addEventListener('visibilitychange', wakeCheck);
 
-            useEffect(() => () => {
-                stopAlarmSound();
-                if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
-            }, []);
+                return () => {
+                    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+                    if (exactTimerRef.current) clearTimeout(exactTimerRef.current);
+                    window.removeEventListener('focus', wakeCheck);
+                    document.removeEventListener('visibilitychange', wakeCheck);
+                };
+            }, [settings]);
 
-            useEffect(() => {
-                if (!isOpen && !alarmOpen) return;
-                const old = document.body.style.overflow;
-                document.body.style.overflow = 'hidden';
-                return () => { document.body.style.overflow = old; };
-            }, [isOpen, alarmOpen]);
+            useEffect(() => () => stopAlarmSound(), []);
 
-            const permissionBadge = permission === 'granted' ? 'Notifikasi diizinkan' : permission === 'denied' ? 'Notifikasi diblokir' : permission === 'unsupported' ? 'Tidak didukung' : 'Belum diizinkan';
+            const selected = settings[activeTab];
+            const selectedMeta = TYPES[activeTab];
+            const activeCount = Number(settings.arrival.enabled) + Number(settings.departure.enabled);
+            const alarmCfg = alarmState?.type ? settings[alarmState.type] : null;
+            const alarmMeta = alarmState?.type ? TYPES[alarmState.type] : null;
+
+            const renderReminderTab = (type) => {
+                const cfg = settings[type];
+                const meta = TYPES[type];
+                const isSelected = activeTab === type;
+                return (
+                    <button
+                        onClick={() => setActiveTab(type)}
+                        className={`flex-1 rounded-2xl p-3 text-left border-2 transition-all ${isSelected ? 'border-violet-500 bg-violet-50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <div className="text-xs font-black uppercase tracking-wider text-gray-400">{type === 'arrival' ? '01' : '02'}</div>
+                                <div className="font-black text-gray-900 dark:text-white">{meta.label}</div>
+                                <div className="text-sm font-bold text-violet-600 dark:text-violet-400 mt-1">{cfg.time}</div>
+                            </div>
+                            <span className={`w-3 h-3 rounded-full ${cfg.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
+                        </div>
+                    </button>
+                );
+            };
 
             return (
                 <>
-                    <button onClick={() => setIsOpen(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border hover:scale-110 transition-all flex items-center justify-center relative ${settings.enabled ? 'border-violet-400 ring-2 ring-violet-200 dark:ring-violet-900/60' : 'border-gray-100 dark:border-gray-700'}`} title="Pengingat Absen Pulang">
-                        <BellIcon size={20} className={settings.enabled ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'} />
-                        {settings.enabled && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-gray-800"></span>}
+                    <button onClick={() => setIsOpen(true)} className="relative bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" title="Pengingat Absen Masuk & Pulang">
+                        <BellIcon size={20} className={activeCount > 0 ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'} />
+                        {activeCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-black flex items-center justify-center border-2 border-white dark:border-gray-800">{activeCount}</span>}
                     </button>
 
                     {isOpen && (
                         <ModalPortal>
-                        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4">
-                            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsOpen(false)}></div>
-                            <div className="relative z-10 w-full max-w-xl bg-white dark:bg-gray-800 rounded-[2rem] shadow-2xl border border-violet-100 dark:border-gray-700 overflow-hidden pop-in-animation">
-                                <div className="p-6 bg-gradient-to-r from-violet-600 to-indigo-600 text-white flex items-center justify-between">
+                        <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+                            <div className="w-full max-w-xl bg-white dark:bg-gray-800 rounded-[2rem] shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden my-auto pop-in-animation">
+                                <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white p-5 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center"><BellIcon size={24}/></div>
                                         <div>
-                                            <h2 className="text-2xl font-black">Pengingat Absen Pulang</h2>
-                                            <p className="text-sm text-violet-100">Masing-masing PC/browser punya jam sendiri.</p>
+                                            <h2 className="text-xl font-black">Pengingat Absensi</h2>
+                                            <p className="text-xs text-white/80">Masuk kerja + pulang • per PC/browser</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setIsOpen(false)} className="p-2 rounded-full hover:bg-white/20"><X size={20}/></button>
                                 </div>
 
-                                <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto hide-scrollbar">
-                                    <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/60 border border-gray-100 dark:border-gray-700">
+                                <div className="p-5 space-y-5 max-h-[76vh] overflow-y-auto hide-scrollbar">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {renderReminderTab('arrival')}
+                                        {renderReminderTab('departure')}
+                                    </div>
+
+                                    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 p-4 flex items-center justify-between gap-4">
                                         <div>
-                                            <div className="font-black text-gray-800 dark:text-gray-100">{settings.enabled ? 'Pengingat aktif' : 'Pengingat nonaktif'}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{statusText} • {permissionBadge}</div>
-                                            <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">🔊 {audioStatus} • berikutnya: {nextAlarmText}</div>
+                                            <div className="font-black text-gray-900 dark:text-white">Pengingat {selectedMeta.label}</div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{selected.enabled ? `Aktif • ${selected.time}` : 'Nonaktif'}</div>
                                         </div>
-                                        <button onClick={toggleEnabled} className={`px-5 py-2.5 rounded-full font-black text-sm transition-all ${settings.enabled ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-violet-100 dark:hover:bg-violet-900/40'}`}>
-                                            {settings.enabled ? 'AKTIF' : 'AKTIFKAN'}
+                                        <button onClick={() => toggleEnabled(activeTab)} className={`px-4 py-2 rounded-xl font-black text-sm ${selected.enabled ? 'bg-emerald-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+                                            {selected.enabled ? 'ON' : 'OFF'}
                                         </button>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Jam alarm PC ini</label>
-                                            <div className="flex w-full min-w-0 rounded-2xl border-2 border-violet-100 dark:border-gray-700 bg-violet-50/60 dark:bg-gray-900 px-4 py-3">
-                                                <input type="time" value={settings.time} onChange={(e) => patchSettings({ time: e.target.value, lastTriggerKey: '' })} className="block w-full min-w-0 border-0 bg-transparent p-0 text-xl font-black text-violet-700 dark:text-violet-300 outline-none" />
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Jam {activeTab === 'arrival' ? 'masuk' : 'pulang'}</label>
+                                            <div className="w-full rounded-2xl border-2 border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3">
+                                                <input type="time" value={selected.time} onChange={(e) => patchReminder(activeTab, { time: e.target.value, lastTriggerKey: '' })} className="block w-full min-w-0 border-0 bg-transparent p-0 text-xl font-black text-gray-900 dark:text-white outline-none"/>
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tes perangkat</label>
-                                            <button onClick={async () => { await ensureNotificationPermission(); await unlockAudio(); await triggerAlarm('test', true); }} className="w-full h-[54px] rounded-2xl border-2 border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-black flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Tes {selectedMeta.shortLabel}</label>
+                                            <button onClick={async () => { await ensureNotificationPermission(); await unlockAudio(); await triggerAlarm(activeTab, 'test', true); }} className="w-full h-[54px] rounded-2xl border-2 border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-black flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
                                                 <VolumeIcon size={18}/> Test Alarm + Notif
                                             </button>
                                         </div>
@@ -1412,34 +1707,45 @@
                                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Hari aktif</label>
                                         <div className="grid grid-cols-7 gap-2">
                                             {dayOptions.map(day => (
-                                                <button key={day.id} onClick={() => toggleDay(day.id)} className={`py-2.5 rounded-xl text-xs font-black border transition-all ${settings.days.includes(day.id) ? 'bg-violet-600 text-white border-violet-600' : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`} title={day.label}>{day.short}</button>
+                                                <button key={day.id} onClick={() => toggleDay(activeTab, day.id)} className={`py-2.5 rounded-xl text-xs font-black border transition-all ${selected.days.includes(day.id) ? 'bg-violet-600 text-white border-violet-600' : 'bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'}`} title={day.label}>{day.short}</button>
                                             ))}
                                         </div>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Pesan alarm</label>
-                                        <input type="text" value={settings.message} onChange={(e) => patchSettings({ message: e.target.value })} className="w-full rounded-2xl border-2 border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3 text-gray-800 dark:text-gray-100 outline-none focus:border-violet-400" placeholder="Contoh: Jangan lupa absen sebelum pulang!"/>
+                                        <input type="text" value={selected.message} onChange={(e) => patchReminder(activeTab, { message: e.target.value })} className="w-full rounded-2xl border-2 border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-4 py-3 text-gray-800 dark:text-gray-100 outline-none focus:border-violet-400"/>
                                     </div>
 
                                     <div>
                                         <div className="flex justify-between items-center mb-2">
-                                            <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Gambar pop-up</label>
-                                            {settings.imageData && <button onClick={() => patchSettings({ imageData: '' })} className="text-xs font-bold text-red-500">Hapus</button>}
+                                            <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Gambar pop-up {selectedMeta.shortLabel}</label>
+                                            {selected.imageData && <button onClick={() => patchReminder(activeTab, { imageData: '' })} className="text-xs font-bold text-red-500">Hapus</button>}
                                         </div>
                                         <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-violet-400 overflow-hidden bg-gray-50 dark:bg-gray-900/60">
-                                            {settings.imageData ? <img src={settings.imageData} alt="Preview" className="w-full h-36 object-cover" /> : <div className="h-24 flex flex-col items-center justify-center text-gray-400 gap-2"><ImageIcon size={26}/><span className="text-xs font-bold">Upload gambar opsional</span></div>}
-                                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
+                                            {selected.imageData ? <img src={selected.imageData} alt="Preview" className="w-full h-32 object-cover" /> : <div className="h-20 flex flex-col items-center justify-center text-gray-400 gap-1"><ImageIcon size={24}/><span className="text-xs font-bold">Upload gambar opsional</span></div>}
+                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(activeTab, e)}/>
                                         </label>
                                     </div>
 
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                            <div className="font-black text-gray-500">Notifikasi</div>
+                                            <div className={`mt-1 font-black ${permission === 'granted' ? 'text-emerald-500' : 'text-amber-500'}`}>{permission === 'granted' ? 'Diizinkan' : permission}</div>
+                                        </div>
+                                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                            <div className="font-black text-gray-500">Alarm berikutnya</div>
+                                            <div className="mt-1 font-black text-violet-600 dark:text-violet-400">{nextAlarmText}</div>
+                                        </div>
+                                    </div>
+
                                     <div className="rounded-2xl p-4 border bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300 text-sm">
-                                        <b>Mode sederhana:</b> tidak perlu Node.js, Firebase Functions, VAPID, atau deploy backend. Setiap pengguna mengatur jamnya sendiri di PC/browser masing-masing. <b>Syaratnya tab Follow Up tetap terbuka</b>; pengguna boleh pindah ke Google, WhatsApp Web, Canva, atau website lain dan notifikasi sistem tetap dapat muncul.
+                                        <b>{statusText}</b><br/>Setiap pengguna bebas mengatur jam masuk dan jam pulang sendiri. Tidak perlu Node.js/Firebase Functions. Tab Follow Up harus tetap terbuka saat pengguna berpindah ke website lain.
                                     </div>
 
                                     <div className="flex gap-3 pt-1">
                                         <button onClick={() => setIsOpen(false)} className="flex-1 py-3 rounded-2xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-black">Batal</button>
-                                        <button onClick={saveReminder} className="flex-1 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black shadow-lg">Simpan</button>
+                                        <button onClick={saveReminder} className="flex-1 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black shadow-lg">Simpan Semua</button>
                                     </div>
                                 </div>
                             </div>
@@ -1447,15 +1753,15 @@
                         </ModalPortal>
                     )}
 
-                    {alarmOpen && (
+                    {alarmState && alarmCfg && alarmMeta && (
                         <ModalPortal>
                         <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-                            <div className="w-full max-w-xl bg-white dark:bg-gray-900 rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-amber-400 pop-in-animation text-center">
-                                {settings.imageData ? <img src={settings.imageData} alt="Pengingat absen" className="w-full h-60 object-cover" /> : <div className="h-52 bg-gradient-to-br from-amber-300 via-orange-400 to-rose-500 flex items-center justify-center"><div className="text-[92px]">⏰</div></div>}
+                            <div className={`w-full max-w-xl bg-white dark:bg-gray-900 rounded-[2.5rem] overflow-hidden shadow-2xl border-4 ${alarmState.type === 'arrival' ? 'border-emerald-400' : 'border-violet-400'} pop-in-animation text-center`}>
+                                {alarmCfg.imageData ? <img src={alarmCfg.imageData} alt="Pengingat absen" className="w-full h-60 object-cover" /> : <div className={`h-52 flex items-center justify-center ${alarmState.type === 'arrival' ? 'bg-gradient-to-br from-emerald-300 via-teal-400 to-cyan-500' : 'bg-gradient-to-br from-violet-300 via-purple-400 to-indigo-500'}`}><div className="text-[92px]">⏰</div></div>}
                                 <div className="p-7">
-                                    <div className="text-xs font-black uppercase tracking-[0.25em] text-amber-600 mb-2">Alarm Absen Pulang</div>
-                                    <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-3">Jangan Lupa Absen! 👋</h2>
-                                    <p className="text-gray-600 dark:text-gray-300 text-lg mb-7">{settings.message || DEFAULTS.message}</p>
+                                    <div className={`text-xs font-black uppercase tracking-[0.25em] mb-2 ${alarmState.type === 'arrival' ? 'text-emerald-600' : 'text-violet-600'}`}>{alarmMeta.alarmLabel}</div>
+                                    <h2 className="text-3xl sm:text-4xl font-black text-gray-900 dark:text-white mb-3">{alarmMeta.headline}</h2>
+                                    <p className="text-gray-600 dark:text-gray-300 text-lg mb-7">{alarmCfg.message}</p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <button onClick={() => snooze(10)} className="py-3.5 rounded-2xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-black">Ingatkan 10 Menit Lagi</button>
                                         <button onClick={markDone} className="py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black shadow-lg">✓ Sudah Absen</button>

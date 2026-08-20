@@ -1,4 +1,4 @@
-// Attendance Reminder Service Worker v6 - cross-tab image fallback
+// Attendance Reminder Service Worker v7 - dual attendance reminder
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
