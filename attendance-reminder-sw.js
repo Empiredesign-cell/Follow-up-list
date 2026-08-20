@@ -1,4 +1,4 @@
-// Attendance Reminder Service Worker v8 - dual attendance reminder
+// Attendance Reminder Service Worker v9 - global dual attendance reminder
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
