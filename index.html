@@ -94,7 +94,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v9-global-engine-dual-sound';
+        const ATTENDANCE_REMINDER_VERSION = 'v13-github-pulang-mp3';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -1271,7 +1271,7 @@
                     alarmLabel: 'Alarm Absen Pulang',
                     headline: 'Jangan Lupa Absen Pulang! 👋',
                     accent: 'violet',
-                    sound: './alarm-pulang.mp3'
+                    sound: './alarm-pulang.mp3?v=58c3d191505dd601'
                 }
             };
 
