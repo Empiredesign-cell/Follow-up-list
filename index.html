@@ -94,7 +94,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v13-github-pulang-mp3';
+        const ATTENDANCE_REMINDER_VERSION = 'v14-workspace-cards-fix';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -1271,7 +1271,7 @@
                     alarmLabel: 'Alarm Absen Pulang',
                     headline: 'Jangan Lupa Absen Pulang! 👋',
                     accent: 'violet',
-                    sound: './alarm-pulang.mp3?v=58c3d191505dd601'
+                    sound: './alarm-pulang.mp3'
                 }
             };
 
@@ -1806,7 +1806,18 @@
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
         const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user }) => {
-            const [folders, setFolders] = useState([]);
+            // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
+            // sedang membaca cache/offline atau query server belum selesai.
+            const FOLDERS_CACHE_KEY = 'flFoldersCacheV2';
+            const [folders, setFolders] = useState(() => {
+                try {
+                    const cached = JSON.parse(localStorage.getItem(FOLDERS_CACHE_KEY) || '[]');
+                    return Array.isArray(cached) ? cached : [];
+                } catch {
+                    return [];
+                }
+            });
+            const [foldersStatus, setFoldersStatus] = useState('loading');
             const [homeBackground, setHomeBackground] = useState(null); 
             
             const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1832,12 +1843,52 @@
 
             useEffect(() => { sessionStorage.setItem('flAdmin', isAdmin); }, [isAdmin]);
 
-            // FETCH FOLDER
+            // FETCH FOLDER - V14 FIX
+            // Jangan memakai orderBy('createdAt') di query Firestore. Dokumen workspace lama
+            // yang tidak punya createdAt dapat tidak ikut hasil query sehingga seluruh kartu
+            // tampak hilang. Ambil semua dokumen lalu urutkan di browser.
             useEffect(() => {
-                const q = query(collection(db, 'folders'), orderBy('createdAt', 'desc'));
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const f = []; snapshot.forEach(doc => f.push({ id: doc.id, ...doc.data() })); setFolders(f);
-                });
+                const foldersRef = collection(db, 'folders');
+
+                const toMillisSafe = (value) => {
+                    if (!value) return 0;
+                    if (typeof value.toMillis === 'function') return value.toMillis();
+                    if (typeof value.seconds === 'number') return value.seconds * 1000;
+                    const n = Number(value);
+                    return Number.isFinite(n) ? n : 0;
+                };
+
+                const unsubscribe = onSnapshot(
+                    foldersRef,
+                    { includeMetadataChanges: true },
+                    (snapshot) => {
+                        const fresh = [];
+                        snapshot.forEach(folderDoc => {
+                            fresh.push({ id: folderDoc.id, ...folderDoc.data() });
+                        });
+
+                        fresh.sort((a, b) => toMillisSafe(b.createdAt) - toMillisSafe(a.createdAt));
+
+                        // Snapshot cache kosong tidak boleh menghapus kartu yang sebelumnya
+                        // sudah tersimpan lokal. Tunggu snapshot server berikutnya.
+                        if (fresh.length === 0 && snapshot.metadata.fromCache) {
+                            setFoldersStatus('cache-wait');
+                            return;
+                        }
+
+                        setFolders(fresh);
+                        setFoldersStatus('ready');
+                        try {
+                            localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(fresh));
+                        } catch {}
+                    },
+                    (error) => {
+                        console.error('Gagal memuat workspace:', error);
+                        setFoldersStatus('error');
+                        // Jangan set [] di sini. Cache/daftar terakhir tetap ditampilkan.
+                    }
+                );
+
                 return () => unsubscribe();
             }, []);
 
@@ -2036,6 +2087,11 @@
                             
                             {/* BAGIAN KIRI: GRID FOLDER */}
                             <div className="flex-1 w-full">
+                                {folders.length === 0 && foldersStatus === 'error' && (
+                                    <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50/90 dark:bg-amber-900/30 dark:border-amber-700 p-4 text-sm font-bold text-amber-800 dark:text-amber-200">
+                                        Workspace gagal dimuat dari Firebase. Data tidak dihapus; coba refresh atau periksa koneksi.
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-6 gap-y-28 justify-items-center">
                                     {isAdmin && (
                                         <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
