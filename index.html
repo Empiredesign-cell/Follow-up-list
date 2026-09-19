@@ -94,7 +94,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v14-workspace-cards-fix';
+        const ATTENDANCE_REMINDER_VERSION = 'v16-single-sound-fix';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -1253,6 +1253,8 @@
             const audioCtxRef = useRef(null);
             const alarmAudioRef = useRef({ arrival: null, departure: null });
             const beepIntervalRef = useRef(null);
+            // Guard untuk mencegah exact timer + heartbeat memicu alarm yang sama bersamaan.
+            const triggerGuardRef = useRef({ arrival: '', departure: '' });
 
             const TYPES = {
                 arrival: {
@@ -1433,7 +1435,8 @@
                     tag: `absen-${type}-${localDateKey()}`,
                     renotify: true,
                     requireInteraction: true,
-                    silent: false,
+                    // Bunyi native notification dimatikan. Suara alarm hanya berasal dari file custom.
+                    silent: true,
                     timestamp: Date.now(),
                     data: { url: window.location.href.split('?')[0], reminderType: type }
                 };
@@ -1456,9 +1459,18 @@
                 if (!cfg) return;
                 const now = new Date();
                 const key = cfg.snoozeUntil ? `${type}@snooze@${cfg.snoozeUntil}` : triggerKeyFor(type, now, cfg);
-                if (!forced && cfg.lastTriggerKey === key) return;
+
+                // Cegah trigger ganda: exact timeout dan heartbeat 15 detik bisa jatuh di waktu yang sama.
+                if (!forced) {
+                    if (cfg.lastTriggerKey === key) return;
+                    if (triggerGuardRef.current[type] === key) return;
+                    triggerGuardRef.current[type] = key;
+                }
 
                 setAlarmState({ type });
+
+                // Notification tetap tampil, tetapi dibuat silent agar tidak menambah bunyi sistem.
+                // Satu-satunya bunyi adalah sound custom sesuai jenis alarm.
                 await showNativeNotification(type, cfg);
                 await startAlarmSound(type);
 
@@ -2248,29 +2260,148 @@
 
         function App() {
             const [authReady, setAuthReady] = useState(false);
+            const [authError, setAuthError] = useState('');
+            const [authErrorCode, setAuthErrorCode] = useState('');
+            const [authAttempt, setAuthAttempt] = useState(0);
             const [user, setUser] = useState(null);
             const [currentFolder, setCurrentFolder] = useState(null); 
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
+            // AUTH V15: jangan biarkan aplikasi muter selamanya jika Anonymous Auth gagal.
+            // Listener dipasang dulu, lalu sign-in anonymous dicoba. Jika gagal/timeout,
+            // tampilkan kode error yang bisa langsung dipakai untuk diagnosis.
             useEffect(() => {
-                signInAnonymously(auth).catch(e => console.error("Auth failed:", e));
-                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-                    if (currentUser) {
-                        setUser(currentUser);
-                        setAuthReady(true);
-                    }
-                });
-                return () => unsubscribe();
-            }, []);
+                let cancelled = false;
+                let timeoutId = null;
+                let signingIn = false;
 
-            if (!authReady) {
+                const setFailure = (error) => {
+                    if (cancelled) return;
+                    if (timeoutId) clearTimeout(timeoutId);
+                    const code = error?.code || 'auth/unknown';
+                    const message = error?.message || 'Firebase Authentication gagal.';
+                    console.error('Firebase Auth error:', code, message, error);
+                    setAuthErrorCode(code);
+                    setAuthError(message);
+                    setAuthReady(false);
+                };
+
+                const tryAnonymousLogin = async () => {
+                    if (cancelled || signingIn || auth.currentUser) return;
+                    signingIn = true;
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (error) {
+                        setFailure(error);
+                    } finally {
+                        signingIn = false;
+                    }
+                };
+
+                setAuthError('');
+                setAuthErrorCode('');
+
+                const unsubscribe = onAuthStateChanged(
+                    auth,
+                    (currentUser) => {
+                        if (cancelled) return;
+                        if (currentUser) {
+                            if (timeoutId) clearTimeout(timeoutId);
+                            setUser(currentUser);
+                            setAuthReady(true);
+                            setAuthError('');
+                            setAuthErrorCode('');
+                        } else {
+                            setUser(null);
+                            setAuthReady(false);
+                            tryAnonymousLogin();
+                        }
+                    },
+                    (error) => setFailure(error)
+                );
+
+                if (auth.currentUser) {
+                    setUser(auth.currentUser);
+                    setAuthReady(true);
+                } else {
+                    tryAnonymousLogin();
+                }
+
+                timeoutId = setTimeout(() => {
+                    if (!cancelled && !auth.currentUser && !authError) {
+                        setFailure({
+                            code: 'auth/timeout',
+                            message: 'Login anonymous tidak selesai dalam 12 detik. Periksa koneksi atau konfigurasi Firebase Authentication.'
+                        });
+                    }
+                }, 12000);
+
+                return () => {
+                    cancelled = true;
+                    if (timeoutId) clearTimeout(timeoutId);
+                    unsubscribe();
+                };
+            }, [authAttempt]);
+
+            const retryAuth = () => {
+                setAuthError('');
+                setAuthErrorCode('');
+                setAuthReady(false);
+                setAuthAttempt(v => v + 1);
+            };
+
+            const authHelpText = (() => {
+                if (authErrorCode === 'auth/operation-not-allowed') {
+                    return 'Anonymous Authentication belum aktif. Buka Firebase Console → Authentication → Sign-in method → Anonymous → Enable.';
+                }
+                if (authErrorCode === 'auth/network-request-failed') {
+                    return 'Browser gagal menjangkau Firebase. Cek internet, VPN, DNS, antivirus, atau extension yang memblokir request.';
+                }
+                if (authErrorCode === 'auth/too-many-requests') {
+                    return 'Firebase membatasi percobaan sementara. Tunggu beberapa menit lalu coba lagi.';
+                }
+                if (authErrorCode === 'auth/timeout') {
+                    return 'Firebase Authentication tidak merespons. Coba Reload; jika tetap sama, cek Anonymous Authentication di Firebase Console.';
+                }
+                return 'Pastikan Firebase Authentication → Sign-in method → Anonymous dalam keadaan Enabled.';
+            })();
+
+            if (!authReady && !authError) {
                 return (
                     <div className={isDarkMode ? 'dark' : ''}>
-                        <div className="min-h-screen flex flex-col items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 text-purple-600 dark:text-purple-400 font-bold text-xl gap-4">
+                        <div className="min-h-screen flex flex-col items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 text-purple-600 dark:text-purple-400 font-bold text-xl gap-4 px-6 text-center">
                             <Loader size={48} className="animate-spin" />
                             <p className="animate-pulse">Menghubungkan ke Awan...</p>
+                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Firebase Authentication sedang diperiksa</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!authReady && authError) {
+                return (
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="min-h-screen flex items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 p-6">
+                            <div className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-[2rem] shadow-2xl border border-red-200 dark:border-red-900/50 p-7 text-center">
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-3xl">☁️</div>
+                                <h1 className="text-2xl font-black text-gray-900 dark:text-white">Gagal Menghubungkan Firebase</h1>
+                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Aplikasi berhenti di tahap login anonymous, bukan di loading workspace.</p>
+
+                                <div className="mt-5 text-left rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
+                                    <div className="text-xs font-black uppercase tracking-wider text-gray-400">Kode error</div>
+                                    <div className="mt-1 font-mono text-sm font-bold text-red-600 dark:text-red-400 break-all">{authErrorCode || 'auth/unknown'}</div>
+                                    <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 break-words">{authHelpText}</div>
+                                </div>
+
+                                <button onClick={retryAuth} className="mt-5 w-full py-3.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black shadow-lg">
+                                    Coba Hubungkan Lagi
+                                </button>
+                                <button onClick={() => window.location.reload()} className="mt-3 w-full py-3 rounded-2xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-black">
+                                    Reload Website
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );
