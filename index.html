@@ -73,7 +73,7 @@
         import { createPortal } from "react-dom";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Portal modal ke <body> agar tidak terjebak stacking-context/z-index parent.
         const ModalPortal = ({ children }) => createPortal(children, document.body);
@@ -99,7 +99,7 @@
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v17-account-access';
+        const ATTENDANCE_REMINDER_VERSION = 'v18-division-groups';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -710,27 +710,29 @@
                 return () => unsubscribe();
             }, [folderId]);
 
-            // FETCH LIST FOLDER (Untuk Kotak Surat) mengikuti hak akses akun.
+            // FETCH LIST FOLDER (Kotak Surat) - V18 grup/divisi.
+            // Member/Admin Divisi hanya bisa mengirim ke workspace dalam divisi yang sama.
             useEffect(() => {
                 const isSuper = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
                 if (isSuper) {
                     const unsub = onSnapshot(collection(db, 'folders'), (snap) => {
                         const f = [];
-                        snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name }); });
+                        snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name, divisionId: d.data().divisionId || '' }); });
                         setAvailableFolders(f);
                     }, () => setAvailableFolders([]));
                     return () => unsub();
                 }
 
-                const ids = Array.isArray(accountProfile?.workspaceIds) ? accountProfile.workspaceIds.filter(id => id && id !== folderId) : [];
-                if (!ids.length) { setAvailableFolders([]); return; }
-                const map = new Map();
-                const unsubs = ids.map(id => onSnapshot(doc(db, 'folders', id), (snap) => {
-                    if (snap.exists()) map.set(id, { id, name: snap.data().name }); else map.delete(id);
-                    setAvailableFolders(Array.from(map.values()));
-                }, () => {}));
-                return () => unsubs.forEach(fn => fn());
-            }, [folderId, accountProfile?.role, accountProfile?.ownsLegacyData, JSON.stringify(accountProfile?.workspaceIds || [])]);
+                const divisionId = accountProfile?.divisionId || '';
+                if (!divisionId) { setAvailableFolders([]); return; }
+                const q = query(collection(db, 'folders'), where('divisionId', '==', divisionId));
+                const unsub = onSnapshot(q, (snap) => {
+                    const f = [];
+                    snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name, divisionId }); });
+                    setAvailableFolders(f);
+                }, () => setAvailableFolders([]));
+                return () => unsub();
+            }, [folderId, accountProfile?.role, accountProfile?.ownsLegacyData, accountProfile?.divisionId]);
 
             // AUTOSAVE HANYA JIKA STATE BENAR-BENAR BERUBAH SECARA LOKAL.
             useEffect(() => {
@@ -1906,80 +1908,155 @@
             );
         };
 
-        const UserManagerModal = ({ folders, onClose, isDarkMode }) => {
-            const EMPTY = { name: '', email: '', password: '', role: 'member', divisionName: '', workspaceIds: [], active: true, allowSharedLegacy: false };
+        const UserManagerModal = ({ folders, onClose, isDarkMode, accountProfile }) => {
+            const isSuperAdmin = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
+            const isDivisionAdmin = accountProfile?.role === 'division_admin';
+            const myDivisionId = accountProfile?.divisionId || '';
+            const EMPTY = { name: '', email: '', password: '', role: 'member', divisionId: isSuperAdmin ? '' : myDivisionId, active: true };
+
             const [users, setUsers] = useState([]);
+            const [divisions, setDivisions] = useState([]);
             const [form, setForm] = useState(EMPTY);
             const [editingUid, setEditingUid] = useState(null);
             const [busy, setBusy] = useState(false);
             const [error, setError] = useState('');
             const [info, setInfo] = useState('');
+            const [newDivisionName, setNewDivisionName] = useState('');
+            const [showDeleted, setShowDeleted] = useState(false);
 
+            // Super Admin melihat semua divisi. Admin divisi hanya mengetahui grupnya sendiri.
             useEffect(() => {
-                const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+                if (isSuperAdmin) {
+                    const unsub = onSnapshot(collection(db, 'divisions'), (snap) => {
+                        const rows = [];
+                        snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+                        rows.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+                        setDivisions(rows);
+                    }, err => setError('Gagal memuat divisi: ' + (err?.message || err)));
+                    return () => unsub();
+                }
+                if (myDivisionId) {
+                    const unsub = onSnapshot(doc(db, 'divisions', myDivisionId), (snap) => {
+                        setDivisions(snap.exists() ? [{ id: snap.id, ...snap.data() }] : []);
+                    });
+                    return () => unsub();
+                }
+                setDivisions([]);
+            }, [isSuperAdmin, myDivisionId]);
+
+            // Query pengguna harus ikut scope divisi agar Firestore Rules benar-benar mengisolasi grup.
+            useEffect(() => {
+                let source;
+                if (isSuperAdmin) source = collection(db, 'users');
+                else if (isDivisionAdmin && myDivisionId) source = query(collection(db, 'users'), where('divisionId', '==', myDivisionId));
+                else { setUsers([]); return; }
+
+                const unsub = onSnapshot(source, (snap) => {
                     const rows = [];
                     snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
                     rows.sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''));
                     setUsers(rows);
                 }, err => setError('Gagal memuat pengguna: ' + (err?.message || err)));
                 return () => unsub();
-            }, []);
+            }, [isSuperAdmin, isDivisionAdmin, myDivisionId]);
 
-            const toggleWorkspace = (id) => {
-                setForm(prev => ({ ...prev, workspaceIds: prev.workspaceIds.includes(id) ? prev.workspaceIds.filter(x => x !== id) : [...prev.workspaceIds, id] }));
+            const divisionById = (id) => divisions.find(d => d.id === id) || null;
+            const visibleUsers = users.filter(u => showDeleted || !u.deleted);
+
+            const resetForm = () => {
+                setEditingUid(null);
+                setForm({ ...EMPTY, divisionId: isSuperAdmin ? '' : myDivisionId });
+                setError('');
+                setInfo('');
             };
 
             const startEdit = (u) => {
+                if (!isSuperAdmin && (u.divisionId !== myDivisionId || u.role !== 'member')) {
+                    setError('Admin divisi hanya boleh mengubah Member di grupnya sendiri.');
+                    return;
+                }
                 setEditingUid(u.uid);
                 setForm({
                     name: u.name || '', email: u.email || '', password: '', role: u.role || 'member',
-                    divisionName: u.divisionName || '', workspaceIds: Array.isArray(u.workspaceIds) ? u.workspaceIds : [],
-                    active: u.active !== false, allowSharedLegacy: !!u.allowSharedLegacy
+                    divisionId: u.divisionId || (isSuperAdmin ? '' : myDivisionId), active: u.active !== false
                 });
                 setError(''); setInfo('');
             };
 
-            const resetForm = () => { setEditingUid(null); setForm(EMPTY); setError(''); setInfo(''); };
+            const createDivision = async (e) => {
+                e.preventDefault();
+                if (!isSuperAdmin || !newDivisionName.trim()) return;
+                setBusy(true); setError(''); setInfo('');
+                try {
+                    const name = newDivisionName.trim();
+                    const ref = await addDoc(collection(db, 'divisions'), {
+                        name,
+                        active: true,
+                        createdAt: serverTimestamp(),
+                        createdBy: auth.currentUser?.uid || null
+                    });
+                    setNewDivisionName('');
+                    setInfo(`Divisi ${name} dibuat. Sekarang assign workspace dan admin divisinya.`);
+                    setForm(prev => ({ ...prev, divisionId: ref.id }));
+                } catch (err) { setError(err?.message || 'Gagal membuat divisi.'); }
+                finally { setBusy(false); }
+            };
 
             const saveUser = async (e) => {
                 e.preventDefault();
                 setBusy(true); setError(''); setInfo('');
                 try {
+                    const normalizedEmail = form.email.trim().toLowerCase();
+                    const lockedOwner = normalizedEmail === LEGACY_OWNER_EMAIL;
+                    const roleToSave = lockedOwner ? 'super_admin' : (isSuperAdmin ? form.role : 'member');
+                    const divisionId = roleToSave === 'super_admin' ? (form.divisionId || '') : (isSuperAdmin ? form.divisionId : myDivisionId);
+                    const division = divisionById(divisionId);
+
+                    if (roleToSave !== 'super_admin' && !divisionId) throw new Error('Pilih divisi/grup terlebih dahulu.');
+                    if (!isSuperAdmin && !myDivisionId) throw new Error('Akun admin ini belum ditempatkan ke divisi.');
+
                     if (editingUid) {
-                        const lockedOwner = form.email.toLowerCase() === LEGACY_OWNER_EMAIL;
+                        const target = users.find(u => u.uid === editingUid);
+                        if (!isSuperAdmin && (!target || target.divisionId !== myDivisionId || target.role !== 'member')) {
+                            throw new Error('Admin divisi hanya boleh mengubah Member di grupnya sendiri.');
+                        }
                         await setDoc(doc(db, 'users', editingUid), {
                             name: form.name.trim(),
-                            email: form.email.trim().toLowerCase(),
-                            role: lockedOwner ? 'super_admin' : form.role,
-                            divisionName: form.divisionName.trim(),
-                            workspaceIds: lockedOwner ? [] : form.workspaceIds,
+                            email: normalizedEmail,
+                            role: roleToSave,
+                            divisionId: lockedOwner ? '' : divisionId,
+                            divisionName: lockedOwner ? 'Management' : (division?.name || accountProfile?.divisionName || ''),
+                            workspaceIds: [], // V18: akses workspace berasal dari divisi, bukan per-user.
                             active: lockedOwner ? true : !!form.active,
-                            allowSharedLegacy: lockedOwner ? true : !!form.allowSharedLegacy,
+                            deleted: false,
                             ownsLegacyData: lockedOwner,
-                            updatedAt: serverTimestamp()
+                            allowSharedLegacy: lockedOwner,
+                            updatedAt: serverTimestamp(),
+                            updatedBy: auth.currentUser?.uid || null
                         }, { merge: true });
-                        setInfo('Akses pengguna berhasil diperbarui.');
+                        setInfo('Pengguna berhasil diperbarui.');
                         resetForm();
                     } else {
                         if (!form.password || form.password.length < 6) throw new Error('Password sementara minimal 6 karakter.');
-                        let created = null;
                         try {
-                            created = await createUserWithEmailAndPassword(userCreatorAuth, form.email.trim().toLowerCase(), form.password);
+                            const created = await createUserWithEmailAndPassword(userCreatorAuth, normalizedEmail, form.password);
                             const uid = created.user.uid;
                             await setDoc(doc(db, 'users', uid), {
                                 name: form.name.trim(),
-                                email: form.email.trim().toLowerCase(),
-                                role: form.role,
-                                divisionName: form.divisionName.trim(),
-                                workspaceIds: form.workspaceIds,
+                                email: normalizedEmail,
+                                role: roleToSave,
+                                divisionId: roleToSave === 'super_admin' ? '' : divisionId,
+                                divisionName: roleToSave === 'super_admin' ? 'Management' : (division?.name || accountProfile?.divisionName || ''),
+                                workspaceIds: [],
                                 active: true,
-                                allowSharedLegacy: !!form.allowSharedLegacy,
+                                deleted: false,
+                                allowSharedLegacy: roleToSave === 'super_admin',
                                 ownsLegacyData: false,
                                 createdAt: serverTimestamp(),
                                 createdBy: auth.currentUser?.uid || null
                             });
-                            setInfo(`Akun ${form.email.trim()} berhasil dibuat.`);
-                            setForm(EMPTY);
+                            setInfo(`Akun ${normalizedEmail} berhasil dibuat di ${roleToSave === 'super_admin' ? 'Management' : (division?.name || 'divisi')}.`);
+                            resetForm();
                         } finally {
                             try { await signOut(userCreatorAuth); } catch {}
                         }
@@ -1993,6 +2070,46 @@
                 } finally { setBusy(false); }
             };
 
+            // Hapus di V18 adalah soft-delete/revoke access. Auth account tetap ada sehingga histori tidak putus.
+            const removeUser = async (u) => {
+                setError(''); setInfo('');
+                if (u.email?.toLowerCase() === LEGACY_OWNER_EMAIL || u.uid === auth.currentUser?.uid) {
+                    setError('Akun utama / akun yang sedang dipakai tidak boleh dihapus.');
+                    return;
+                }
+                if (!isSuperAdmin && (u.divisionId !== myDivisionId || u.role !== 'member')) {
+                    setError('Admin divisi hanya boleh menghapus Member di grupnya sendiri.');
+                    return;
+                }
+                if (!window.confirm(`Hapus akses ${u.name || u.email}?\n\nAkun akan langsung tidak bisa membuka data grup. Histori tetap disimpan.`)) return;
+                try {
+                    await updateDoc(doc(db, 'users', u.uid), {
+                        active: false,
+                        deleted: true,
+                        deletedAt: serverTimestamp(),
+                        deletedBy: auth.currentUser?.uid || null
+                    });
+                    setInfo(`${u.name || u.email} dihapus dari sistem Follow Up.`);
+                    if (editingUid === u.uid) resetForm();
+                } catch (err) { setError(err?.message || 'Gagal menghapus pengguna.'); }
+            };
+
+            const restoreUser = async (u) => {
+                setError(''); setInfo('');
+                if (!isSuperAdmin && (u.divisionId !== myDivisionId || u.role !== 'member')) return;
+                try {
+                    await updateDoc(doc(db, 'users', u.uid), {
+                        active: true,
+                        deleted: false,
+                        deletedAt: null,
+                        deletedBy: null,
+                        restoredAt: serverTimestamp(),
+                        restoredBy: auth.currentUser?.uid || null
+                    });
+                    setInfo(`${u.name || u.email} dipulihkan.`);
+                } catch (err) { setError(err?.message || 'Gagal memulihkan pengguna.'); }
+            };
+
             const sendReset = async (email) => {
                 setError(''); setInfo('');
                 try { await sendPasswordResetEmail(auth, email); setInfo(`Link reset password dikirim ke ${email}.`); }
@@ -2003,44 +2120,115 @@
                 <ModalPortal>
                     <div className={isDarkMode ? 'dark' : ''}>
                         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-                            <div className="w-full max-w-6xl max-h-[92vh] overflow-hidden bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col">
-                                <div className="p-5 md:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                                    <div><h2 className="text-2xl font-black text-gray-900 dark:text-white">Manajemen Pengguna</h2><p className="text-sm text-gray-500 dark:text-gray-400">Buat akun divisi dan tentukan workspace yang boleh diakses.</p></div>
+                            <div className="w-full max-w-7xl max-h-[94vh] overflow-hidden bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col">
+                                <div className="p-5 md:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-gray-900 dark:text-white">Manajemen Grup & Pengguna</h2>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            {isSuperAdmin ? 'Super Admin mengatur semua divisi. Setiap divisi terisolasi seperti grup.' : `Admin Divisi • ${accountProfile?.divisionName || 'Grup Saya'}`}
+                                        </p>
+                                    </div>
                                     <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800"><X size={22} className="text-gray-500"/></button>
                                 </div>
-                                <div className="grid grid-cols-1 lg:grid-cols-5 flex-1 overflow-hidden">
-                                    <div className="lg:col-span-2 p-5 md:p-6 overflow-y-auto border-r border-gray-200 dark:border-gray-700">
-                                        <form onSubmit={saveUser} className="space-y-4">
-                                            <div className="flex items-center justify-between"><h3 className="font-black text-gray-900 dark:text-white">{editingUid ? 'Edit Akses Pengguna' : 'Tambah Pengguna'}</h3>{editingUid && <button type="button" onClick={resetForm} className="text-xs font-bold text-violet-600">Batal Edit</button>}</div>
-                                            <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nama pengguna / divisi" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>
-                                            <input required type="email" disabled={!!editingUid} value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Email" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none disabled:opacity-60"/>
-                                            {!editingUid && <input required type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password sementara (min. 6 karakter)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>}
-                                            <input value={form.divisionName} onChange={e=>setForm({...form,divisionName:e.target.value})} placeholder="Nama divisi (contoh: Design)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>
-                                            <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
-                                                <option value="member">Member</option><option value="division_admin">Division Admin</option><option value="super_admin">Super Admin</option>
-                                            </select>
-                                            <div>
-                                                <div className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Workspace yang boleh diakses</div>
-                                                <div className="max-h-52 overflow-y-auto space-y-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
-                                                    {folders.map(f => <label key={f.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.workspaceIds.includes(f.id)} onChange={()=>toggleWorkspace(f.id)}/><span>{f.name}</span></label>)}
-                                                    {folders.length===0 && <div className="text-xs text-gray-400">Belum ada workspace.</div>}
+
+                                <div className="grid grid-cols-1 xl:grid-cols-12 flex-1 overflow-hidden">
+                                    <div className="xl:col-span-5 p-5 md:p-6 overflow-y-auto border-r border-gray-200 dark:border-gray-700 space-y-6">
+                                        {isSuperAdmin && (
+                                            <div className="rounded-2xl border border-cyan-200 dark:border-cyan-900 bg-cyan-50/70 dark:bg-cyan-950/20 p-4">
+                                                <div className="font-black text-gray-900 dark:text-white mb-1">Divisi / Grup</div>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Buat grup terlebih dahulu. Workspace lama bisa dimasukkan ke grup lewat tombol Edit pada kartu workspace.</p>
+                                                <form onSubmit={createDivision} className="flex gap-2">
+                                                    <input value={newDivisionName} onChange={e=>setNewDivisionName(e.target.value)} placeholder="Contoh: Design / Marketing / Produksi" className="flex-1 min-w-0 px-4 py-3 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 outline-none" />
+                                                    <button disabled={busy || !newDivisionName.trim()} className="px-4 py-3 rounded-xl bg-cyan-600 text-white font-black disabled:opacity-50"><Plus size={18}/></button>
+                                                </form>
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                    {divisions.length === 0 && <span className="text-xs text-gray-400">Belum ada divisi.</span>}
+                                                    {divisions.filter(d=>d.active!==false).map(d => {
+                                                        const count = folders.filter(f => f.divisionId === d.id).length;
+                                                        return <span key={d.id} className="px-3 py-1.5 rounded-full bg-white dark:bg-gray-800 border border-cyan-200 dark:border-cyan-900 text-xs font-black text-cyan-700 dark:text-cyan-300">{d.name} • {count} workspace</span>;
+                                                    })}
                                                 </div>
                                             </div>
-                                            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.allowSharedLegacy} onChange={e=>setForm({...form,allowSharedLegacy:e.target.checked})}/> Boleh akses Titipan Weekend / data bersama lama</label>
-                                            {editingUid && form.email.toLowerCase() !== LEGACY_OWNER_EMAIL && <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Akun aktif</label>}
-                                            {error && <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-sm font-bold">{error}</div>}
-                                            {info && <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm font-bold">{info}</div>}
-                                            <button disabled={busy} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black disabled:opacity-60">{busy ? 'Menyimpan...' : (editingUid ? 'Simpan Akses' : 'Buat Akun')}</button>
+                                        )}
+
+                                        <form onSubmit={saveUser} className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="font-black text-gray-900 dark:text-white">{editingUid ? 'Edit Pengguna' : 'Tambah Pengguna'}</h3>
+                                                    <p className="text-xs text-gray-500">{isDivisionAdmin ? 'Akun baru otomatis menjadi Member di grup kamu.' : 'Pilih role dan divisinya.'}</p>
+                                                </div>
+                                                {editingUid && <button type="button" onClick={resetForm} className="text-xs font-bold text-violet-600">Batal Edit</button>}
+                                            </div>
+                                            <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nama pengguna" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>
+                                            <input required type="email" value={form.email} disabled={!!editingUid} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Email" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none disabled:opacity-60"/>
+                                            {!editingUid && <input required type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password sementara (min. 6 karakter)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>}
+
+                                            {isSuperAdmin ? (
+                                                <>
+                                                    <select value={form.role} onChange={e=>setForm({...form,role:e.target.value,divisionId:e.target.value==='super_admin'?'':form.divisionId})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
+                                                        <option value="member">Member</option>
+                                                        <option value="division_admin">Admin Divisi</option>
+                                                        <option value="super_admin">Super Admin</option>
+                                                    </select>
+                                                    {form.role !== 'super_admin' && (
+                                                        <select required value={form.divisionId} onChange={e=>setForm({...form,divisionId:e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
+                                                            <option value="">-- Pilih Divisi / Grup --</option>
+                                                            {divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                                                        </select>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="w-full px-4 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-900 text-cyan-700 dark:text-cyan-300 font-black text-sm">
+                                                    Grup: {accountProfile?.divisionName || 'Belum ditentukan'} • Role: Member
+                                                </div>
+                                            )}
+
+                                            {editingUid && form.email.toLowerCase() !== LEGACY_OWNER_EMAIL && (
+                                                <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
+                                                    <input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Akun aktif
+                                                </label>
+                                            )}
+                                            <button disabled={busy} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black disabled:opacity-50">{busy ? 'Menyimpan...' : (editingUid ? 'Simpan Perubahan' : 'Buat Akun')}</button>
                                         </form>
+
+                                        {error && <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 p-3 text-sm font-bold text-red-600 dark:text-red-300">{error}</div>}
+                                        {info && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">{info}</div>}
                                     </div>
-                                    <div className="lg:col-span-3 p-5 md:p-6 overflow-y-auto bg-gray-50 dark:bg-gray-950/40">
-                                        <h3 className="font-black text-gray-900 dark:text-white mb-4">Pengguna Terdaftar <span className="text-gray-400">({users.length})</span></h3>
+
+                                    <div className="xl:col-span-7 p-5 md:p-6 overflow-y-auto">
+                                        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                                            <div>
+                                                <h3 className="font-black text-gray-900 dark:text-white">Pengguna Terdaftar ({visibleUsers.length})</h3>
+                                                <p className="text-xs text-gray-500">{isSuperAdmin ? 'Semua grup' : `Hanya ${accountProfile?.divisionName || 'grup kamu'}`}</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-300">
+                                                <input type="checkbox" checked={showDeleted} onChange={e=>setShowDeleted(e.target.checked)}/> Tampilkan terhapus
+                                            </label>
+                                        </div>
                                         <div className="space-y-3">
-                                            {users.map(u => <div key={u.uid} className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-                                                <div className="min-w-0"><div className="font-black text-gray-900 dark:text-white truncate">{u.name || u.email}</div><div className="text-xs text-gray-500 truncate">{u.email}</div><div className="mt-1 flex flex-wrap gap-1"><span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase">{u.role || 'member'}</span>{u.divisionName && <span className="px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${u.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>
-                                                <div className="flex gap-2 shrink-0"><button onClick={()=>startEdit(u)} className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-black">Edit</button><button onClick={()=>sendReset(u.email)} className="px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-black">Reset Password</button></div>
-                                            </div>)}
-                                            {users.length===0 && <div className="text-center py-16 text-gray-400">Belum ada profil pengguna.</div>}
+                                            {visibleUsers.map(u => {
+                                                const canModify = isSuperAdmin || (isDivisionAdmin && u.divisionId === myDivisionId && u.role === 'member');
+                                                return (
+                                                    <div key={u.uid} className={`rounded-2xl border p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 ${u.deleted ? 'border-red-200 bg-red-50/60 dark:bg-red-950/20 dark:border-red-900' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}>
+                                                        <div className="min-w-0">
+                                                            <div className="font-black text-gray-900 dark:text-white truncate">{u.name || u.email}</div>
+                                                            <div className="text-xs text-gray-500 truncate">{u.email}</div>
+                                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                                <span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase">{u.role || 'member'}</span>
+                                                                {u.divisionName && <span className="px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{u.divisionName}</span>}
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${u.deleted?'bg-red-100 text-red-600':u.active===false?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}>{u.deleted?'Terhapus':u.active===false?'Nonaktif':'Aktif'}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 shrink-0">
+                                                            {!u.deleted && canModify && <button onClick={()=>startEdit(u)} className="px-3 py-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-black">Edit</button>}
+                                                            {!u.deleted && canModify && <button onClick={()=>sendReset(u.email)} className="px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-black">Reset Password</button>}
+                                                            {!u.deleted && canModify && u.uid !== auth.currentUser?.uid && u.email?.toLowerCase() !== LEGACY_OWNER_EMAIL && <button onClick={()=>removeUser(u)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-black flex items-center gap-1"><Trash2 size={14}/> Hapus</button>}
+                                                            {u.deleted && canModify && <button onClick={()=>restoreUser(u)} className="px-3 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center gap-1"><RotateCcw size={14}/> Pulihkan</button>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {visibleUsers.length === 0 && <div className="rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-10 text-center text-gray-400 text-sm">Belum ada pengguna di grup ini.</div>}
                                         </div>
                                     </div>
                                 </div>
@@ -2074,9 +2262,15 @@
             const [newFolderName, setNewFolderName] = useState('');
             const [selectedAvatar, setSelectedAvatar] = useState('boy');
             const [selectedGradient, setSelectedGradient] = useState(Gradients[0]);
+            const [divisions, setDivisions] = useState([]);
+            const [selectedDivisionId, setSelectedDivisionId] = useState('');
             
-            const isAdmin = accountProfile?.role === 'super_admin';
-            const canSeeLegacyShared = isAdmin || !!accountProfile?.allowSharedLegacy;
+            const isSuperAdmin = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
+            const isDivisionAdmin = accountProfile?.role === 'division_admin';
+            const isAdmin = isSuperAdmin; // kompatibilitas kode lama yang memang khusus owner/super admin
+            const canManageUsers = isSuperAdmin || isDivisionAdmin;
+            const canManageWorkspaces = isSuperAdmin || isDivisionAdmin;
+            const canSeeLegacyShared = isSuperAdmin; // data bersama legacy tidak bocor antar divisi
             const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
@@ -2089,8 +2283,28 @@
             const [weekendNotes, setWeekendNotes] = useState([]);
             const [isWeekendDataReady, setIsWeekendDataReady] = useState(false);
 
-            // FETCH WORKSPACE BERDASARKAN AKUN.
-            // Super Admin (ciptadigi) melihat semua data legacy. User lain hanya workspaceIds yang ditugaskan.
+            // DAFTAR DIVISI / GRUP.
+            useEffect(() => {
+                if (isSuperAdmin) {
+                    const unsub = onSnapshot(collection(db, 'divisions'), (snap) => {
+                        const rows = [];
+                        snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+                        rows.sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+                        setDivisions(rows);
+                    }, () => setDivisions([]));
+                    return () => unsub();
+                }
+                if (accountProfile?.divisionId) {
+                    const unsub = onSnapshot(doc(db, 'divisions', accountProfile.divisionId), (snap) => {
+                        setDivisions(snap.exists() ? [{ id: snap.id, ...snap.data() }] : []);
+                    }, () => setDivisions([]));
+                    return () => unsub();
+                }
+                setDivisions([]);
+            }, [isSuperAdmin, accountProfile?.divisionId]);
+
+            // FETCH WORKSPACE BERDASARKAN DIVISI / GRUP.
+            // Super Admin melihat semua workspace. Selain itu hanya workspace dengan divisionId yang sama.
             useEffect(() => {
                 const toMillisSafe = (value) => {
                     if (!value) return 0;
@@ -2101,10 +2315,9 @@
                 };
                 const sortFolders = (rows) => [...rows].sort((a,b) => toMillisSafe(b.createdAt) - toMillisSafe(a.createdAt));
                 const saveCache = (rows) => { try { localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(rows)); } catch {} };
-
                 setFoldersStatus('loading');
 
-                if (isAdmin || accountProfile?.ownsLegacyData) {
+                if (isSuperAdmin) {
                     const unsubscribe = onSnapshot(collection(db, 'folders'), { includeMetadataChanges: true }, (snapshot) => {
                         const fresh = [];
                         snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
@@ -2118,28 +2331,24 @@
                     return () => unsubscribe();
                 }
 
-                const ids = Array.isArray(accountProfile?.workspaceIds) ? [...new Set(accountProfile.workspaceIds.filter(Boolean))] : [];
-                if (ids.length === 0) {
+                const divisionId = accountProfile?.divisionId || '';
+                if (!divisionId) {
                     setFolders([]); saveCache([]); setFoldersStatus('ready');
                     return;
                 }
 
-                const map = new Map();
-                let active = true;
-                const push = () => {
-                    if (!active) return;
-                    const rows = sortFolders(Array.from(map.values()));
-                    setFolders(rows); saveCache(rows); setFoldersStatus('ready');
-                };
-                const unsubs = ids.map(id => onSnapshot(doc(db, 'folders', id), (snap) => {
-                    if (snap.exists()) map.set(id, { id: snap.id, ...snap.data() }); else map.delete(id);
-                    push();
+                const q = query(collection(db, 'folders'), where('divisionId', '==', divisionId));
+                const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+                    const fresh = [];
+                    snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
+                    const sorted = sortFolders(fresh);
+                    setFolders(sorted); saveCache(sorted); setFoldersStatus('ready');
                 }, (error) => {
-                    console.error('Gagal memuat workspace yang ditugaskan:', id, error);
+                    console.error('Gagal memuat workspace divisi:', error);
                     setFoldersStatus('error');
-                }));
-                return () => { active = false; unsubs.forEach(fn => fn()); };
-            }, [user?.uid, accountProfile?.role, accountProfile?.ownsLegacyData, JSON.stringify(accountProfile?.workspaceIds || [])]);
+                });
+                return () => unsubscribe();
+            }, [user?.uid, isSuperAdmin, accountProfile?.divisionId]);
 
             // FETCH WEEKEND BOARD & LOGIKA RESET HARI SENIN
             useEffect(() => {
@@ -2196,21 +2405,38 @@
             const deleteWeekendNote = (id) => setWeekendNotes(prev => prev.filter(s => s.id !== id));
 
             const handleFolderClick = (folder) => {
-                if (folder.pin && folder.pin.trim() !== '' && !isAdmin) { setUnlockingFolder(folder); setUnlockPin(''); setUnlockError(false); } 
+                if (folder.pin && folder.pin.trim() !== '' && !canManageWorkspaces) { setUnlockingFolder(folder); setUnlockPin(''); setUnlockError(false); }
                 else { onSelectFolder(folder.id, folder.name); }
             };
 
-            const openCreateModal = () => { setEditingId(null); setNewFolderName(''); setSelectedAvatar('boy'); setSelectedGradient(Gradients[0]); setFolderPin(''); setShowPinInput(false); setIsModalOpen(true); };
-            const openEditModal = (e, folder) => { e.stopPropagation(); setEditingId(folder.id); setNewFolderName(folder.name); setSelectedAvatar(folder.avatarId || 'boy'); const grad = Gradients.find(g => g.classes === folder.gradient) || Gradients[0]; setSelectedGradient(grad); setFolderPin(folder.pin || ''); setShowPinInput(!!folder.pin); setIsModalOpen(true); };
+            const openCreateModal = () => {
+                setEditingId(null); setNewFolderName(''); setSelectedAvatar('boy'); setSelectedGradient(Gradients[0]); setFolderPin(''); setShowPinInput(false);
+                setSelectedDivisionId(isSuperAdmin ? '' : (accountProfile?.divisionId || ''));
+                setIsModalOpen(true);
+            };
+            const openEditModal = (e, folder) => {
+                e.stopPropagation(); setEditingId(folder.id); setNewFolderName(folder.name); setSelectedAvatar(folder.avatarId || 'boy');
+                const grad = Gradients.find(g => g.classes === folder.gradient) || Gradients[0]; setSelectedGradient(grad); setFolderPin(folder.pin || ''); setShowPinInput(!!folder.pin);
+                setSelectedDivisionId(folder.divisionId || (isSuperAdmin ? '' : (accountProfile?.divisionId || ''))); setIsModalOpen(true);
+            };
             const handleSaveFolder = async (e) => {
                 e.preventDefault(); if (!newFolderName.trim()) return;
+                const divisionId = isSuperAdmin ? selectedDivisionId : (accountProfile?.divisionId || '');
+                if (!divisionId) { alert('Pilih divisi/grup untuk workspace ini.'); return; }
+                const div = divisions.find(d => d.id === divisionId);
+                const payload = { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin, divisionId, divisionName: div?.name || accountProfile?.divisionName || '' };
                 try {
-                    if (editingId) { await updateDoc(doc(db, 'folders', editingId), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin }); } 
-                    else { await addDoc(collection(db, 'folders'), { name: newFolderName, avatarId: selectedAvatar, gradient: selectedGradient.classes, pin: folderPin, createdAt: serverTimestamp() }); }
+                    if (editingId) await updateDoc(doc(db, 'folders', editingId), payload);
+                    else await addDoc(collection(db, 'folders'), { ...payload, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || null });
                     setIsModalOpen(false);
-                } catch (err) { console.error("Gagal simpan folder", err); }
+                } catch (err) { console.error("Gagal simpan folder", err); alert(err?.message || 'Gagal menyimpan workspace.'); }
             };
-            const handleDeleteFolder = async (e, id) => { e.stopPropagation(); if (window.confirm("Yakin ingin menghapus folder/karakter ini selamanya?")) { await deleteDoc(doc(db, 'folders', id)); } };
+            const handleDeleteFolder = async (e, id) => {
+                e.stopPropagation();
+                if (window.confirm("Yakin ingin menghapus workspace ini? Data workspace_data lama tidak otomatis dihapus sebagai pengaman.")) {
+                    try { await deleteDoc(doc(db, 'folders', id)); } catch (err) { alert(err?.message || 'Gagal menghapus workspace.'); }
+                }
+            };
 
             useEffect(() => {
                 const authUser = auth.currentUser; if (!authUser) return;
@@ -2310,7 +2536,7 @@
                                     <BellIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                 </button>
 
-                                {isAdmin && (
+                                {canManageUsers && (
                                     <button onClick={() => setIsUserManagerOpen(true)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-violet-300 dark:border-violet-700 hover:scale-110 transition-transform" title="Kelola Pengguna">
                                         <UsersIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                     </button>
@@ -2333,7 +2559,7 @@
                                 )}
                                 <div className="hidden xl:flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 px-3 py-2 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 max-w-[220px]">
                                     <UserIcon size={18} className="text-indigo-500 shrink-0" />
-                                    <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{accountProfile?.divisionName || (isAdmin ? 'Super Admin' : 'Member')}</div></div>
+                                    <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{isSuperAdmin ? 'Super Admin' : (accountProfile?.divisionName || (isDivisionAdmin ? 'Admin Divisi' : 'Member'))}</div></div>
                                 </div>
                                 <button onClick={onLogout} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform" title="Keluar akun">
                                     <LogOutIcon size={20} className="text-red-500" />
@@ -2357,7 +2583,7 @@
                                     </div>
                                 )}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-x-6 gap-y-28 justify-items-center">
-                                    {isAdmin && (
+                                    {canManageWorkspaces && (
                                         <button onClick={openCreateModal} className="relative w-56 h-72 rounded-[2rem] bg-white/50 dark:bg-gray-800/50 border-4 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center hover:bg-white/80 dark:hover:bg-gray-700/80 transition-all hover:scale-105 group shadow-sm mt-0">
                                             <div className="bg-purple-100 dark:bg-purple-900/50 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform">
                                                 <Plus size={32} className="text-purple-500" />
@@ -2373,14 +2599,14 @@
                                         return (
                                             <div key={folder.id} onClick={() => handleFolderClick(folder)} className="relative character-card cursor-pointer group w-56 h-72">
                                                 <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 bg-gradient-to-b ${gradClass}`}>
-                                                    {isAdmin && (
+                                                    {canManageWorkspaces && (
                                                         <>
                                                             <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace"><EditIcon size={16} /></button>
                                                             <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace"><Trash2 size={16} /></button>
                                                         </>
                                                     )}
                                                     <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{folder.name}</h3>
-                                                    <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">Workspace Active</p>
+                                                    <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">{folder.divisionName || (folder.divisionId ? 'Divisi' : 'Belum masuk grup')}</p>
                                                 </div>
                                                 <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">
                                                     {AvatarComp ? <AvatarComp /> : <Avatars.boy />}
@@ -2434,11 +2660,11 @@
                             
                         </div>
 
-                        {isUserManagerOpen && isAdmin && (
-                            <UserManagerModal folders={folders} onClose={() => setIsUserManagerOpen(false)} isDarkMode={isDarkMode} />
+                        {isUserManagerOpen && canManageUsers && (
+                            <UserManagerModal folders={folders} onClose={() => setIsUserManagerOpen(false)} isDarkMode={isDarkMode} accountProfile={accountProfile} />
                         )}
 
-                        {isModalOpen && isAdmin && (
+                        {isModalOpen && canManageWorkspaces && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                                 <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
                                 <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] shadow-2xl relative p-6 pop-in-animation flex flex-col items-center z-10">
@@ -2455,6 +2681,17 @@
                                         {Gradients.map(g => (<button key={g.id} type="button" onClick={() => setSelectedGradient(g)} className={`w-8 h-8 rounded-full bg-gradient-to-b ${g.classes} transition-transform border-2 ${selectedGradient.id === g.id ? 'scale-125 border-gray-800 dark:border-white shadow-md' : 'border-transparent hover:scale-110'}`}></button>))}
                                     </div>
                                     <form onSubmit={handleSaveFolder} className="w-full">
+                                        <div className="w-full mb-4">
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-2 text-center">Divisi / Grup</label>
+                                            {isSuperAdmin ? (
+                                                <select required value={selectedDivisionId} onChange={(e)=>setSelectedDivisionId(e.target.value)} className="w-full bg-cyan-50 dark:bg-gray-800 border-2 border-cyan-200 dark:border-gray-600 px-5 py-3 rounded-2xl outline-none text-center font-bold text-cyan-700 dark:text-cyan-300 focus:border-cyan-500">
+                                                    <option value="">-- Pilih Divisi --</option>
+                                                    {divisions.filter(d=>d.active!==false).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                                </select>
+                                            ) : (
+                                                <div className="w-full bg-cyan-50 dark:bg-gray-800 border-2 border-cyan-200 dark:border-gray-600 px-5 py-3 rounded-2xl text-center font-bold text-cyan-700 dark:text-cyan-300">{accountProfile?.divisionName || 'Divisi Saya'}</div>
+                                            )}
+                                        </div>
                                         <div className="relative w-full mb-4">
                                             <input autoFocus type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="Nama Workspace..." className="w-full bg-gray-100 dark:bg-gray-700 pl-6 pr-12 py-4 rounded-2xl outline-none text-center font-bold text-gray-800 dark:text-gray-100 border-2 border-transparent focus:border-purple-400"/>
                                             <button type="button" onClick={() => setShowPinInput(!showPinInput)} className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors ${showPinInput || folderPin ? 'text-purple-500 bg-purple-100 dark:bg-purple-900/50' : 'text-gray-400 hover:text-purple-400'}`} title="Set PIN Rahasia"><LockIcon size={18} /></button>
@@ -2508,7 +2745,7 @@
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
-            // V17: Email/Password account auth. Tidak ada lagi anonymous login.
+            // V18: Email/Password + isolasi grup/divisi. Tidak ada lagi anonymous login.
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
                     // Bersihkan sesi anonymous dari versi lama agar langsung masuk ke layar login akun.
@@ -2550,13 +2787,15 @@
                                 name: 'Cipta Digital',
                                 email: LEGACY_OWNER_EMAIL,
                                 role: 'super_admin',
+                                divisionId: '',
                                 divisionName: 'Management',
                                 workspaceIds: [],
                                 active: true,
+                                deleted: false,
                                 ownsLegacyData: true,
                                 allowSharedLegacy: true,
                                 createdAt: serverTimestamp(),
-                                bootstrapVersion: 17
+                                bootstrapVersion: 18
                             }, { merge: true });
                         }
 
@@ -2572,7 +2811,9 @@
                             setAccountProfile({
                                 ...data,
                                 uid: snap.id,
-                                workspaceIds: Array.isArray(data.workspaceIds) ? data.workspaceIds : []
+                                workspaceIds: Array.isArray(data.workspaceIds) ? data.workspaceIds : [],
+                                divisionId: data.divisionId || '',
+                                deleted: !!data.deleted
                             });
                             setProfileError('');
                             setProfileReady(true);

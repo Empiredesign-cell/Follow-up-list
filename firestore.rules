@@ -19,33 +19,71 @@ service cloud.firestore {
       return get(profilePath()).data;
     }
 
+    function accountActive() {
+      return hasProfile() &&
+        (!('active' in myProfile()) || myProfile().active != false) &&
+        (!('deleted' in myProfile()) || myProfile().deleted != true);
+    }
+
     function isSuperAdmin() {
-      return hasProfile() && myProfile().active != false && myProfile().role == 'super_admin';
+      return accountActive() && myProfile().role == 'super_admin';
     }
 
-    function hasWorkspace(workspaceId) {
+    function isDivisionAdmin() {
+      return accountActive() &&
+        myProfile().role == 'division_admin' &&
+        ('divisionId' in myProfile()) &&
+        myProfile().divisionId is string &&
+        myProfile().divisionId != '';
+    }
+
+    function myDivisionId() {
+      return hasProfile() && ('divisionId' in myProfile()) && myProfile().divisionId is string
+        ? myProfile().divisionId
+        : '';
+    }
+
+    function sameDivision(divisionId) {
+      return accountActive() && divisionId is string && divisionId != '' && divisionId == myDivisionId();
+    }
+
+    function folderInMyDivision(folderId) {
       return isSuperAdmin() || (
-        hasProfile() &&
-        myProfile().active != false &&
-        workspaceId in myProfile().workspaceIds
+        accountActive() &&
+        exists(/databases/$(database)/documents/folders/$(folderId)) &&
+        get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == myDivisionId()
       );
     }
 
-    function canUseLegacyShared() {
-      return isSuperAdmin() || (
-        hasProfile() &&
-        myProfile().active != false &&
-        myProfile().allowSharedLegacy == true
-      );
-    }
-
-    // Profil akun.
+    // =========================================================
+    // USER PROFILE
+    // =========================================================
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      // User membaca profil sendiri.
+      // Super Admin membaca semua.
+      // Admin divisi hanya membaca user dari divisi yang sama.
+      allow get: if signedIn() && (
+        request.auth.uid == uid ||
+        isSuperAdmin() ||
+        (isDivisionAdmin() && resource.data.divisionId == myDivisionId())
+      );
 
-      // Bootstrap satu kali akun owner lama.
+      // List/query untuk Super Admin atau Admin Divisi.
+      // Query Admin Divisi WAJIB difilter where('divisionId','==',myDivisionId).
+      allow list: if isSuperAdmin() || (
+        isDivisionAdmin() && resource.data.divisionId == myDivisionId()
+      );
+
+      // Bootstrap akun owner lama.
+      // Pembuatan profil user baru dilakukan oleh Super Admin / Admin Divisi.
       allow create: if signedIn() && (
         isSuperAdmin() ||
+        (
+          isDivisionAdmin() &&
+          request.resource.data.divisionId == myDivisionId() &&
+          request.resource.data.role == 'member' &&
+          (!('ownsLegacyData' in request.resource.data) || request.resource.data.ownsLegacyData != true)
+        ) ||
         (
           request.auth.uid == uid &&
           request.auth.token.email == 'ciptadigi@gmail.com' &&
@@ -53,38 +91,78 @@ service cloud.firestore {
         )
       );
 
-      // Pengelolaan role/akses hanya Super Admin.
-      allow update, delete: if isSuperAdmin();
+      // Super Admin bebas mengatur profil.
+      // Admin Divisi hanya boleh mengubah MEMBER di grup yang sama dan tidak boleh memindahkan grup/role.
+      allow update: if isSuperAdmin() || (
+        isDivisionAdmin() &&
+        resource.data.divisionId == myDivisionId() &&
+        resource.data.role == 'member' &&
+        request.resource.data.divisionId == myDivisionId() &&
+        request.resource.data.role == 'member' &&
+        (!('ownsLegacyData' in request.resource.data) || request.resource.data.ownsLegacyData != true)
+      );
 
-      // Data tampilan pribadi per akun, mis. background beranda.
+      // UI V18 menggunakan soft-delete. Hard delete hanya Super Admin sebagai emergency.
+      allow delete: if isSuperAdmin() && uid != request.auth.uid;
+
+      // Data tampilan pribadi per akun.
       match /appState/{document=**} {
         allow read, write: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
       }
     }
 
-    // Metadata workspace lama tetap di tempat semula.
-    match /folders/{folderId} {
-      allow read: if hasWorkspace(folderId);
+    // =========================================================
+    // DIVISI / GROUP
+    // =========================================================
+    match /divisions/{divisionId} {
+      allow get: if isSuperAdmin() || sameDivision(divisionId);
+      allow list: if isSuperAdmin();
       allow create, update, delete: if isSuperAdmin();
     }
 
-    // Seluruh task/sticky/archive legacy tetap memakai document ID workspace yang sama.
-    match /workspace_data/{workspaceId} {
-      allow read, write: if hasWorkspace(workspaceId);
+    // =========================================================
+    // WORKSPACE LEGACY - sekarang dimiliki DIVISI
+    // Workspace tanpa divisionId hanya terlihat Super Admin sampai di-assign.
+    // =========================================================
+    match /folders/{folderId} {
+      allow read: if isSuperAdmin() || (
+        accountActive() && resource.data.divisionId == myDivisionId()
+      );
+
+      allow create: if isSuperAdmin() || (
+        isDivisionAdmin() && request.resource.data.divisionId == myDivisionId()
+      );
+
+      allow update: if isSuperAdmin() || (
+        isDivisionAdmin() &&
+        resource.data.divisionId == myDivisionId() &&
+        request.resource.data.divisionId == myDivisionId()
+      );
+
+      allow delete: if isSuperAdmin() || (
+        isDivisionAdmin() && resource.data.divisionId == myDivisionId()
+      );
     }
 
-    // Data bersama lama hanya untuk owner/super admin atau akun yang diberi izin eksplisit.
+    // Task/sticky/archive legacy tetap memakai document ID workspace yang sama.
+    match /workspace_data/{workspaceId} {
+      allow read, write: if folderInMyDivision(workspaceId);
+    }
+
+    // Data global lama sengaja hanya Super Admin agar tidak bocor antar divisi.
     match /shared_data/{document=**} {
-      allow read, write: if canUseLegacyShared();
+      allow read, write: if isSuperAdmin();
     }
 
     match /global_workspace/{document=**} {
-      allow read, write: if canUseLegacyShared();
+      allow read, write: if isSuperAdmin();
     }
 
-    // Jika masih ada collection reminder cloud lama, batasi per akun.
+    // Reminder cloud lama jika masih ada.
     match /attendance_reminders/{uid} {
-      allow read, create, update, delete: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow read, create, update, delete: if signedIn() && (
+        request.auth.uid == uid || isSuperAdmin()
+      );
     }
   }
 }
