@@ -1873,6 +1873,18 @@
                 } catch (err) { setError(err?.message || 'Gagal mengirim reset password.'); }
             };
 
+            const requestAccess = () => {
+                const target = 'https://t.me/xdaniel04';
+                const draftEmail = (email || '').trim();
+                const rawMessage = 'Halo kak, saya ingin request akses akun Follow Up Workspace.\n\n' +
+                    'Email: ' + (draftEmail || '-') + '\n' +
+                    'Nama: \n' +
+                    'Divisi: \n' +
+                    'Keterangan: ';
+                const message = encodeURIComponent(rawMessage);
+                window.open(target + '?text=' + message, '_blank', 'noopener,noreferrer');
+            };
+
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-violet-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
@@ -1902,9 +1914,9 @@
                                 {info && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">{info}</div>}
                                 <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black shadow-lg disabled:opacity-60">{busy ? 'Masuk...' : 'Masuk'}</button>
                             </form>
-                            <button onClick={resetPassword} className="mt-4 w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>
-                            <div className="mt-7 pt-5 border-t border-gray-200 dark:border-gray-700 text-center text-xs text-gray-400">
-                                Akun baru dibuat oleh Super Admin Cipta Grafika.
+                            <div className="mt-4 grid grid-cols-1 gap-3">
+                                <button onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>
+                                <button type="button" onClick={requestAccess} className="w-full py-3.5 rounded-2xl border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-black bg-violet-50/80 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition">REQUEST AKSES</button>
                             </div>
                         </div>
                     </div>
