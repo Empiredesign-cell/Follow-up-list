@@ -72,7 +72,7 @@
         import { createRoot } from "react-dom/client";
         import { createPortal } from "react-dom";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Portal modal ke <body> agar tidak terjebak stacking-context/z-index parent.
@@ -92,9 +92,14 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
+        // Auth kedua khusus Super Admin membuat akun baru tanpa menendang sesi admin utama.
+        const userCreatorApp = initializeApp(firebaseConfig, 'fl-user-creator');
+        const userCreatorAuth = getAuth(userCreatorApp);
+        const LEGACY_OWNER_EMAIL = 'ciptadigi@gmail.com';
+
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v16-single-sound-fix';
+        const ATTENDANCE_REMINDER_VERSION = 'v17-account-access';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -119,6 +124,9 @@
         const EditIcon = (p) => <Icon {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></Icon>;
         const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></Icon>;
         const BellIcon = (p) => <Icon {...p}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></Icon>;
+        const UsersIcon = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></Icon>;
+        const LogOutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></Icon>;
+        const UserIcon = (p) => <Icon {...p}><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></Icon>;
         const VolumeIcon = (p) => <Icon {...p}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></Icon>;
         const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
         const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
@@ -431,7 +439,7 @@
         // ==========================================
         // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
         // ==========================================
-        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode }) => {
+        const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode, accountProfile }) => {
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
             const [currentTime, setCurrentTime] = useState(Date.now());
@@ -702,18 +710,27 @@
                 return () => unsubscribe();
             }, [folderId]);
 
-            // FETCH LIST FOLDER (Untuk Kotak Surat)
+            // FETCH LIST FOLDER (Untuk Kotak Surat) mengikuti hak akses akun.
             useEffect(() => {
-                const q = query(collection(db, 'folders'));
-                const unsub = onSnapshot(q, (snap) => {
-                    const f = [];
-                    snap.forEach(doc => {
-                        if (doc.id !== folderId) f.push({ id: doc.id, name: doc.data().name });
-                    });
-                    setAvailableFolders(f);
-                });
-                return () => unsub();
-            }, [folderId]);
+                const isSuper = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
+                if (isSuper) {
+                    const unsub = onSnapshot(collection(db, 'folders'), (snap) => {
+                        const f = [];
+                        snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name }); });
+                        setAvailableFolders(f);
+                    }, () => setAvailableFolders([]));
+                    return () => unsub();
+                }
+
+                const ids = Array.isArray(accountProfile?.workspaceIds) ? accountProfile.workspaceIds.filter(id => id && id !== folderId) : [];
+                if (!ids.length) { setAvailableFolders([]); return; }
+                const map = new Map();
+                const unsubs = ids.map(id => onSnapshot(doc(db, 'folders', id), (snap) => {
+                    if (snap.exists()) map.set(id, { id, name: snap.data().name }); else map.delete(id);
+                    setAvailableFolders(Array.from(map.values()));
+                }, () => {}));
+                return () => unsubs.forEach(fn => fn());
+            }, [folderId, accountProfile?.role, accountProfile?.ownsLegacyData, JSON.stringify(accountProfile?.workspaceIds || [])]);
 
             // AUTOSAVE HANYA JIKA STATE BENAR-BENAR BERUBAH SECARA LOKAL.
             useEffect(() => {
@@ -1191,7 +1208,7 @@
         // PER PC / PER BROWSER, TANPA FIREBASE FUNCTIONS
         // ==========================================
         const AttendanceReminder = ({ user, isDarkMode, showLauncher = false }) => {
-            const STORAGE_KEY = 'flAttendanceReminderDualV7';
+            const STORAGE_KEY = `flAttendanceReminderAccountV17:${user?.uid || 'guest'}`;
             const LEGACY_STORAGE_KEY = 'flAttendanceReminderLocalV5';
 
             const ARRIVAL_DEFAULT = {
@@ -1815,12 +1832,232 @@
         };
 
         // ==========================================
+        // LOGIN AKUN + USER MANAGEMENT V17
+        // ==========================================
+        const AccountLoginScreen = ({ isDarkMode, setIsDarkMode }) => {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            const [info, setInfo] = useState('');
+
+            const login = async (e) => {
+                e.preventDefault();
+                setBusy(true); setError(''); setInfo('');
+                try {
+                    await signInWithEmailAndPassword(auth, email.trim(), password);
+                } catch (err) {
+                    const code = err?.code || '';
+                    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+                        setError('Email atau password salah.');
+                    } else if (code === 'auth/too-many-requests') {
+                        setError('Terlalu banyak percobaan login. Coba lagi beberapa menit lagi.');
+                    } else {
+                        setError(err?.message || 'Login gagal.');
+                    }
+                } finally { setBusy(false); }
+            };
+
+            const resetPassword = async () => {
+                setError(''); setInfo('');
+                if (!email.trim()) { setError('Isi email dulu untuk mengirim reset password.'); return; }
+                try {
+                    await sendPasswordResetEmail(auth, email.trim());
+                    setInfo('Link reset password sudah dikirim ke email tersebut.');
+                } catch (err) { setError(err?.message || 'Gagal mengirim reset password.'); }
+            };
+
+            return (
+                <div className={isDarkMode ? 'dark' : ''}>
+                    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-violet-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
+                        <div className="absolute -top-24 -left-24 w-80 h-80 bg-violet-400/20 rounded-full blur-3xl"></div>
+                        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-cyan-400/15 rounded-full blur-3xl"></div>
+                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="absolute top-6 right-6 p-3 rounded-2xl bg-white/80 dark:bg-gray-800/80 border border-white/70 dark:border-gray-700 shadow-sm">
+                            {isDarkMode ? <Moon size={20} className="text-blue-400"/> : <Sun size={20} className="text-amber-500"/>}
+                        </button>
+                        <div className="w-full max-w-md bg-white/85 dark:bg-gray-900/85 backdrop-blur-2xl border border-white dark:border-gray-700 rounded-[2rem] shadow-2xl p-8 relative z-10">
+                            <div className="flex items-center gap-3 mb-8">
+                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg">FL</div>
+                                <div>
+                                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">Follow Up Workspace</h1>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Masuk dengan akun divisi kamu</p>
+                                </div>
+                            </div>
+                            <form onSubmit={login} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</label>
+                                    <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="nama@ciptagrafika.com" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Password</label>
+                                    <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
+                                </div>
+                                {error && <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 p-3 text-sm font-bold text-red-600 dark:text-red-300">{error}</div>}
+                                {info && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">{info}</div>}
+                                <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black shadow-lg disabled:opacity-60">{busy ? 'Masuk...' : 'Masuk'}</button>
+                            </form>
+                            <button onClick={resetPassword} className="mt-4 w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>
+                            <div className="mt-7 pt-5 border-t border-gray-200 dark:border-gray-700 text-center text-xs text-gray-400">
+                                Akun baru dibuat oleh Super Admin Cipta Grafika.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const UserManagerModal = ({ folders, onClose, isDarkMode }) => {
+            const EMPTY = { name: '', email: '', password: '', role: 'member', divisionName: '', workspaceIds: [], active: true, allowSharedLegacy: false };
+            const [users, setUsers] = useState([]);
+            const [form, setForm] = useState(EMPTY);
+            const [editingUid, setEditingUid] = useState(null);
+            const [busy, setBusy] = useState(false);
+            const [error, setError] = useState('');
+            const [info, setInfo] = useState('');
+
+            useEffect(() => {
+                const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+                    const rows = [];
+                    snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
+                    rows.sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''));
+                    setUsers(rows);
+                }, err => setError('Gagal memuat pengguna: ' + (err?.message || err)));
+                return () => unsub();
+            }, []);
+
+            const toggleWorkspace = (id) => {
+                setForm(prev => ({ ...prev, workspaceIds: prev.workspaceIds.includes(id) ? prev.workspaceIds.filter(x => x !== id) : [...prev.workspaceIds, id] }));
+            };
+
+            const startEdit = (u) => {
+                setEditingUid(u.uid);
+                setForm({
+                    name: u.name || '', email: u.email || '', password: '', role: u.role || 'member',
+                    divisionName: u.divisionName || '', workspaceIds: Array.isArray(u.workspaceIds) ? u.workspaceIds : [],
+                    active: u.active !== false, allowSharedLegacy: !!u.allowSharedLegacy
+                });
+                setError(''); setInfo('');
+            };
+
+            const resetForm = () => { setEditingUid(null); setForm(EMPTY); setError(''); setInfo(''); };
+
+            const saveUser = async (e) => {
+                e.preventDefault();
+                setBusy(true); setError(''); setInfo('');
+                try {
+                    if (editingUid) {
+                        const lockedOwner = form.email.toLowerCase() === LEGACY_OWNER_EMAIL;
+                        await setDoc(doc(db, 'users', editingUid), {
+                            name: form.name.trim(),
+                            email: form.email.trim().toLowerCase(),
+                            role: lockedOwner ? 'super_admin' : form.role,
+                            divisionName: form.divisionName.trim(),
+                            workspaceIds: lockedOwner ? [] : form.workspaceIds,
+                            active: lockedOwner ? true : !!form.active,
+                            allowSharedLegacy: lockedOwner ? true : !!form.allowSharedLegacy,
+                            ownsLegacyData: lockedOwner,
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+                        setInfo('Akses pengguna berhasil diperbarui.');
+                        resetForm();
+                    } else {
+                        if (!form.password || form.password.length < 6) throw new Error('Password sementara minimal 6 karakter.');
+                        let created = null;
+                        try {
+                            created = await createUserWithEmailAndPassword(userCreatorAuth, form.email.trim().toLowerCase(), form.password);
+                            const uid = created.user.uid;
+                            await setDoc(doc(db, 'users', uid), {
+                                name: form.name.trim(),
+                                email: form.email.trim().toLowerCase(),
+                                role: form.role,
+                                divisionName: form.divisionName.trim(),
+                                workspaceIds: form.workspaceIds,
+                                active: true,
+                                allowSharedLegacy: !!form.allowSharedLegacy,
+                                ownsLegacyData: false,
+                                createdAt: serverTimestamp(),
+                                createdBy: auth.currentUser?.uid || null
+                            });
+                            setInfo(`Akun ${form.email.trim()} berhasil dibuat.`);
+                            setForm(EMPTY);
+                        } finally {
+                            try { await signOut(userCreatorAuth); } catch {}
+                        }
+                    }
+                } catch (err) {
+                    const code = err?.code || '';
+                    if (code === 'auth/email-already-in-use') setError('Email tersebut sudah punya akun Firebase.');
+                    else if (code === 'auth/invalid-email') setError('Format email tidak valid.');
+                    else if (code === 'auth/weak-password') setError('Password terlalu lemah. Minimal 6 karakter.');
+                    else setError(err?.message || 'Gagal menyimpan pengguna.');
+                } finally { setBusy(false); }
+            };
+
+            const sendReset = async (email) => {
+                setError(''); setInfo('');
+                try { await sendPasswordResetEmail(auth, email); setInfo(`Link reset password dikirim ke ${email}.`); }
+                catch (err) { setError(err?.message || 'Gagal mengirim reset password.'); }
+            };
+
+            return (
+                <ModalPortal>
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                            <div className="w-full max-w-6xl max-h-[92vh] overflow-hidden bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col">
+                                <div className="p-5 md:p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                    <div><h2 className="text-2xl font-black text-gray-900 dark:text-white">Manajemen Pengguna</h2><p className="text-sm text-gray-500 dark:text-gray-400">Buat akun divisi dan tentukan workspace yang boleh diakses.</p></div>
+                                    <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800"><X size={22} className="text-gray-500"/></button>
+                                </div>
+                                <div className="grid grid-cols-1 lg:grid-cols-5 flex-1 overflow-hidden">
+                                    <div className="lg:col-span-2 p-5 md:p-6 overflow-y-auto border-r border-gray-200 dark:border-gray-700">
+                                        <form onSubmit={saveUser} className="space-y-4">
+                                            <div className="flex items-center justify-between"><h3 className="font-black text-gray-900 dark:text-white">{editingUid ? 'Edit Akses Pengguna' : 'Tambah Pengguna'}</h3>{editingUid && <button type="button" onClick={resetForm} className="text-xs font-bold text-violet-600">Batal Edit</button>}</div>
+                                            <input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Nama pengguna / divisi" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>
+                                            <input required type="email" disabled={!!editingUid} value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="Email" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none disabled:opacity-60"/>
+                                            {!editingUid && <input required type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password sementara (min. 6 karakter)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>}
+                                            <input value={form.divisionName} onChange={e=>setForm({...form,divisionName:e.target.value})} placeholder="Nama divisi (contoh: Design)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>
+                                            <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
+                                                <option value="member">Member</option><option value="division_admin">Division Admin</option><option value="super_admin">Super Admin</option>
+                                            </select>
+                                            <div>
+                                                <div className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Workspace yang boleh diakses</div>
+                                                <div className="max-h-52 overflow-y-auto space-y-2 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                                                    {folders.map(f => <label key={f.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.workspaceIds.includes(f.id)} onChange={()=>toggleWorkspace(f.id)}/><span>{f.name}</span></label>)}
+                                                    {folders.length===0 && <div className="text-xs text-gray-400">Belum ada workspace.</div>}
+                                                </div>
+                                            </div>
+                                            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.allowSharedLegacy} onChange={e=>setForm({...form,allowSharedLegacy:e.target.checked})}/> Boleh akses Titipan Weekend / data bersama lama</label>
+                                            {editingUid && form.email.toLowerCase() !== LEGACY_OWNER_EMAIL && <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Akun aktif</label>}
+                                            {error && <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 text-sm font-bold">{error}</div>}
+                                            {info && <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm font-bold">{info}</div>}
+                                            <button disabled={busy} className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black disabled:opacity-60">{busy ? 'Menyimpan...' : (editingUid ? 'Simpan Akses' : 'Buat Akun')}</button>
+                                        </form>
+                                    </div>
+                                    <div className="lg:col-span-3 p-5 md:p-6 overflow-y-auto bg-gray-50 dark:bg-gray-950/40">
+                                        <h3 className="font-black text-gray-900 dark:text-white mb-4">Pengguna Terdaftar <span className="text-gray-400">({users.length})</span></h3>
+                                        <div className="space-y-3">
+                                            {users.map(u => <div key={u.uid} className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                                                <div className="min-w-0"><div className="font-black text-gray-900 dark:text-white truncate">{u.name || u.email}</div><div className="text-xs text-gray-500 truncate">{u.email}</div><div className="mt-1 flex flex-wrap gap-1"><span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase">{u.role || 'member'}</span>{u.divisionName && <span className="px-2 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${u.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>
+                                                <div className="flex gap-2 shrink-0"><button onClick={()=>startEdit(u)} className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-black">Edit</button><button onClick={()=>sendReset(u.email)} className="px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-black">Reset Password</button></div>
+                                            </div>)}
+                                            {users.length===0 && <div className="text-center py-16 text-gray-400">Belum ada profil pengguna.</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </ModalPortal>
+            );
+        };
+
+        // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user }) => {
+        const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user, accountProfile, onLogout }) => {
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
-            const FOLDERS_CACHE_KEY = 'flFoldersCacheV2';
+            const FOLDERS_CACHE_KEY = `flFoldersCacheV17:${user?.uid || 'guest'}`;
             const [folders, setFolders] = useState(() => {
                 try {
                     const cached = JSON.parse(localStorage.getItem(FOLDERS_CACHE_KEY) || '[]');
@@ -1838,10 +2075,9 @@
             const [selectedAvatar, setSelectedAvatar] = useState('boy');
             const [selectedGradient, setSelectedGradient] = useState(Gradients[0]);
             
-            const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('flAdmin') === 'true');
-            const [showAdminLogin, setShowAdminLogin] = useState(false);
-            const [adminPassword, setAdminPassword] = useState('');
-            const [adminError, setAdminError] = useState(false);
+            const isAdmin = accountProfile?.role === 'super_admin';
+            const canSeeLegacyShared = isAdmin || !!accountProfile?.allowSharedLegacy;
+            const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
             const [showPinInput, setShowPinInput] = useState(false);
@@ -1853,15 +2089,9 @@
             const [weekendNotes, setWeekendNotes] = useState([]);
             const [isWeekendDataReady, setIsWeekendDataReady] = useState(false);
 
-            useEffect(() => { sessionStorage.setItem('flAdmin', isAdmin); }, [isAdmin]);
-
-            // FETCH FOLDER - V14 FIX
-            // Jangan memakai orderBy('createdAt') di query Firestore. Dokumen workspace lama
-            // yang tidak punya createdAt dapat tidak ikut hasil query sehingga seluruh kartu
-            // tampak hilang. Ambil semua dokumen lalu urutkan di browser.
+            // FETCH WORKSPACE BERDASARKAN AKUN.
+            // Super Admin (ciptadigi) melihat semua data legacy. User lain hanya workspaceIds yang ditugaskan.
             useEffect(() => {
-                const foldersRef = collection(db, 'folders');
-
                 const toMillisSafe = (value) => {
                     if (!value) return 0;
                     if (typeof value.toMillis === 'function') return value.toMillis();
@@ -1869,43 +2099,55 @@
                     const n = Number(value);
                     return Number.isFinite(n) ? n : 0;
                 };
+                const sortFolders = (rows) => [...rows].sort((a,b) => toMillisSafe(b.createdAt) - toMillisSafe(a.createdAt));
+                const saveCache = (rows) => { try { localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(rows)); } catch {} };
 
-                const unsubscribe = onSnapshot(
-                    foldersRef,
-                    { includeMetadataChanges: true },
-                    (snapshot) => {
+                setFoldersStatus('loading');
+
+                if (isAdmin || accountProfile?.ownsLegacyData) {
+                    const unsubscribe = onSnapshot(collection(db, 'folders'), { includeMetadataChanges: true }, (snapshot) => {
                         const fresh = [];
-                        snapshot.forEach(folderDoc => {
-                            fresh.push({ id: folderDoc.id, ...folderDoc.data() });
-                        });
-
-                        fresh.sort((a, b) => toMillisSafe(b.createdAt) - toMillisSafe(a.createdAt));
-
-                        // Snapshot cache kosong tidak boleh menghapus kartu yang sebelumnya
-                        // sudah tersimpan lokal. Tunggu snapshot server berikutnya.
-                        if (fresh.length === 0 && snapshot.metadata.fromCache) {
-                            setFoldersStatus('cache-wait');
-                            return;
-                        }
-
-                        setFolders(fresh);
-                        setFoldersStatus('ready');
-                        try {
-                            localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(fresh));
-                        } catch {}
-                    },
-                    (error) => {
-                        console.error('Gagal memuat workspace:', error);
+                        snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
+                        const sorted = sortFolders(fresh);
+                        if (sorted.length === 0 && snapshot.metadata.fromCache) { setFoldersStatus('cache-wait'); return; }
+                        setFolders(sorted); saveCache(sorted); setFoldersStatus('ready');
+                    }, (error) => {
+                        console.error('Gagal memuat semua workspace:', error);
                         setFoldersStatus('error');
-                        // Jangan set [] di sini. Cache/daftar terakhir tetap ditampilkan.
-                    }
-                );
+                    });
+                    return () => unsubscribe();
+                }
 
-                return () => unsubscribe();
-            }, []);
+                const ids = Array.isArray(accountProfile?.workspaceIds) ? [...new Set(accountProfile.workspaceIds.filter(Boolean))] : [];
+                if (ids.length === 0) {
+                    setFolders([]); saveCache([]); setFoldersStatus('ready');
+                    return;
+                }
+
+                const map = new Map();
+                let active = true;
+                const push = () => {
+                    if (!active) return;
+                    const rows = sortFolders(Array.from(map.values()));
+                    setFolders(rows); saveCache(rows); setFoldersStatus('ready');
+                };
+                const unsubs = ids.map(id => onSnapshot(doc(db, 'folders', id), (snap) => {
+                    if (snap.exists()) map.set(id, { id: snap.id, ...snap.data() }); else map.delete(id);
+                    push();
+                }, (error) => {
+                    console.error('Gagal memuat workspace yang ditugaskan:', id, error);
+                    setFoldersStatus('error');
+                }));
+                return () => { active = false; unsubs.forEach(fn => fn()); };
+            }, [user?.uid, accountProfile?.role, accountProfile?.ownsLegacyData, JSON.stringify(accountProfile?.workspaceIds || [])]);
 
             // FETCH WEEKEND BOARD & LOGIKA RESET HARI SENIN
             useEffect(() => {
+                if (!canSeeLegacyShared) {
+                    setWeekendNotes([]);
+                    setIsWeekendDataReady(true);
+                    return;
+                }
                 const boardRef = doc(db, 'shared_data', 'weekend_board_notes');
                 const unsubscribe = onSnapshot(boardRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -1931,17 +2173,17 @@
                     }
                 });
                 return () => unsubscribe();
-            }, []);
+            }, [canSeeLegacyShared]);
 
             // DELAYED SYNC UNTUK WEEKEND NOTES
             useEffect(() => {
-                if (!isWeekendDataReady) return;
+                if (!canSeeLegacyShared || !isWeekendDataReady) return;
                 const timer = setTimeout(async () => {
                     try { await setDoc(doc(db, 'shared_data', 'weekend_board_notes'), { notes: JSON.stringify(weekendNotes) }, { merge: true }); } 
                     catch (err) { console.error("Save weekend notes failed", err); }
                 }, 1000);
                 return () => clearTimeout(timer);
-            }, [weekendNotes, isWeekendDataReady]);
+            }, [weekendNotes, isWeekendDataReady, canSeeLegacyShared]);
 
             // FUNGSI WEEKEND NOTES
             const addWeekendNote = () => {
@@ -2068,9 +2310,11 @@
                                     <BellIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                 </button>
 
-                                <button onClick={() => isAdmin ? setIsAdmin(false) : setShowAdminLogin(true)} className={`bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border ${isAdmin ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30' : 'border-gray-100 dark:border-gray-700'} hover:scale-110 transition-transform`} title={isAdmin ? "Keluar Mode Admin" : "Login Admin"}>
-                                    <KeyIcon size={20} className={isAdmin ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"} />
-                                </button>
+                                {isAdmin && (
+                                    <button onClick={() => setIsUserManagerOpen(true)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-violet-300 dark:border-violet-700 hover:scale-110 transition-transform" title="Kelola Pengguna">
+                                        <UsersIcon size={20} className="text-violet-600 dark:text-violet-400" />
+                                    </button>
+                                )}
                                 {isAdmin && (
                                     <div className="relative group flex items-center">
                                         <label className="cursor-pointer bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
@@ -2087,6 +2331,14 @@
                                         )}
                                     </div>
                                 )}
+                                <div className="hidden xl:flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 px-3 py-2 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 max-w-[220px]">
+                                    <UserIcon size={18} className="text-indigo-500 shrink-0" />
+                                    <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{accountProfile?.divisionName || (isAdmin ? 'Super Admin' : 'Member')}</div></div>
+                                </div>
+                                <button onClick={onLogout} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform" title="Keluar akun">
+                                    <LogOutIcon size={20} className="text-red-500" />
+                                </button>
+
                                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform">
                                     <Sun size={20} className={isDarkMode ? "hidden" : "block text-yellow-500"} />
                                     <Moon size={20} className={isDarkMode ? "block text-blue-400" : "hidden"} />
@@ -2140,6 +2392,7 @@
                             </div>
 
                             {/* BAGIAN KANAN: SIDEBAR TITIPAN WEEKEND BERUPA STICKY NOTES */}
+                            {canSeeLegacyShared && (
                             <div className="w-full xl:w-[350px] shrink-0 bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl border border-white dark:border-gray-700 rounded-3xl p-5 shadow-2xl flex flex-col min-h-[500px] xl:sticky top-12">
                                 <div className="flex items-center gap-3 mb-6 border-b-2 border-dashed border-indigo-200 dark:border-gray-600 pb-4">
                                     <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl text-indigo-600 dark:text-indigo-400">
@@ -2177,26 +2430,12 @@
                                     )}
                                 </div>
                             </div>
+                            )}
                             
                         </div>
 
-                        {showAdminLogin && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                                <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowAdminLogin(false)}></div>
-                                <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] shadow-2xl relative p-8 pop-in-animation flex flex-col items-center z-10">
-                                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full flex items-center justify-center mb-4"><KeyIcon size={32} className="text-blue-500" /></div>
-                                    <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-2">Akses Admin</h2>
-                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 text-center">Masukkan password untuk mengedit dan membuat workspace.</p>
-                                    <form onSubmit={(e) => { e.preventDefault(); if (adminPassword === 'ciptadigi') { setIsAdmin(true); setShowAdminLogin(false); setAdminPassword(''); setAdminError(false); } else { setAdminError(true); setAdminPassword(''); } }} className="w-full">
-                                        <input autoFocus type="password" value={adminPassword} onChange={(e) => { setAdminPassword(e.target.value); setAdminError(false); }} placeholder="Password..." className={`w-full bg-gray-100 dark:bg-gray-700 px-6 py-4 rounded-2xl outline-none text-center font-bold tracking-widest text-gray-800 dark:text-gray-100 mb-2 border-2 ${adminError ? 'border-red-500' : 'border-transparent focus:border-blue-400'}`}/>
-                                        <div className="h-6 mb-4 flex items-center justify-center">{adminError && <span className="text-red-500 text-xs font-bold pop-in-animation">Password Salah!</span>}</div>
-                                        <div className="flex gap-3 w-full">
-                                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-2xl font-bold hover:bg-gray-300 dark:hover:bg-gray-600">Batal</button>
-                                            <button type="submit" className="flex-1 py-3 bg-blue-500 text-white rounded-2xl font-bold hover:bg-blue-600 shadow-md">Masuk</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
+                        {isUserManagerOpen && isAdmin && (
+                            <UserManagerModal folders={folders} onClose={() => setIsUserManagerOpen(false)} isDarkMode={isDarkMode} />
                         )}
 
                         {isModalOpen && isAdmin && (
@@ -2260,147 +2499,149 @@
 
         function App() {
             const [authReady, setAuthReady] = useState(false);
-            const [authError, setAuthError] = useState('');
-            const [authErrorCode, setAuthErrorCode] = useState('');
-            const [authAttempt, setAuthAttempt] = useState(0);
+            const [profileReady, setProfileReady] = useState(false);
+            const [profileError, setProfileError] = useState('');
             const [user, setUser] = useState(null);
-            const [currentFolder, setCurrentFolder] = useState(null); 
+            const [accountProfile, setAccountProfile] = useState(null);
+            const [currentFolder, setCurrentFolder] = useState(null);
             const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('followUpDarkMode') === 'true');
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
-            // AUTH V15: jangan biarkan aplikasi muter selamanya jika Anonymous Auth gagal.
-            // Listener dipasang dulu, lalu sign-in anonymous dicoba. Jika gagal/timeout,
-            // tampilkan kode error yang bisa langsung dipakai untuk diagnosis.
+            // V17: Email/Password account auth. Tidak ada lagi anonymous login.
             useEffect(() => {
-                let cancelled = false;
-                let timeoutId = null;
-                let signingIn = false;
-
-                const setFailure = (error) => {
-                    if (cancelled) return;
-                    if (timeoutId) clearTimeout(timeoutId);
-                    const code = error?.code || 'auth/unknown';
-                    const message = error?.message || 'Firebase Authentication gagal.';
-                    console.error('Firebase Auth error:', code, message, error);
-                    setAuthErrorCode(code);
-                    setAuthError(message);
-                    setAuthReady(false);
-                };
-
-                const tryAnonymousLogin = async () => {
-                    if (cancelled || signingIn || auth.currentUser) return;
-                    signingIn = true;
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (error) {
-                        setFailure(error);
-                    } finally {
-                        signingIn = false;
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    // Bersihkan sesi anonymous dari versi lama agar langsung masuk ke layar login akun.
+                    if (currentUser?.isAnonymous) {
+                        signOut(auth).catch(() => {});
+                        return;
                     }
-                };
-
-                setAuthError('');
-                setAuthErrorCode('');
-
-                const unsubscribe = onAuthStateChanged(
-                    auth,
-                    (currentUser) => {
-                        if (cancelled) return;
-                        if (currentUser) {
-                            if (timeoutId) clearTimeout(timeoutId);
-                            setUser(currentUser);
-                            setAuthReady(true);
-                            setAuthError('');
-                            setAuthErrorCode('');
-                        } else {
-                            setUser(null);
-                            setAuthReady(false);
-                            tryAnonymousLogin();
-                        }
-                    },
-                    (error) => setFailure(error)
-                );
-
-                if (auth.currentUser) {
-                    setUser(auth.currentUser);
+                    setUser(currentUser || null);
+                    setCurrentFolder(null);
                     setAuthReady(true);
-                } else {
-                    tryAnonymousLogin();
-                }
-
-                timeoutId = setTimeout(() => {
-                    if (!cancelled && !auth.currentUser && !authError) {
-                        setFailure({
-                            code: 'auth/timeout',
-                            message: 'Login anonymous tidak selesai dalam 12 detik. Periksa koneksi atau konfigurasi Firebase Authentication.'
-                        });
+                    if (!currentUser) {
+                        setAccountProfile(null);
+                        setProfileReady(true);
+                        setProfileError('');
                     }
-                }, 12000);
+                }, (error) => {
+                    console.error('Auth listener error:', error);
+                    setProfileError(error?.message || 'Firebase Authentication gagal.');
+                    setAuthReady(true);
+                });
+                return () => unsubscribe();
+            }, []);
 
-                return () => {
-                    cancelled = true;
-                    if (timeoutId) clearTimeout(timeoutId);
-                    unsubscribe();
+            // Ambil profil akun. ciptadigi@gmail.com otomatis menjadi owner legacy + Super Admin
+            // jika dokumen profil belum pernah dibuat.
+            useEffect(() => {
+                if (!user) return;
+                let unsubscribe = null;
+                let cancelled = false;
+                setProfileReady(false);
+                setProfileError('');
+
+                const initProfile = async () => {
+                    const profileRef = doc(db, 'users', user.uid);
+                    try {
+                        const first = await getDoc(profileRef);
+                        if (!first.exists() && (user.email || '').toLowerCase() === LEGACY_OWNER_EMAIL) {
+                            await setDoc(profileRef, {
+                                name: 'Cipta Digital',
+                                email: LEGACY_OWNER_EMAIL,
+                                role: 'super_admin',
+                                divisionName: 'Management',
+                                workspaceIds: [],
+                                active: true,
+                                ownsLegacyData: true,
+                                allowSharedLegacy: true,
+                                createdAt: serverTimestamp(),
+                                bootstrapVersion: 17
+                            }, { merge: true });
+                        }
+
+                        if (cancelled) return;
+                        unsubscribe = onSnapshot(profileRef, (snap) => {
+                            if (!snap.exists()) {
+                                setAccountProfile(null);
+                                setProfileError('PROFILE_MISSING');
+                                setProfileReady(true);
+                                return;
+                            }
+                            const data = snap.data();
+                            setAccountProfile({
+                                ...data,
+                                uid: snap.id,
+                                workspaceIds: Array.isArray(data.workspaceIds) ? data.workspaceIds : []
+                            });
+                            setProfileError('');
+                            setProfileReady(true);
+                        }, (error) => {
+                            console.error('Profile listener error:', error);
+                            setProfileError(error?.message || 'Profil tidak dapat dibaca dari Firestore.');
+                            setProfileReady(true);
+                        });
+                    } catch (error) {
+                        console.error('Profile bootstrap error:', error);
+                        setProfileError(error?.message || 'Gagal membuka profil akun.');
+                        setProfileReady(true);
+                    }
                 };
-            }, [authAttempt]);
 
-            const retryAuth = () => {
-                setAuthError('');
-                setAuthErrorCode('');
-                setAuthReady(false);
-                setAuthAttempt(v => v + 1);
+                initProfile();
+                return () => { cancelled = true; if (unsubscribe) unsubscribe(); };
+            }, [user?.uid]);
+
+            const logout = async () => {
+                setCurrentFolder(null);
+                try { await signOut(auth); } catch (e) { console.error('Logout gagal', e); }
             };
 
-            const authHelpText = (() => {
-                if (authErrorCode === 'auth/operation-not-allowed') {
-                    return 'Anonymous Authentication belum aktif. Buka Firebase Console → Authentication → Sign-in method → Anonymous → Enable.';
-                }
-                if (authErrorCode === 'auth/network-request-failed') {
-                    return 'Browser gagal menjangkau Firebase. Cek internet, VPN, DNS, antivirus, atau extension yang memblokir request.';
-                }
-                if (authErrorCode === 'auth/too-many-requests') {
-                    return 'Firebase membatasi percobaan sementara. Tunggu beberapa menit lalu coba lagi.';
-                }
-                if (authErrorCode === 'auth/timeout') {
-                    return 'Firebase Authentication tidak merespons. Coba Reload; jika tetap sama, cek Anonymous Authentication di Firebase Console.';
-                }
-                return 'Pastikan Firebase Authentication → Sign-in method → Anonymous dalam keadaan Enabled.';
-            })();
-
-            if (!authReady && !authError) {
+            if (!authReady) {
                 return (
                     <div className={isDarkMode ? 'dark' : ''}>
-                        <div className="min-h-screen flex flex-col items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 text-purple-600 dark:text-purple-400 font-bold text-xl gap-4 px-6 text-center">
-                            <Loader size={48} className="animate-spin" />
-                            <p className="animate-pulse">Menghubungkan ke Awan...</p>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Firebase Authentication sedang diperiksa</p>
+                        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-950 text-violet-600 dark:text-violet-400 font-bold gap-4">
+                            <Loader size={48} className="animate-spin" /><p>Membuka Follow Up...</p>
                         </div>
                     </div>
                 );
             }
 
-            if (!authReady && authError) {
+            if (!user) return <AccountLoginScreen isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />;
+
+            if (!profileReady) {
                 return (
                     <div className={isDarkMode ? 'dark' : ''}>
-                        <div className="min-h-screen flex items-center justify-center bg-[#e2ddf8] dark:bg-gray-900 p-6">
-                            <div className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-[2rem] shadow-2xl border border-red-200 dark:border-red-900/50 p-7 text-center">
-                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-3xl">☁️</div>
-                                <h1 className="text-2xl font-black text-gray-900 dark:text-white">Gagal Menghubungkan Firebase</h1>
-                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Aplikasi berhenti di tahap login anonymous, bukan di loading workspace.</p>
+                        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-950 text-violet-600 dark:text-violet-400 font-bold gap-4">
+                            <Loader size={48} className="animate-spin" /><p>Memuat akses akun...</p>
+                        </div>
+                    </div>
+                );
+            }
 
-                                <div className="mt-5 text-left rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-4">
-                                    <div className="text-xs font-black uppercase tracking-wider text-gray-400">Kode error</div>
-                                    <div className="mt-1 font-mono text-sm font-bold text-red-600 dark:text-red-400 break-all">{authErrorCode || 'auth/unknown'}</div>
-                                    <div className="mt-3 text-sm text-gray-700 dark:text-gray-300 break-words">{authHelpText}</div>
-                                </div>
+            if (!accountProfile || profileError) {
+                const missing = profileError === 'PROFILE_MISSING';
+                return (
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950 p-6">
+                            <div className="max-w-lg w-full bg-white dark:bg-gray-900 rounded-[2rem] shadow-xl border border-gray-200 dark:border-gray-700 p-7">
+                                <h1 className="text-2xl font-black text-gray-900 dark:text-white">{missing ? 'Akun belum diberi akses' : 'Profil akun gagal dimuat'}</h1>
+                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{missing ? `Akun ${user.email} sudah ada di Authentication, tetapi belum punya profil users/${user.uid}. Minta Super Admin menambahkan akun ini.` : profileError}</p>
+                                <button onClick={logout} className="mt-5 px-4 py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black">Keluar</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
 
-                                <button onClick={retryAuth} className="mt-5 w-full py-3.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black shadow-lg">
-                                    Coba Hubungkan Lagi
-                                </button>
-                                <button onClick={() => window.location.reload()} className="mt-3 w-full py-3 rounded-2xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-black">
-                                    Reload Website
-                                </button>
+            if (accountProfile.active === false) {
+                return (
+                    <div className={isDarkMode ? 'dark' : ''}>
+                        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950 p-6">
+                            <div className="max-w-lg w-full bg-white dark:bg-gray-900 rounded-[2rem] shadow-xl border border-red-200 dark:border-red-900 p-7 text-center">
+                                <h1 className="text-2xl font-black text-gray-900 dark:text-white">Akun dinonaktifkan</h1>
+                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Hubungi Super Admin untuk mengaktifkan akses.</p>
+                                <button onClick={logout} className="mt-5 px-5 py-3 rounded-xl bg-red-500 text-white font-black">Keluar</button>
                             </div>
                         </div>
                     </div>
@@ -2409,23 +2650,25 @@
 
             return (
                 <>
-                    {/* SATU engine alarm global. Tidak di-unmount saat pindah Beranda <-> Workspace. */}
                     <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
 
                     {currentFolder ? (
-                        <BoardScreen 
-                            folderId={currentFolder.id} 
-                            folderName={currentFolder.name} 
+                        <BoardScreen
+                            folderId={currentFolder.id}
+                            folderName={currentFolder.name}
                             onBack={() => setCurrentFolder(null)}
                             isDarkMode={isDarkMode}
                             setIsDarkMode={setIsDarkMode}
+                            accountProfile={accountProfile}
                         />
                     ) : (
-                        <HomeScreen 
-                            onSelectFolder={(id, name) => setCurrentFolder({ id, name })} 
+                        <HomeScreen
+                            onSelectFolder={(id, name) => setCurrentFolder({ id, name })}
                             isDarkMode={isDarkMode}
                             setIsDarkMode={setIsDarkMode}
                             user={user}
+                            accountProfile={accountProfile}
+                            onLogout={logout}
                         />
                     )}
                 </>
