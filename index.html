@@ -61,10 +61,14 @@
         .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
 
         .mailbox-hover { transform: scale(1.2) rotate(-5deg); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
+        .global-crafted-footer { padding: 18px 16px 22px; text-align:center; font: 700 13px/1.4 ui-sans-serif,system-ui; background:#111827; color:#9ca3af; }
+        .global-crafted-footer a { color:#38bdf8; text-decoration:underline; text-underline-offset:3px; }
+        @media (max-width: 640px) { button,a,input,select,textarea { min-height:44px; } .global-crafted-footer{padding-bottom:28px;} }
     </style>
 </head>
 <body>
     <div id="root"></div>
+    <footer class="global-crafted-footer">Crafted by <a href="https://www.instagram.com/xdaniel04/" target="_blank" rel="noopener noreferrer">xdaniel04</a></footer>
 
     <script type="text/babel" data-type="module">
         // IMPORT MODULES
@@ -1846,6 +1850,8 @@
             const [busy, setBusy] = useState(false);
             const [error, setError] = useState('');
             const [info, setInfo] = useState('');
+            const [signupMode, setSignupMode] = useState(false);
+            const [name, setName] = useState('');
 
             const login = async (e) => {
                 e.preventDefault();
@@ -1864,6 +1870,23 @@
                 } finally { setBusy(false); }
             };
 
+            const signup = async (e) => {
+                e.preventDefault();
+                setBusy(true); setError(''); setInfo('');
+                try {
+                    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+                    await setDoc(doc(db, 'users', cred.user.uid), {
+                        name: name.trim() || email.trim().split('@')[0], email: email.trim().toLowerCase(),
+                        role: 'member', divisionId: '', divisionName: '', active: false, deleted: false,
+                        accessStatus: 'pending', requestedAt: serverTimestamp(), updatedAt: serverTimestamp()
+                    });
+                    setInfo('Akun berhasil dibuat. Menunggu ACC Super Admin. Untuk akses Admin/Room, chat Telegram @xdaniel04.');
+                } catch (err) {
+                    const code = err?.code || '';
+                    setError(code === 'auth/email-already-in-use' ? 'Email sudah terdaftar.' : (code === 'auth/weak-password' ? 'Password minimal 6 karakter.' : (err?.message || 'Gagal membuat akun.')));
+                } finally { setBusy(false); }
+            };
+
             const resetPassword = async () => {
                 setError(''); setInfo('');
                 if (!email.trim()) { setError('Isi email dulu untuk mengirim reset password.'); return; }
@@ -1876,7 +1899,7 @@
             const requestAccess = () => {
                 const target = 'https://t.me/xdaniel04';
                 const draftEmail = (email || '').trim();
-                const rawMessage = 'Halo kak, saya ingin request akses akun Follow Up Workspace.\n\n' +
+                const rawMessage = 'Halo kak, saya ingin request akses ADMIN Follow Up Workspace agar dapat membuat/mengelola room.\n\n' +
                     'Email: ' + (draftEmail || '-') + '\n' +
                     'Nama: \n' +
                     'Divisi: \n' +
@@ -1897,14 +1920,18 @@
                             <div className="flex items-center gap-3 mb-8">
                                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg">FL</div>
                                 <div>
-                                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">Follow Up Workspace</h1>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Masuk dengan akun divisi kamu</p>
+                                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">WELCOME TO FOLLUP</h1>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Masukkan akun dengan benar</p>
                                 </div>
                             </div>
-                            <form onSubmit={login} className="space-y-4">
+                            <form onSubmit={signupMode ? signup : login} className="space-y-4">
+                                {signupMode && <div>
+                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Nama</label>
+                                    <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Nama lengkap" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
+                                </div>}
                                 <div>
                                     <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</label>
-                                    <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="nama@ciptagrafika.com" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
+                                    <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Masukkan email" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Password</label>
@@ -1912,16 +1939,34 @@
                                 </div>
                                 {error && <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 p-3 text-sm font-bold text-red-600 dark:text-red-300">{error}</div>}
                                 {info && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">{info}</div>}
-                                <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black shadow-lg disabled:opacity-60">{busy ? 'Masuk...' : 'Masuk'}</button>
+                                <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black shadow-lg disabled:opacity-60">{busy ? 'Memproses...' : (signupMode ? 'Buat Akun' : 'Masuk')}</button>
                             </form>
                             <div className="mt-4 grid grid-cols-1 gap-3">
-                                <button onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>
-                                <button type="button" onClick={requestAccess} className="w-full py-3.5 rounded-2xl border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-black bg-violet-50/80 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition">REQUEST AKSES</button>
+                                <button type="button" onClick={() => { setSignupMode(!signupMode); setError(''); setInfo(''); }} className="w-full text-sm font-black text-indigo-600 dark:text-indigo-400 hover:underline">{signupMode ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun'}</button>
+                                {!signupMode && <button type="button" onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>}
+                                <button type="button" onClick={requestAccess} className="w-full py-3.5 rounded-2xl border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-black bg-violet-50/80 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition">REQUEST AKSES ADMIN VIA TELEGRAM</button>
                             </div>
                         </div>
                     </div>
                 </div>
             );
+        };
+
+        const FeedbackWidget = ({ user, accountProfile, isDarkMode }) => {
+            const [open, setOpen] = useState(false), [message, setMessage] = useState(''), [imageData, setImageData] = useState(''), [busy, setBusy] = useState(false), [status, setStatus] = useState('');
+            const submit = async (e) => { e.preventDefault(); if (!message.trim()) return; setBusy(true); setStatus(''); try {
+                await addDoc(collection(db,'feedback'), { uid:user.uid, account: accountProfile?.email || user.email || '', name: accountProfile?.name || '', message:message.trim(), imageData:imageData || '', status:'new', createdAt:serverTimestamp() });
+                setMessage(''); setImageData(''); setStatus('Feedback terkirim. Terima kasih.');
+            } catch(err){ setStatus('Gagal mengirim: '+(err?.message||err)); } finally { setBusy(false); } };
+            const pick = async(e)=>{ const f=e.target.files?.[0]; if(!f)return; if(f.size>8*1024*1024){setStatus('Foto maksimal 8 MB.');return;} setImageData(await resizeImage(f,1280,0.72)); e.target.value=''; };
+            return <><button onClick={()=>setOpen(true)} className="fixed right-4 bottom-5 z-40 px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black shadow-2xl text-sm">Feedback</button>
+            {open && <ModalPortal><div className={isDarkMode?'dark':''}><div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={submit} className="w-full max-w-lg rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5 sm:p-7 shadow-2xl">
+                <div className="flex justify-between gap-4"><div><h2 className="text-xl font-black text-gray-900 dark:text-white">Feedback untuk Developer</h2><p className="text-xs text-gray-500 mt-1">Akun: {accountProfile?.email || user.email}</p></div><button type="button" onClick={()=>setOpen(false)} className="p-2 text-gray-500"><X size={20}/></button></div>
+                <textarea required value={message} onChange={e=>setMessage(e.target.value)} rows="5" placeholder="Tulis pesan, bug, atau saran..." className="mt-5 w-full p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none border-2 border-transparent focus:border-indigo-500"></textarea>
+                <label className="mt-3 block p-3 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-center text-sm font-bold text-gray-600 dark:text-gray-300 cursor-pointer">{imageData?'Ganti foto':'Lampirkan foto (opsional)'}<input type="file" accept="image/*" onChange={pick} className="hidden"/></label>
+                {imageData && <img src={imageData} className="mt-3 max-h-48 w-full object-contain rounded-2xl bg-gray-100 dark:bg-gray-800"/>}{status && <p className="mt-3 text-sm font-bold text-indigo-600 dark:text-indigo-300">{status}</p>}
+                <button disabled={busy} className="mt-4 w-full py-3 rounded-2xl bg-indigo-600 text-white font-black disabled:opacity-50">{busy?'Mengirim...':'Kirim Feedback'}</button>
+            </form></div></div></ModalPortal>}</>;
         };
 
         const UserManagerModal = ({ folders, onClose, isDarkMode, accountProfile }) => {
@@ -2266,6 +2311,22 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
+        const SuperAdminDashboard = ({ user, accountProfile, isDarkMode, setIsDarkMode, onLogout, onOpenFolder }) => {
+            const [users,setUsers]=useState([]), [folders,setFolders]=useState([]), [feedback,setFeedback]=useState([]), [selectedUid,setSelectedUid]=useState(''), [manager,setManager]=useState(false);
+            useEffect(()=>onSnapshot(collection(db,'users'),snap=>{const a=[];snap.forEach(d=>a.push({uid:d.id,...d.data()}));a.sort((x,y)=>(x.name||x.email||'').localeCompare(y.name||y.email||''));setUsers(a)}),[]);
+            useEffect(()=>onSnapshot(collection(db,'folders'),snap=>{const a=[];snap.forEach(d=>a.push({id:d.id,...d.data()}));setFolders(a)}),[]);
+            useEffect(()=>onSnapshot(collection(db,'feedback'),snap=>{const a=[];snap.forEach(d=>a.push({id:d.id,...d.data()}));a.sort((x,y)=>(y.createdAt?.seconds||0)-(x.createdAt?.seconds||0));setFeedback(a)}),[]);
+            const selected=users.find(u=>u.uid===selectedUid); const scoped=selected ? folders.filter(f=>selected.email===LEGACY_OWNER_EMAIL || f.divisionId===selected.divisionId) : [];
+            const pending=users.filter(u=>u.accessStatus==='pending'||u.active===false).length;
+            const approve=async(u)=>{ if(!u)return; await updateDoc(doc(db,'users',u.uid),{active:true,accessStatus:'approved',updatedAt:serverTimestamp()}); };
+            return <div className={isDarkMode?'dark':''}><div className="min-h-screen bg-slate-100 dark:bg-gray-950 p-4 sm:p-6 lg:p-10 text-gray-900 dark:text-white">
+                <div className="max-w-7xl mx-auto"><header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7"><div><p className="text-xs font-black tracking-[.25em] text-indigo-500">CONTROL CENTER</p><h1 className="text-3xl sm:text-4xl font-black">Super Admin Dashboard</h1><p className="text-sm text-gray-500 mt-1">Pantau akun, ACC akses, kelola room, dan feedback developer.</p></div><div className="flex flex-wrap gap-2"><button onClick={()=>setIsDarkMode(!isDarkMode)} className="px-4 py-3 rounded-xl bg-white dark:bg-gray-900 border dark:border-gray-700">Tema</button><button onClick={()=>setManager(true)} className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-black">Buat / Kelola Akun</button><button onClick={onLogout} className="px-4 py-3 rounded-xl bg-red-100 text-red-700 font-black">Keluar</button></div></header>
+                <div className="grid sm:grid-cols-3 gap-4 mb-6"><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{users.length}</div><div className="text-sm text-gray-500">Total akun</div></div><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{pending}</div><div className="text-sm text-gray-500">Menunggu ACC / nonaktif</div></div><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{feedback.length}</div><div className="text-sm text-gray-500">Feedback masuk</div></div></div>
+                <div className="grid lg:grid-cols-2 gap-6"><section className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><h2 className="font-black text-xl">Pantau Akun</h2><select value={selectedUid} onChange={e=>setSelectedUid(e.target.value)} className="mt-4 w-full p-3 rounded-xl bg-gray-100 dark:bg-gray-800"><option value="">Pilih akun yang ingin dipantau</option>{users.map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} — {u.email}</option>)}</select>{selected&&<div className="mt-4"><div className="p-4 rounded-2xl bg-slate-50 dark:bg-gray-800"><b>{selected.name||selected.email}</b><div className="text-sm text-gray-500">{selected.email} • {selected.role||'member'} • {selected.divisionName||'Belum ada divisi'}</div>{selected.active===false&&<button onClick={()=>approve(selected)} className="mt-3 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black">ACC AKSES</button>}</div><div className="mt-4 grid sm:grid-cols-2 gap-3">{scoped.map(f=><button key={f.id} onClick={()=>onOpenFolder(f.id,f.name)} className="text-left p-4 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-indigo-500"><b>{f.name}</b><div className="text-xs text-gray-500">{f.divisionName||'Workspace'}</div></button>)}{!scoped.length&&<p className="text-sm text-gray-400">Tidak ada room yang terhubung.</p>}</div></div>}</section>
+                <section className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><h2 className="font-black text-xl">Feedback Developer</h2><div className="mt-4 space-y-3 max-h-[520px] overflow-auto">{feedback.map(f=><div key={f.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-gray-800"><div className="flex justify-between gap-3"><div className="min-w-0"><b className="text-sm">{f.account||f.name||'Akun'}</b><p className="text-sm mt-1 whitespace-pre-wrap">{f.message}</p></div><button onClick={()=>deleteDoc(doc(db,'feedback',f.id))} className="text-red-500 shrink-0"><Trash2 size={18}/></button></div>{f.imageData&&<img src={f.imageData} className="mt-3 max-h-48 rounded-xl object-contain"/>}</div>)}{!feedback.length&&<p className="text-sm text-gray-400">Belum ada feedback.</p>}</div></section></div>
+                </div>{manager&&<UserManagerModal folders={folders} onClose={()=>setManager(false)} isDarkMode={isDarkMode} accountProfile={accountProfile}/>}</div></div>;
+        };
+
         const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user, accountProfile, onLogout }) => {
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
@@ -2296,7 +2357,8 @@
             const isAdmin = isSuperAdmin || isLegacyOwner; // visual/background pribadi tetap bisa dipakai legacy owner
             const canManageUsers = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah member
             const canManageWorkspaces = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah/edit/hapus room
-            const canSeeLegacyShared = isSuperAdmin || isLegacyOwner
+            const canSeeLegacyShared = isLegacyOwner;
+            const canUseCiptaTools = accountEmail === LEGACY_OWNER_EMAIL
             const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
@@ -2494,6 +2556,7 @@
                             </h1>
                             <div className="flex gap-3">
                                 
+                                {canUseCiptaTools && <>
                                 {/* Tombol Link Hitung Nota */}
                                 <a 
                                     href="https://hitung-nota.vercel.app/" 
@@ -2558,6 +2621,8 @@
                                 >
                                     <BellIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                 </button>
+
+                                </>}
 
                                 {canManageUsers && (
                                     <button onClick={() => setIsUserManagerOpen(true)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-violet-300 dark:border-violet-700 hover:scale-110 transition-transform" title="Kelola Pengguna">
@@ -2935,7 +3000,8 @@
 
             return (
                 <>
-                    <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
+                    {(user.email || '').toLowerCase() === LEGACY_OWNER_EMAIL && <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />}
+                    {accountProfile?.role !== 'super_admin' && <FeedbackWidget user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />}
 
                     {currentFolder ? (
                         <BoardScreen
@@ -2946,6 +3012,8 @@
                             setIsDarkMode={setIsDarkMode}
                             accountProfile={accountProfile}
                         />
+                    ) : accountProfile?.role === 'super_admin' && (user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL ? (
+                        <SuperAdminDashboard user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onLogout={logout} onOpenFolder={(id,name)=>setCurrentFolder({id,name})} />
                     ) : (
                         <HomeScreen
                             onSelectFolder={(id, name) => setCurrentFolder({ id, name })}

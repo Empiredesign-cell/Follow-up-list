@@ -105,6 +105,15 @@ service cloud.firestore {
           request.resource.data.role == 'legacy_owner' &&
           request.resource.data.ownsLegacyData == true
         ) ||
+        // Pengguna boleh membuat profil MEMBER miliknya sendiri dalam status pending/nonaktif.
+        (
+          request.auth.uid == uid &&
+          request.resource.data.email == authEmail() &&
+          request.resource.data.role == 'member' &&
+          request.resource.data.active == false &&
+          request.resource.data.accessStatus == 'pending' &&
+          request.resource.data.divisionId == ''
+        ) ||
         // Super Admin membuat Admin Divisi / Member saja.
         (
           isSuperAdmin() &&
@@ -233,6 +242,12 @@ service cloud.firestore {
       allow read, create, update, delete: if signedIn() && (
         request.auth.uid == uid || isSuperAdmin()
       );
+    }
+
+    // Feedback developer: user hanya dapat mengirim miliknya, Super Admin dapat membaca/menghapus semua.
+    match /feedback/{feedbackId} {
+      allow create: if accountActive() && request.resource.data.uid == request.auth.uid && request.resource.data.account == authEmail();
+      allow read, update, delete: if isSuperAdmin();
     }
   }
 }
