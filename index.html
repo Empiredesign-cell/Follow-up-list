@@ -63,12 +63,17 @@
         .mailbox-hover { transform: scale(1.2) rotate(-5deg); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
         .global-crafted-footer { padding: 18px 16px 22px; text-align:center; font: 700 13px/1.4 ui-sans-serif,system-ui; background:#111827; color:#9ca3af; }
         .global-crafted-footer a { color:#38bdf8; text-decoration:underline; text-underline-offset:3px; }
-        @media (max-width: 640px) { button,a,input,select,textarea { min-height:44px; } .global-crafted-footer{padding-bottom:28px;} }
+        @media (max-width: 640px) {
+            html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
+            button,a,input,select,textarea { min-height:44px; }
+            input,select,textarea { font-size:16px; }
+            .global-crafted-footer{padding:20px 16px calc(28px + env(safe-area-inset-bottom));}
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
-    <footer class="global-crafted-footer">Crafted by <a href="https://www.instagram.com/xdaniel04/" target="_blank" rel="noopener noreferrer">xdaniel04</a></footer>
+    <footer class="global-crafted-footer">crafted by <a href="https://www.instagram.com/xdaniel04/" target="_blank" rel="noopener noreferrer">xdaniel04</a></footer>
 
     <script type="text/babel" data-type="module">
         // IMPORT MODULES
@@ -101,6 +106,18 @@
         const userCreatorAuth = getAuth(userCreatorApp);
         const SUPER_ADMIN_EMAIL = 'empiredesign1510@gmail.com';
         const LEGACY_OWNER_EMAIL = 'ciptadigi@gmail.com';
+        const ADMIN_ACCESS_TELEGRAM = 'xdaniel04';
+        const buildAdminAccessTelegramUrl = (email = '') => {
+            const message = [
+                'Halo @xdaniel04, saya ingin mengajukan akses Admin FOLLUP.',
+                '',
+                `Email akun: ${email || '-'}`,
+                'Kebutuhan: akses Admin / membuat & mengelola room.',
+                '',
+                'Mohon dibantu untuk proses ACC. Terima kasih.'
+            ].join('\n');
+            return `https://t.me/${ADMIN_ACCESS_TELEGRAM}?text=${encodeURIComponent(message)}`;
+        };
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
@@ -1880,7 +1897,7 @@
                         role: 'member', divisionId: '', divisionName: '', active: false, deleted: false,
                         accessStatus: 'pending', requestedAt: serverTimestamp(), updatedAt: serverTimestamp()
                     });
-                    setInfo('Akun berhasil dibuat. Menunggu ACC Super Admin. Untuk akses Admin/Room, chat Telegram @xdaniel04.');
+                    setInfo('Akun berhasil dibuat dan sedang menunggu ACC Super Admin. Jika membutuhkan akses Admin/Room, gunakan tombol Telegram di bawah.');
                 } catch (err) {
                     const code = err?.code || '';
                     setError(code === 'auth/email-already-in-use' ? 'Email sudah terdaftar.' : (code === 'auth/weak-password' ? 'Password minimal 6 karakter.' : (err?.message || 'Gagal membuat akun.')));
@@ -1943,7 +1960,15 @@
                             </form>
                             <div className="mt-4 grid grid-cols-1 gap-3">
                                 <button type="button" onClick={() => { setSignupMode(!signupMode); setError(''); setInfo(''); }} className="w-full text-sm font-black text-indigo-600 dark:text-indigo-400 hover:underline">{signupMode ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun'}</button>
-                                {!signupMode && <button type="button" onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>}
+                                {!signupMode && <a
+                                href={buildAdminAccessTelegramUrl(email.trim().toLowerCase())}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-black transition-colors"
+                            >
+                                <SendIcon size={18}/> Ajukan Akses Admin via Telegram
+                            </a>
+                            <button type="button" onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>}
                                 <button type="button" onClick={requestAccess} className="w-full py-3.5 rounded-2xl border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-black bg-violet-50/80 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition">REQUEST AKSES ADMIN VIA TELEGRAM</button>
                             </div>
                         </div>
@@ -2358,7 +2383,7 @@
             const canManageUsers = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah member
             const canManageWorkspaces = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah/edit/hapus room
             const canSeeLegacyShared = isLegacyOwner;
-            const canUseCiptaTools = accountEmail === LEGACY_OWNER_EMAIL
+            const canUseCiptaTools = accountEmail === LEGACY_OWNER_EMAIL;
             const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
