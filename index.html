@@ -95,11 +95,12 @@
         // Auth kedua khusus Super Admin membuat akun baru tanpa menendang sesi admin utama.
         const userCreatorApp = initializeApp(firebaseConfig, 'fl-user-creator');
         const userCreatorAuth = getAuth(userCreatorApp);
+        const SUPER_ADMIN_EMAIL = 'empiredesign1510@gmail.com';
         const LEGACY_OWNER_EMAIL = 'ciptadigi@gmail.com';
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v18-division-groups';
+        const ATTENDANCE_REMINDER_VERSION = 'v19-single-superadmin-legacy-owner';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -710,11 +711,14 @@
                 return () => unsubscribe();
             }, [folderId]);
 
-            // FETCH LIST FOLDER (Kotak Surat) - V18 grup/divisi.
+            // FETCH LIST FOLDER (Kotak Surat) - V19 grup/divisi.
             // Member/Admin Divisi hanya bisa mengirim ke workspace dalam divisi yang sama.
             useEffect(() => {
-                const isSuper = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
-                if (isSuper) {
+                const accountEmail = (accountProfile?.email || auth.currentUser?.email || '').toLowerCase();
+                const isSuper = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
+                const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
+                const canAccessAllLegacy = isSuper || isLegacyOwner;
+                if (canAccessAllLegacy) {
                     const unsub = onSnapshot(collection(db, 'folders'), (snap) => {
                         const f = [];
                         snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name, divisionId: d.data().divisionId || '' }); });
@@ -732,7 +736,7 @@
                     setAvailableFolders(f);
                 }, () => setAvailableFolders([]));
                 return () => unsub();
-            }, [folderId, accountProfile?.role, accountProfile?.ownsLegacyData, accountProfile?.divisionId]);
+            }, [folderId, accountProfile?.role, accountProfile?.ownsLegacyData, accountProfile?.divisionId, accountProfile?.email]);
 
             // AUTOSAVE HANYA JIKA STATE BENAR-BENAR BERUBAH SECARA LOKAL.
             useEffect(() => {
@@ -1909,7 +1913,8 @@
         };
 
         const UserManagerModal = ({ folders, onClose, isDarkMode, accountProfile }) => {
-            const isSuperAdmin = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
+            const accountEmail = (accountProfile?.email || auth.currentUser?.email || '').toLowerCase();
+            const isSuperAdmin = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
             const isDivisionAdmin = accountProfile?.role === 'division_admin';
             const myDivisionId = accountProfile?.divisionId || '';
             const EMPTY = { name: '', email: '', password: '', role: 'member', divisionId: isSuperAdmin ? '' : myDivisionId, active: true };
@@ -2007,12 +2012,16 @@
                 setBusy(true); setError(''); setInfo('');
                 try {
                     const normalizedEmail = form.email.trim().toLowerCase();
-                    const lockedOwner = normalizedEmail === LEGACY_OWNER_EMAIL;
-                    const roleToSave = lockedOwner ? 'super_admin' : (isSuperAdmin ? form.role : 'member');
-                    const divisionId = roleToSave === 'super_admin' ? (form.divisionId || '') : (isSuperAdmin ? form.divisionId : myDivisionId);
+                    const isSystemSuper = normalizedEmail === SUPER_ADMIN_EMAIL;
+                    const isSystemLegacy = normalizedEmail === LEGACY_OWNER_EMAIL;
+                    if (!editingUid && (isSystemSuper || isSystemLegacy)) {
+                        throw new Error('Akun sistem utama tidak dibuat dari form pengguna.');
+                    }
+                    const roleToSave = isSystemSuper ? 'super_admin' : (isSystemLegacy ? 'legacy_owner' : (isSuperAdmin ? form.role : 'member'));
+                    const divisionId = ['super_admin','legacy_owner'].includes(roleToSave) ? '' : (isSuperAdmin ? form.divisionId : myDivisionId);
                     const division = divisionById(divisionId);
 
-                    if (roleToSave !== 'super_admin' && !divisionId) throw new Error('Pilih divisi/grup terlebih dahulu.');
+                    if (!['super_admin','legacy_owner'].includes(roleToSave) && !divisionId) throw new Error('Pilih divisi/grup terlebih dahulu.');
                     if (!isSuperAdmin && !myDivisionId) throw new Error('Akun admin ini belum ditempatkan ke divisi.');
 
                     if (editingUid) {
@@ -2024,13 +2033,13 @@
                             name: form.name.trim(),
                             email: normalizedEmail,
                             role: roleToSave,
-                            divisionId: lockedOwner ? '' : divisionId,
-                            divisionName: lockedOwner ? 'Management' : (division?.name || accountProfile?.divisionName || ''),
-                            workspaceIds: [], // V18: akses workspace berasal dari divisi, bukan per-user.
-                            active: lockedOwner ? true : !!form.active,
+                            divisionId,
+                            divisionName: roleToSave === 'super_admin' ? 'Management' : (roleToSave === 'legacy_owner' ? 'Data Lama Cipta Digital' : (division?.name || accountProfile?.divisionName || '')),
+                            workspaceIds: [], // V19: akses workspace berasal dari divisi; legacy owner khusus data lama.
+                            active: (isSystemSuper || isSystemLegacy) ? true : !!form.active,
                             deleted: false,
-                            ownsLegacyData: lockedOwner,
-                            allowSharedLegacy: lockedOwner,
+                            ownsLegacyData: isSystemLegacy,
+                            allowSharedLegacy: isSystemSuper || isSystemLegacy,
                             updatedAt: serverTimestamp(),
                             updatedBy: auth.currentUser?.uid || null
                         }, { merge: true });
@@ -2045,17 +2054,17 @@
                                 name: form.name.trim(),
                                 email: normalizedEmail,
                                 role: roleToSave,
-                                divisionId: roleToSave === 'super_admin' ? '' : divisionId,
-                                divisionName: roleToSave === 'super_admin' ? 'Management' : (division?.name || accountProfile?.divisionName || ''),
+                                divisionId: ['super_admin','legacy_owner'].includes(roleToSave) ? '' : divisionId,
+                                divisionName: roleToSave === 'super_admin' ? 'Management' : (roleToSave === 'legacy_owner' ? 'Data Lama Cipta Digital' : (division?.name || accountProfile?.divisionName || '')),
                                 workspaceIds: [],
                                 active: true,
                                 deleted: false,
-                                allowSharedLegacy: roleToSave === 'super_admin',
+                                allowSharedLegacy: ['super_admin','legacy_owner'].includes(roleToSave),
                                 ownsLegacyData: false,
                                 createdAt: serverTimestamp(),
                                 createdBy: auth.currentUser?.uid || null
                             });
-                            setInfo(`Akun ${normalizedEmail} berhasil dibuat di ${roleToSave === 'super_admin' ? 'Management' : (division?.name || 'divisi')}.`);
+                            setInfo(`Akun ${normalizedEmail} berhasil dibuat di ${division?.name || 'divisi'}.`);
                             resetForm();
                         } finally {
                             try { await signOut(userCreatorAuth); } catch {}
@@ -2070,10 +2079,10 @@
                 } finally { setBusy(false); }
             };
 
-            // Hapus di V18 adalah soft-delete/revoke access. Auth account tetap ada sehingga histori tidak putus.
+            // Hapus di V19 adalah soft-delete/revoke access. Auth account tetap ada sehingga histori tidak putus.
             const removeUser = async (u) => {
                 setError(''); setInfo('');
-                if (u.email?.toLowerCase() === LEGACY_OWNER_EMAIL || u.uid === auth.currentUser?.uid) {
+                if ([SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes((u.email || '').toLowerCase()) || u.uid === auth.currentUser?.uid) {
                     setError('Akun utama / akun yang sedang dipakai tidak boleh dihapus.');
                     return;
                 }
@@ -2125,7 +2134,7 @@
                                     <div>
                                         <h2 className="text-2xl font-black text-gray-900 dark:text-white">Manajemen Grup & Pengguna</h2>
                                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {isSuperAdmin ? 'Super Admin mengatur semua divisi. Setiap divisi terisolasi seperti grup.' : `Admin Divisi • ${accountProfile?.divisionName || 'Grup Saya'}`}
+                                            {isSuperAdmin ? `Super Admin tunggal: ${SUPER_ADMIN_EMAIL} • mengatur semua divisi.` : `Admin Divisi • ${accountProfile?.divisionName || 'Grup Saya'}`}
                                         </p>
                                     </div>
                                     <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800"><X size={22} className="text-gray-500"/></button>
@@ -2164,26 +2173,29 @@
                                             {!editingUid && <input required type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password sementara (min. 6 karakter)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>}
 
                                             {isSuperAdmin ? (
-                                                <>
-                                                    <select value={form.role} onChange={e=>setForm({...form,role:e.target.value,divisionId:e.target.value==='super_admin'?'':form.divisionId})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
-                                                        <option value="member">Member</option>
-                                                        <option value="division_admin">Admin Divisi</option>
-                                                        <option value="super_admin">Super Admin</option>
-                                                    </select>
-                                                    {form.role !== 'super_admin' && (
+                                                editingUid && [SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes(form.email.toLowerCase()) ? (
+                                                    <div className="w-full px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900 text-violet-700 dark:text-violet-300 font-black text-sm">
+                                                        {form.email.toLowerCase() === SUPER_ADMIN_EMAIL ? 'Super Admin tunggal • role dikunci' : 'Legacy Cipta Digital • data lama dipertahankan, tanpa hak tambah user/room'}
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <select value={form.role} onChange={e=>setForm({...form,role:e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
+                                                            <option value="member">Member</option>
+                                                            <option value="division_admin">Admin Divisi</option>
+                                                        </select>
                                                         <select required value={form.divisionId} onChange={e=>setForm({...form,divisionId:e.target.value})} className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none">
                                                             <option value="">-- Pilih Divisi / Grup --</option>
                                                             {divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
                                                         </select>
-                                                    )}
-                                                </>
+                                                    </>
+                                                )
                                             ) : (
                                                 <div className="w-full px-4 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-900 text-cyan-700 dark:text-cyan-300 font-black text-sm">
                                                     Grup: {accountProfile?.divisionName || 'Belum ditentukan'} • Role: Member
                                                 </div>
                                             )}
 
-                                            {editingUid && form.email.toLowerCase() !== LEGACY_OWNER_EMAIL && (
+                                            {editingUid && ![SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes(form.email.toLowerCase()) && (
                                                 <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
                                                     <input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Akun aktif
                                                 </label>
@@ -2222,7 +2234,7 @@
                                                         <div className="flex flex-wrap gap-2 shrink-0">
                                                             {!u.deleted && canModify && <button onClick={()=>startEdit(u)} className="px-3 py-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-black">Edit</button>}
                                                             {!u.deleted && canModify && <button onClick={()=>sendReset(u.email)} className="px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-black">Reset Password</button>}
-                                                            {!u.deleted && canModify && u.uid !== auth.currentUser?.uid && u.email?.toLowerCase() !== LEGACY_OWNER_EMAIL && <button onClick={()=>removeUser(u)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-black flex items-center gap-1"><Trash2 size={14}/> Hapus</button>}
+                                                            {!u.deleted && canModify && u.uid !== auth.currentUser?.uid && ![SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes((u.email || '').toLowerCase()) && <button onClick={()=>removeUser(u)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs font-black flex items-center gap-1"><Trash2 size={14}/> Hapus</button>}
                                                             {u.deleted && canModify && <button onClick={()=>restoreUser(u)} className="px-3 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-black flex items-center gap-1"><RotateCcw size={14}/> Pulihkan</button>}
                                                         </div>
                                                     </div>
@@ -2265,12 +2277,14 @@
             const [divisions, setDivisions] = useState([]);
             const [selectedDivisionId, setSelectedDivisionId] = useState('');
             
-            const isSuperAdmin = accountProfile?.role === 'super_admin' || accountProfile?.ownsLegacyData;
+            const accountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
+            const isSuperAdmin = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
+            const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
             const isDivisionAdmin = accountProfile?.role === 'division_admin';
-            const isAdmin = isSuperAdmin; // kompatibilitas kode lama yang memang khusus owner/super admin
-            const canManageUsers = isSuperAdmin || isDivisionAdmin;
-            const canManageWorkspaces = isSuperAdmin || isDivisionAdmin;
-            const canSeeLegacyShared = isSuperAdmin; // data bersama legacy tidak bocor antar divisi
+            const isAdmin = isSuperAdmin || isLegacyOwner; // visual/background pribadi tetap bisa dipakai legacy owner
+            const canManageUsers = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah member
+            const canManageWorkspaces = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah/edit/hapus room
+            const canSeeLegacyShared = isSuperAdmin || isLegacyOwner
             const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
@@ -2317,7 +2331,7 @@
                 const saveCache = (rows) => { try { localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(rows)); } catch {} };
                 setFoldersStatus('loading');
 
-                if (isSuperAdmin) {
+                if (isSuperAdmin || isLegacyOwner) {
                     const unsubscribe = onSnapshot(collection(db, 'folders'), { includeMetadataChanges: true }, (snapshot) => {
                         const fresh = [];
                         snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
@@ -2348,7 +2362,7 @@
                     setFoldersStatus('error');
                 });
                 return () => unsubscribe();
-            }, [user?.uid, isSuperAdmin, accountProfile?.divisionId]);
+            }, [user?.uid, isSuperAdmin, isLegacyOwner, accountProfile?.divisionId]);
 
             // FETCH WEEKEND BOARD & LOGIKA RESET HARI SENIN
             useEffect(() => {
@@ -2405,7 +2419,7 @@
             const deleteWeekendNote = (id) => setWeekendNotes(prev => prev.filter(s => s.id !== id));
 
             const handleFolderClick = (folder) => {
-                if (folder.pin && folder.pin.trim() !== '' && !canManageWorkspaces) { setUnlockingFolder(folder); setUnlockPin(''); setUnlockError(false); }
+                if (folder.pin && folder.pin.trim() !== '' && !canManageWorkspaces && !isLegacyOwner) { setUnlockingFolder(folder); setUnlockPin(''); setUnlockError(false); }
                 else { onSelectFolder(folder.id, folder.name); }
             };
 
@@ -2559,7 +2573,7 @@
                                 )}
                                 <div className="hidden xl:flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 px-3 py-2 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 max-w-[220px]">
                                     <UserIcon size={18} className="text-indigo-500 shrink-0" />
-                                    <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{isSuperAdmin ? 'Super Admin' : (accountProfile?.divisionName || (isDivisionAdmin ? 'Admin Divisi' : 'Member'))}</div></div>
+                                    <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{isSuperAdmin ? 'Super Admin' : (isLegacyOwner ? 'Legacy Cipta Digital' : (accountProfile?.divisionName || (isDivisionAdmin ? 'Admin Divisi' : 'Member')))}</div></div>
                                 </div>
                                 <button onClick={onLogout} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform" title="Keluar akun">
                                     <LogOutIcon size={20} className="text-red-500" />
@@ -2745,7 +2759,7 @@
 
             useEffect(() => { localStorage.setItem('followUpDarkMode', isDarkMode); }, [isDarkMode]);
 
-            // V18: Email/Password + isolasi grup/divisi. Tidak ada lagi anonymous login.
+            // V19: Email/Password + isolasi grup/divisi. Tidak ada lagi anonymous login.
             useEffect(() => {
                 const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
                     // Bersihkan sesi anonymous dari versi lama agar langsung masuk ke layar login akun.
@@ -2769,8 +2783,10 @@
                 return () => unsubscribe();
             }, []);
 
-            // Ambil profil akun. ciptadigi@gmail.com otomatis menjadi owner legacy + Super Admin
-            // jika dokumen profil belum pernah dibuat.
+            // V19 role sistem:
+            // - empiredesign1510@gmail.com = satu-satunya Super Admin.
+            // - ciptadigi@gmail.com = Legacy Owner: data lama tetap utuh dan bisa dipakai,
+            //   tetapi tidak punya menu tambah member/divisi/workspace.
             useEffect(() => {
                 if (!user) return;
                 let unsubscribe = null;
@@ -2781,21 +2797,40 @@
                 const initProfile = async () => {
                     const profileRef = doc(db, 'users', user.uid);
                     try {
+                        const email = (user.email || '').toLowerCase();
                         const first = await getDoc(profileRef);
-                        if (!first.exists() && (user.email || '').toLowerCase() === LEGACY_OWNER_EMAIL) {
+
+                        if (email === SUPER_ADMIN_EMAIL) {
                             await setDoc(profileRef, {
-                                name: 'Cipta Digital',
-                                email: LEGACY_OWNER_EMAIL,
+                                name: first.exists() ? (first.data().name || 'Empire Design') : 'Empire Design',
+                                email: SUPER_ADMIN_EMAIL,
                                 role: 'super_admin',
                                 divisionId: '',
                                 divisionName: 'Management',
-                                workspaceIds: [],
+                                active: true,
+                                deleted: false,
+                                ownsLegacyData: false,
+                                allowSharedLegacy: true,
+                                systemAccount: true,
+                                bootstrapVersion: 19,
+                                updatedAt: serverTimestamp()
+                            }, { merge: true });
+                        } else if (email === LEGACY_OWNER_EMAIL) {
+                            await setDoc(profileRef, {
+                                name: first.exists() ? (first.data().name || 'Cipta Digital') : 'Cipta Digital',
+                                email: LEGACY_OWNER_EMAIL,
+                                role: 'legacy_owner',
+                                divisionId: '',
+                                divisionName: 'Data Lama Cipta Digital',
                                 active: true,
                                 deleted: false,
                                 ownsLegacyData: true,
                                 allowSharedLegacy: true,
-                                createdAt: serverTimestamp(),
-                                bootstrapVersion: 18
+                                canManageUsers: false,
+                                canCreateWorkspaces: false,
+                                systemAccount: true,
+                                bootstrapVersion: 19,
+                                updatedAt: serverTimestamp()
                             }, { merge: true });
                         }
 

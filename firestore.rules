@@ -7,6 +7,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function authEmail() {
+      return signedIn() && request.auth.token.email is string
+        ? request.auth.token.email
+        : '';
+    }
+
     function profilePath() {
       return /databases/$(database)/documents/users/$(request.auth.uid);
     }
@@ -26,7 +32,16 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return accountActive() && myProfile().role == 'super_admin';
+      return accountActive() &&
+        authEmail() == 'empiredesign1510@gmail.com' &&
+        myProfile().role == 'super_admin';
+    }
+
+    function isLegacyOwner() {
+      return accountActive() &&
+        authEmail() == 'ciptadigi@gmail.com' &&
+        (myProfile().role == 'legacy_owner' ||
+         (('ownsLegacyData' in myProfile()) && myProfile().ownsLegacyData == true));
     }
 
     function isDivisionAdmin() {
@@ -44,70 +59,126 @@ service cloud.firestore {
     }
 
     function sameDivision(divisionId) {
-      return accountActive() && divisionId is string && divisionId != '' && divisionId == myDivisionId();
+      return accountActive() &&
+        divisionId is string &&
+        divisionId != '' &&
+        divisionId == myDivisionId();
     }
 
-    function folderInMyDivision(folderId) {
-      return isSuperAdmin() || (
-        accountActive() &&
-        exists(/databases/$(database)/documents/folders/$(folderId)) &&
-        get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == myDivisionId()
-      );
+    function folderAccessible(folderId) {
+      return isSuperAdmin() ||
+        isLegacyOwner() ||
+        (
+          accountActive() &&
+          exists(/databases/$(database)/documents/folders/$(folderId)) &&
+          get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == myDivisionId()
+        );
     }
 
     // =========================================================
     // USER PROFILE
     // =========================================================
     match /users/{uid} {
-      // User membaca profil sendiri.
-      // Super Admin membaca semua.
-      // Admin divisi hanya membaca user dari divisi yang sama.
       allow get: if signedIn() && (
         request.auth.uid == uid ||
         isSuperAdmin() ||
         (isDivisionAdmin() && resource.data.divisionId == myDivisionId())
       );
 
-      // List/query untuk Super Admin atau Admin Divisi.
-      // Query Admin Divisi WAJIB difilter where('divisionId','==',myDivisionId).
-      allow list: if isSuperAdmin() || (
-        isDivisionAdmin() && resource.data.divisionId == myDivisionId()
-      );
+      // Legacy owner tidak boleh melihat daftar user.
+      allow list: if isSuperAdmin() ||
+        (isDivisionAdmin() && resource.data.divisionId == myDivisionId());
 
-      // Bootstrap akun owner lama.
-      // Pembuatan profil user baru dilakukan oleh Super Admin / Admin Divisi.
       allow create: if signedIn() && (
-        isSuperAdmin() ||
+        // Bootstrap Super Admin tunggal.
+        (
+          request.auth.uid == uid &&
+          authEmail() == 'empiredesign1510@gmail.com' &&
+          request.resource.data.email == 'empiredesign1510@gmail.com' &&
+          request.resource.data.role == 'super_admin'
+        ) ||
+        // Bootstrap akun legacy.
+        (
+          request.auth.uid == uid &&
+          authEmail() == 'ciptadigi@gmail.com' &&
+          request.resource.data.email == 'ciptadigi@gmail.com' &&
+          request.resource.data.role == 'legacy_owner' &&
+          request.resource.data.ownsLegacyData == true
+        ) ||
+        // Super Admin membuat Admin Divisi / Member saja.
+        (
+          isSuperAdmin() &&
+          request.resource.data.email != 'empiredesign1510@gmail.com' &&
+          request.resource.data.email != 'ciptadigi@gmail.com' &&
+          (request.resource.data.role == 'division_admin' || request.resource.data.role == 'member')
+        ) ||
+        // Admin Divisi hanya membuat member di grup sendiri.
         (
           isDivisionAdmin() &&
           request.resource.data.divisionId == myDivisionId() &&
           request.resource.data.role == 'member' &&
           (!('ownsLegacyData' in request.resource.data) || request.resource.data.ownsLegacyData != true)
-        ) ||
-        (
-          request.auth.uid == uid &&
-          request.auth.token.email == 'ciptadigi@gmail.com' &&
-          request.resource.data.role == 'super_admin'
         )
       );
 
-      // Super Admin bebas mengatur profil.
-      // Admin Divisi hanya boleh mengubah MEMBER di grup yang sama dan tidak boleh memindahkan grup/role.
-      allow update: if isSuperAdmin() || (
-        isDivisionAdmin() &&
-        resource.data.divisionId == myDivisionId() &&
-        resource.data.role == 'member' &&
-        request.resource.data.divisionId == myDivisionId() &&
-        request.resource.data.role == 'member' &&
-        (!('ownsLegacyData' in request.resource.data) || request.resource.data.ownsLegacyData != true)
+      allow update: if signedIn() && (
+        // Dua akun sistem boleh menormalkan profilnya sendiri.
+        (
+          request.auth.uid == uid &&
+          authEmail() == 'empiredesign1510@gmail.com' &&
+          request.resource.data.email == 'empiredesign1510@gmail.com' &&
+          request.resource.data.role == 'super_admin'
+        ) ||
+        (
+          request.auth.uid == uid &&
+          authEmail() == 'ciptadigi@gmail.com' &&
+          request.resource.data.email == 'ciptadigi@gmail.com' &&
+          request.resource.data.role == 'legacy_owner' &&
+          request.resource.data.ownsLegacyData == true
+        ) ||
+        // Super Admin boleh mengatur user, tetapi role sistem tetap terkunci.
+        (
+          isSuperAdmin() &&
+          (
+            (
+              resource.data.email == 'empiredesign1510@gmail.com' &&
+              request.resource.data.email == 'empiredesign1510@gmail.com' &&
+              request.resource.data.role == 'super_admin'
+            ) ||
+            (
+              resource.data.email == 'ciptadigi@gmail.com' &&
+              request.resource.data.email == 'ciptadigi@gmail.com' &&
+              request.resource.data.role == 'legacy_owner' &&
+              request.resource.data.ownsLegacyData == true
+            ) ||
+            (
+              resource.data.email != 'empiredesign1510@gmail.com' &&
+              resource.data.email != 'ciptadigi@gmail.com' &&
+              request.resource.data.email == resource.data.email &&
+              (request.resource.data.role == 'division_admin' || request.resource.data.role == 'member')
+            )
+          )
+        ) ||
+        // Admin Divisi hanya boleh mengubah MEMBER di divisinya.
+        (
+          isDivisionAdmin() &&
+          resource.data.divisionId == myDivisionId() &&
+          resource.data.role == 'member' &&
+          request.resource.data.divisionId == myDivisionId() &&
+          request.resource.data.role == 'member' &&
+          request.resource.data.email == resource.data.email &&
+          (!('ownsLegacyData' in request.resource.data) || request.resource.data.ownsLegacyData != true)
+        )
       );
 
-      // UI V18 menggunakan soft-delete. Hard delete hanya Super Admin sebagai emergency.
-      allow delete: if isSuperAdmin() && uid != request.auth.uid;
+      allow delete: if isSuperAdmin() &&
+        resource.data.email != 'empiredesign1510@gmail.com' &&
+        resource.data.email != 'ciptadigi@gmail.com';
 
-      // Data tampilan pribadi per akun.
       match /appState/{document=**} {
-        allow read, write: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+        allow read, write: if signedIn() && (
+          request.auth.uid == uid || isSuperAdmin()
+        );
       }
     }
 
@@ -121,44 +192,43 @@ service cloud.firestore {
     }
 
     // =========================================================
-    // WORKSPACE LEGACY - sekarang dimiliki DIVISI
-    // Workspace tanpa divisionId hanya terlihat Super Admin sampai di-assign.
+    // WORKSPACE / ROOM
     // =========================================================
     match /folders/{folderId} {
-      allow read: if isSuperAdmin() || (
-        accountActive() && resource.data.divisionId == myDivisionId()
-      );
+      // ciptadigi tetap dapat melihat seluruh data workspace yang sudah ada.
+      allow read: if isSuperAdmin() || isLegacyOwner() ||
+        (accountActive() && resource.data.divisionId == myDivisionId());
 
-      allow create: if isSuperAdmin() || (
-        isDivisionAdmin() && request.resource.data.divisionId == myDivisionId()
-      );
+      // ciptadigi tidak boleh membuat room baru.
+      allow create: if isSuperAdmin() ||
+        (isDivisionAdmin() && request.resource.data.divisionId == myDivisionId());
 
-      allow update: if isSuperAdmin() || (
-        isDivisionAdmin() &&
-        resource.data.divisionId == myDivisionId() &&
-        request.resource.data.divisionId == myDivisionId()
-      );
+      // ciptadigi juga tidak mengubah struktur room; hanya isi workspace_data.
+      allow update: if isSuperAdmin() ||
+        (
+          isDivisionAdmin() &&
+          resource.data.divisionId == myDivisionId() &&
+          request.resource.data.divisionId == myDivisionId()
+        );
 
-      allow delete: if isSuperAdmin() || (
-        isDivisionAdmin() && resource.data.divisionId == myDivisionId()
-      );
+      allow delete: if isSuperAdmin() ||
+        (isDivisionAdmin() && resource.data.divisionId == myDivisionId());
     }
 
-    // Task/sticky/archive legacy tetap memakai document ID workspace yang sama.
+    // Task/sticky/archive lama tetap memakai document ID workspace yang sama.
     match /workspace_data/{workspaceId} {
-      allow read, write: if folderInMyDivision(workspaceId);
+      allow read, write: if folderAccessible(workspaceId);
     }
 
-    // Data global lama sengaja hanya Super Admin agar tidak bocor antar divisi.
+    // Titipan weekend dan data bersama lama tetap tersedia untuk Super Admin + Cipta Digital.
     match /shared_data/{document=**} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if isSuperAdmin() || isLegacyOwner();
     }
 
     match /global_workspace/{document=**} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if isSuperAdmin() || isLegacyOwner();
     }
 
-    // Reminder cloud lama jika masih ada.
     match /attendance_reminders/{uid} {
       allow read, create, update, delete: if signedIn() && (
         request.auth.uid == uid || isSuperAdmin()
