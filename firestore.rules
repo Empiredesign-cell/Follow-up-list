@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function activeUser() {
+      return hasProfile() && me().active != false;
+    }
+    function superAdmin() {
+      return activeUser() && me().role == 'super_admin';
+    }
+    function canAccessDivision(divisionId) {
+      return activeUser() && (superAdmin() || divisionId in me().divisionIds);
+    }
+    function canAdminDivision(divisionId) {
+      return activeUser() && (superAdmin() || (me().role == 'division_admin' && divisionId in me().divisionIds));
+    }
+
+    // USER PROFILE V2
+    match /users/{uid} {
+      allow read: if activeUser();
+      allow create, update, delete: if superAdmin();
+
+      // Tetap mendukung data personal V1 di users/{uid}/...
+      match /{document=**} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // DIVISIONS V2
+    match /divisions/{divisionId} {
+      allow read: if activeUser();
+      allow create, delete: if superAdmin();
+      allow update: if canAdminDivision(divisionId);
+    }
+
+    // TASKS V2
+    match /tasks/{taskId} {
+      allow read: if canAccessDivision(resource.data.divisionId);
+      allow create: if canAccessDivision(request.resource.data.divisionId);
+      allow update: if canAccessDivision(resource.data.divisionId)
+                    && request.resource.data.divisionId == resource.data.divisionId;
+      allow delete: if superAdmin();
+    }
+
+    // STICKY NOTES V2
+    match /stickyNotes/{noteId} {
+      allow read: if canAccessDivision(resource.data.divisionId);
+      allow create: if canAccessDivision(request.resource.data.divisionId);
+      allow update: if canAccessDivision(resource.data.divisionId)
+                    && request.resource.data.divisionId == resource.data.divisionId;
+      allow delete: if superAdmin();
+    }
+
+    // TRANSFER ANTAR DIVISI
+    match /taskTransfers/{transferId} {
+      allow create: if canAccessDivision(request.resource.data.fromDivisionId);
+      allow read: if canAccessDivision(resource.data.fromDivisionId)
+                  || canAccessDivision(resource.data.toDivisionId);
+      allow update: if canAccessDivision(resource.data.fromDivisionId)
+                    || canAccessDivision(resource.data.toDivisionId);
+      allow delete: if superAdmin();
+    }
+
+    // AUDIT LOG
+    match /activityLogs/{logId} {
+      allow read: if canAccessDivision(resource.data.divisionId);
+      allow create: if activeUser()
+                    && request.resource.data.actorUid == request.auth.uid
+                    && canAccessDivision(request.resource.data.divisionId);
+      allow update, delete: if false;
+    }
+
+    // SYSTEM / MIGRATION MARKER
+    match /system/{document=**} {
+      allow read, write: if superAdmin();
+    }
+
+    // LEGACY V1 - dipertahankan sementara agar production lama tidak mati saat migrasi.
+    match /folders/{document=**} {
+      allow read, write: if signedIn();
+    }
+    match /workspace_data/{document=**} {
+      allow read, write: if signedIn();
+    }
+    match /shared_data/{document=**} {
+      allow read, write: if signedIn();
+    }
+    match /global_workspace/{document=**} {
+      allow read, write: if signedIn();
+    }
+    match /attendance_reminders/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+  }
+}
