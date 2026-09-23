@@ -2171,6 +2171,7 @@
             const [newDivisionName, setNewDivisionName] = useState('');
             const [showDeleted, setShowDeleted] = useState(false);
             const [adminRequestVerified, setAdminRequestVerified] = useState(false);
+            const [legacyDivisionIds, setLegacyDivisionIds] = useState([]);
 
             // Super Admin melihat semua divisi. Admin divisi hanya mengetahui grupnya sendiri.
             useEffect(() => {
@@ -2217,6 +2218,7 @@
                 setError('');
                 setInfo('');
                 setAdminRequestVerified(false);
+                setLegacyDivisionIds([]);
             };
 
             const startEdit = (u) => {
@@ -2231,6 +2233,11 @@
                 });
                 setError(''); setInfo('');
                 setAdminRequestVerified(u.role === 'division_admin');
+                if (isSuperAdmin && (u.email || '').toLowerCase() === LEGACY_OWNER_EMAIL) {
+                    setLegacyDivisionIds(divisions.filter(d => d.ciptaDigiAccess === true).map(d => d.id));
+                } else {
+                    setLegacyDivisionIds([]);
+                }
             };
 
             const createDivision = async (e) => {
@@ -2283,14 +2290,26 @@
                             divisionId,
                             divisionName: roleToSave === 'super_admin' ? 'Management' : (roleToSave === 'legacy_owner' ? 'Data Lama Cipta Digital' : (division?.name || accountProfile?.divisionName || '')),
                             workspaceIds: [], // V19: akses workspace berasal dari divisi; legacy owner khusus data lama.
-                            active: (isSystemSuper || isSystemLegacy) ? true : !!form.active,
+                            active: isSystemSuper ? true : !!form.active,
                             deleted: false,
                             ownsLegacyData: isSystemLegacy,
                             allowSharedLegacy: isSystemSuper || isSystemLegacy,
                             updatedAt: serverTimestamp(),
                             updatedBy: auth.currentUser?.uid || null
                         }, { merge: true });
-                        setInfo('Pengguna berhasil diperbarui.');
+
+                        if (isSystemLegacy && isSuperAdmin) {
+                            const selected = new Set(legacyDivisionIds);
+                            await Promise.all(divisions.map(d =>
+                                setDoc(doc(db, 'divisions', d.id), {
+                                    ciptaDigiAccess: selected.has(d.id),
+                                    updatedAt: serverTimestamp(),
+                                    updatedBy: auth.currentUser?.uid || null
+                                }, { merge: true })
+                            ));
+                        }
+
+                        setInfo(isSystemLegacy ? 'Cipta Digital berhasil diperbarui.' : 'Pengguna berhasil diperbarui.');
                         resetForm();
                     } else {
                         if (!form.password || form.password.length < 6) throw new Error('Password sementara minimal 6 karakter.');
@@ -2420,9 +2439,46 @@
                                             {!editingUid && <input required type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Password sementara (min. 6 karakter)" className="w-full px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none"/>}
 
                                             {isSuperAdmin ? (
-                                                editingUid && [SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes(form.email.toLowerCase()) ? (
+                                                editingUid && form.email.toLowerCase() === SUPER_ADMIN_EMAIL ? (
                                                     <div className="w-full px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-900 text-violet-700 dark:text-violet-300 font-black text-sm">
-                                                        {form.email.toLowerCase() === SUPER_ADMIN_EMAIL ? 'Super Admin tunggal • role dikunci' : 'Legacy Cipta Digital • data lama dipertahankan, tanpa hak tambah user/room'}
+                                                        Super Admin tunggal • role dikunci
+                                                    </div>
+                                                ) : editingUid && form.email.toLowerCase() === LEGACY_OWNER_EMAIL ? (
+                                                    <div className="space-y-3">
+                                                        <div className="w-full px-4 py-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-900">
+                                                            <div className="text-cyan-700 dark:text-cyan-300 font-black text-sm">Cipta Digital • Legacy Owner</div>
+                                                            <div className="text-[11px] text-cyan-600/80 dark:text-cyan-300/70 mt-1">Super Admin boleh mengubah nama, status akun, dan divisi yang dapat diakses. Hak membuat user/room tetap dinonaktifkan.</div>
+                                                        </div>
+
+                                                        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-800/60">
+                                                            <div className="flex items-center justify-between gap-3 mb-3">
+                                                                <div>
+                                                                    <div className="font-black text-sm text-gray-900 dark:text-white">Akses Divisi Cipta Digi</div>
+                                                                    <div className="text-[11px] text-gray-500 dark:text-gray-400">Centang divisi yang boleh tampil di akun ciptadigi@gmail.com.</div>
+                                                                </div>
+                                                                <button type="button" onClick={() => setLegacyDivisionIds(divisions.filter(d=>d.active!==false).map(d=>d.id))} className="text-[10px] font-black px-2 py-1 rounded-lg bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300">Pilih Semua</button>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                                                                {divisions.filter(d=>d.active!==false).map(d => {
+                                                                    const checked = legacyDivisionIds.includes(d.id);
+                                                                    return (
+                                                                        <label key={d.id} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer ${checked ? 'border-cyan-300 bg-cyan-50 dark:bg-cyan-950/30 dark:border-cyan-800' : 'border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700'}`}>
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={checked}
+                                                                                onChange={(e) => {
+                                                                                    setLegacyDivisionIds(prev => e.target.checked ? Array.from(new Set([...prev, d.id])) : prev.filter(id => id !== d.id));
+                                                                                }}
+                                                                            />
+                                                                            <span className="min-w-0">
+                                                                                <span className="block text-sm font-black text-gray-900 dark:text-white truncate">{d.name}</span>
+                                                                                <span className="block text-[10px] text-gray-500">{folders.filter(f => f.divisionId === d.id).length} room</span>
+                                                                            </span>
+                                                                        </label>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 ) : (
                                                     <>
@@ -2446,7 +2502,7 @@
                                                 </div>
                                             )}
 
-                                            {editingUid && ![SUPER_ADMIN_EMAIL, LEGACY_OWNER_EMAIL].includes(form.email.toLowerCase()) && (
+                                            {editingUid && form.email.toLowerCase() !== SUPER_ADMIN_EMAIL && (
                                                 <label className="flex items-center gap-2 text-sm font-bold text-gray-700 dark:text-gray-200">
                                                     <input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Akun aktif
                                                 </label>
