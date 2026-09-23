@@ -2453,6 +2453,29 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setFolders(rows);
             }),[]);
+
+            // V28 privacy migration: dokumen room lama yang belum punya divisionId dinormalisasi menjadi ''.
+            // Ini membuat query legacy owner bisa dibatasi secara aman di Firestore Rules, tanpa membaca room divisi lain.
+            const folderPrivacyNormalizedRef = useRef(false);
+            useEffect(() => {
+                if (folderPrivacyNormalizedRef.current || !folders.length) return;
+                const targets = folders.filter(f => f.divisionId === undefined || f.divisionId === null);
+                if (!targets.length) { folderPrivacyNormalizedRef.current = true; return; }
+                folderPrivacyNormalizedRef.current = true;
+                (async () => {
+                    try {
+                        await Promise.all(targets.map(f => updateDoc(doc(db, 'folders', f.id), {
+                            divisionId: '',
+                            divisionName: '',
+                            privacyNormalizedV28: true
+                        })));
+                        setNotice(`Privasi room lama dinormalisasi: ${targets.length} room tanpa divisi.`);
+                    } catch (err) {
+                        console.error('Normalisasi privasi room lama gagal:', err);
+                        folderPrivacyNormalizedRef.current = false;
+                    }
+                })();
+            }, [folders]);
             useEffect(()=>onSnapshot(collection(db,'divisions'), snap=>{
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setDivisions(rows);
@@ -2559,9 +2582,11 @@
             // Isolasi room V25: akun divisi HANYA melihat room dengan divisionId yang persis sama.
             // Satu room mempunyai satu divisionId, sehingga ketika dipindahkan divisi ia otomatis hilang dari divisi lama.
             const monitoredFolders = selectedUser ? (
-                (selectedUserIsLegacy || selectedUserIsSuper || (selectedUser.role==='super_admin' && (selectedUser.email||'').toLowerCase()===SUPER_ADMIN_EMAIL))
+                (selectedUserIsSuper || (selectedUser.role==='super_admin' && (selectedUser.email||'').toLowerCase()===SUPER_ADMIN_EMAIL))
                     ? folders
-                    : (selectedUser.divisionId ? folders.filter(f => String(f.divisionId || '') === String(selectedUser.divisionId)) : [])
+                    : selectedUserIsLegacy
+                        ? folders.filter(f => !String(f.divisionId || '').trim())
+                        : (selectedUser.divisionId ? folders.filter(f => String(f.divisionId || '') === String(selectedUser.divisionId)) : [])
             ) : [];
             const selectedUserDivision = selectedUser?.divisionId ? divisions.find(d=>d.id===selectedUser.divisionId) : null;
             const selectedFeatures = selectedUserIsLegacy ? ALL_DIVISION_FEATURES : normalizeDivisionFeatures(selectedUserDivision?.features || {});
@@ -2819,13 +2844,14 @@
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
             const homeAccountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
-            const homeFolderScope = homeAccountEmail === SUPER_ADMIN_EMAIL ? 'all' : (homeAccountEmail === LEGACY_OWNER_EMAIL ? 'legacy' : (accountProfile?.divisionId || 'none'));
-            const FOLDERS_CACHE_KEY = `flFoldersCacheV25:${user?.uid || 'guest'}:${homeFolderScope}`;
+            const homeFolderScope = homeAccountEmail === SUPER_ADMIN_EMAIL ? 'all' : (homeAccountEmail === LEGACY_OWNER_EMAIL ? 'legacy-unassigned' : (accountProfile?.divisionId || 'none'));
+            const FOLDERS_CACHE_KEY = `flFoldersCacheV28:${user?.uid || 'guest'}:${homeFolderScope}`;
             const [folders, setFolders] = useState(() => {
                 try {
                     const cached = JSON.parse(localStorage.getItem(FOLDERS_CACHE_KEY) || '[]');
                     if (!Array.isArray(cached)) return [];
-                    if (homeFolderScope === 'all' || homeFolderScope === 'legacy') return cached;
+                    if (homeFolderScope === 'all') return cached;
+                    if (homeFolderScope === 'legacy-unassigned') return cached.filter(f => !String(f.divisionId || '').trim());
                     if (homeFolderScope === 'none') return [];
                     return cached.filter(f => String(f.divisionId || '') === String(homeFolderScope));
                 } catch {
@@ -2888,7 +2914,10 @@
             }, [isSuperAdmin, accountProfile?.divisionId]);
 
             // FETCH WORKSPACE BERDASARKAN DIVISI / GRUP.
-            // Super Admin melihat semua workspace. Selain itu hanya workspace dengan divisionId yang sama.
+            // PRIVASI V28:
+            // - Super Admin: semua room untuk monitoring.
+            // - Cipta Digital Legacy Owner: hanya room BELUM masuk divisi.
+            // - Admin Divisi / Member: hanya room dengan divisionId persis sama.
             useEffect(() => {
                 const toMillisSafe = (value) => {
                     if (!value) return 0;
@@ -2901,7 +2930,7 @@
                 const saveCache = (rows) => { try { localStorage.setItem(FOLDERS_CACHE_KEY, JSON.stringify(rows)); } catch {} };
                 setFoldersStatus('loading');
 
-                if (isSuperAdmin || isLegacyOwner) {
+                if (isSuperAdmin) {
                     const unsubscribe = onSnapshot(collection(db, 'folders'), { includeMetadataChanges: true }, (snapshot) => {
                         const fresh = [];
                         snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
@@ -2911,6 +2940,22 @@
                     }, (error) => {
                         console.error('Gagal memuat semua workspace:', error);
                         setFoldersStatus('error');
+                    });
+                    return () => unsubscribe();
+                }
+
+                // PRIVASI KETAT V28: akun Cipta Digital hanya melihat room legacy yang BELUM masuk divisi.
+                // Begitu sebuah room diberi divisionId, room tersebut hanya terlihat oleh divisi itu + Super Admin.
+                if (isLegacyOwner) {
+                    const qLegacy = query(collection(db, 'folders'), where('divisionId', '==', ''));
+                    const unsubscribe = onSnapshot(qLegacy, { includeMetadataChanges: true }, (snapshot) => {
+                        const fresh = [];
+                        snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
+                        const sorted = sortFolders(fresh);
+                        setFolders(sorted); saveCache(sorted); setFoldersStatus('ready');
+                    }, (error) => {
+                        console.error('Gagal memuat workspace legacy Cipta Digital:', error);
+                        setFolders([]); saveCache([]); setFoldersStatus('error');
                     });
                     return () => unsubscribe();
                 }

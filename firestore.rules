@@ -77,10 +77,16 @@ service cloud.firestore {
 
     function folderAccessible(folderId) {
       return isSuperAdmin() ||
-        isLegacyOwner() ||
+        (
+          isLegacyOwner() &&
+          exists(/databases/$(database)/documents/folders/$(folderId)) &&
+          ('divisionId' in get(/databases/$(database)/documents/folders/$(folderId)).data) &&
+          get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == ''
+        ) ||
         (
           accountActive() &&
           exists(/databases/$(database)/documents/folders/$(folderId)) &&
+          ('divisionId' in get(/databases/$(database)/documents/folders/$(folderId)).data) &&
           get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == myDivisionId()
         );
     }
@@ -215,9 +221,11 @@ service cloud.firestore {
     // WORKSPACE / ROOM
     // =========================================================
     match /folders/{folderId} {
-      // ciptadigi tetap dapat melihat seluruh data workspace yang sudah ada.
-      allow read: if isSuperAdmin() || isLegacyOwner() ||
-        (accountActive() && resource.data.divisionId == myDivisionId());
+      // PRIVASI V28: satu room hanya boleh terlihat oleh satu divisi.
+      // Cipta Digital legacy owner hanya boleh membaca room yang belum ditempatkan ke divisi.
+      allow read: if isSuperAdmin() ||
+        (isLegacyOwner() && ('divisionId' in resource.data) && resource.data.divisionId == '') ||
+        (accountActive() && ('divisionId' in resource.data) && resource.data.divisionId == myDivisionId());
 
       // ciptadigi tidak boleh membuat room baru.
       allow create: if isSuperAdmin() ||
