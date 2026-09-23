@@ -222,7 +222,9 @@
             'monster-green': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 50 Q 25 15 50 15 Q 75 15 75 50 Q 80 85 50 85 Q 20 85 25 50 Z" fill="#22c55e" /><path d="M 35 25 L 25 5 L 45 20 Z M 65 25 L 75 5 L 55 20 Z" fill="#bef264" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="14" fill="#ffffff" stroke="#15803d" strokeWidth="2" /><circle cx="50" cy="45" r="5" fill="#1f2937" /><circle cx="53" cy="42" r="2" fill="#ffffff" /><path d="M 38 65 Q 50 75 62 65" stroke="#15803d" strokeWidth="4" strokeLinecap="round" fill="none" /><path d="M 47 67 L 50 74 L 53 67 Z" fill="#ffffff" /></svg>),
             'cat-cute': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><path d="M 25 45 L 15 15 L 45 35 Z M 75 45 L 85 15 L 55 35 Z" fill="#fca5a5" stroke="#1f2937" strokeWidth="4" strokeLinejoin="round" /><ellipse cx="50" cy="55" rx="35" ry="28" fill="#ffffff" stroke="#1f2937" strokeWidth="4" /><circle cx="38" cy="50" r="4" fill="#1f2937" /><circle cx="62" cy="50" r="4" fill="#1f2937" /><path d="M 45 60 Q 50 65 55 60" stroke="#1f2937" strokeWidth="3" strokeLinecap="round" fill="none" /><line x1="10" y1="50" x2="25" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="10" y1="60" x2="25" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="50" x2="75" y2="53" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /><line x1="90" y1="60" x2="75" y2="57" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" /></svg>),
             'robot': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><line x1="50" y1="30" x2="50" y2="10" stroke="#6b7280" strokeWidth="4" /><circle cx="50" cy="10" r="5" fill="#ef4444" /><rect x="25" y="30" width="50" height="45" rx="8" fill="#9ca3af" stroke="#374151" strokeWidth="4" /><rect x="32" y="38" width="36" height="20" rx="4" fill="#10b981" /><circle cx="42" cy="48" r="3" fill="#ffffff" /><circle cx="58" cy="48" r="3" fill="#ffffff" /><line x1="40" y1="65" x2="60" y2="65" stroke="#374151" strokeWidth="3" strokeLinecap="round" /></svg>),
-            'ninja': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#1f2937" /><path d="M 25 45 Q 50 55 75 45 L 75 60 Q 50 70 25 60 Z" fill="#ffcdb2" /><circle cx="40" cy="54" r="4" fill="#1f2937" /><circle cx="60" cy="54" r="4" fill="#1f2937" /><path d="M 15 50 Q 5 60 10 70 Q 20 60 20 50 Z" fill="#ef4444" /><path d="M 22 45 Q 50 52 78 45 L 80 52 Q 50 60 20 52 Z" fill="#ef4444" /></svg>)
+            'ninja': () => (<svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl"><circle cx="50" cy="55" r="30" fill="#1f2937" /><path d="M 25 45 Q 50 55 75 45 L 75 60 Q 50 70 25 60 Z" fill="#ffcdb2" /><circle cx="40" cy="54" r="4" fill="#1f2937" /><circle cx="60" cy="54" r="4" fill="#1f2937" /><path d="M 15 50 Q 5 60 10 70 Q 20 60 20 50 Z" fill="#ef4444" /><path d="M 22 45 Q 50 52 78 45 L 80 52 Q 50 60 20 52 Z" fill="#ef4444" /></svg>),
+            'yellow-beanie': () => (<div className="w-full h-full flex items-end justify-center drop-shadow-xl"><img src="./avatar-kuning-topi.png" alt="Yellow character with beanie" className="w-full h-full object-contain object-center" /></div>),
+            'yellow-round': () => (<div className="w-full h-full flex items-end justify-center drop-shadow-xl"><img src="./avatar-kuning-bulat.png" alt="Yellow round character" className="w-full h-full object-contain object-center" /></div>)
         };
 
         const Gradients = [
@@ -2439,6 +2441,8 @@
             const [newRoomDivisionId, setNewRoomDivisionId] = useState('');
             const [busyAction, setBusyAction] = useState('');
             const [notice, setNotice] = useState('');
+            const [monitorBackground, setMonitorBackground] = useState(null);
+            const [monitorWeekendNotes, setMonitorWeekendNotes] = useState([]);
             const legacyCleanupDoneRef = useRef(false);
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
@@ -2461,6 +2465,31 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setFeedbacks(rows);
             }),[]);
+
+
+            // TRUE LIVE VIEW: baca background akun yang sedang dipantau.
+            useEffect(() => {
+                if (!monitorUid) { setMonitorBackground(null); return; }
+                const ref = doc(db, 'users', monitorUid, 'appState', 'homeData');
+                const unsub = onSnapshot(ref, snap => {
+                    setMonitorBackground(snap.exists() ? (snap.data().homeBackground || null) : null);
+                }, () => setMonitorBackground(null));
+                return () => unsub();
+            }, [monitorUid]);
+
+            // Super Admin boleh melihat isi Titipan Weekend untuk preview akun yang memiliki fitur tersebut.
+            useEffect(() => {
+                const ref = doc(db, 'shared_data', 'weekend_board_notes');
+                const unsub = onSnapshot(ref, snap => {
+                    if (!snap.exists()) { setMonitorWeekendNotes([]); return; }
+                    try {
+                        const raw = snap.data().notes;
+                        const parsed = typeof raw === 'string' ? JSON.parse(raw) : (Array.isArray(raw) ? raw : []);
+                        setMonitorWeekendNotes(Array.isArray(parsed) ? parsed : []);
+                    } catch { setMonitorWeekendNotes([]); }
+                }, () => setMonitorWeekendNotes([]));
+                return () => unsub();
+            }, []);
 
             // V24: bersihkan profil lama ciptadigi@gmail.com yang masih tercatat sebagai super_admin.
             // Satu-satunya Super Admin adalah empiredesign1510@gmail.com.
@@ -2527,13 +2556,16 @@
             const selectedUser = activeUsers.find(u=>u.uid===monitorUid) || null;
             const selectedUserIsLegacy = (selectedUser?.email||'').toLowerCase()===LEGACY_OWNER_EMAIL;
             const selectedUserIsSuper = (selectedUser?.email||'').toLowerCase()===SUPER_ADMIN_EMAIL;
+            // Isolasi room V25: akun divisi HANYA melihat room dengan divisionId yang persis sama.
+            // Satu room mempunyai satu divisionId, sehingga ketika dipindahkan divisi ia otomatis hilang dari divisi lama.
             const monitoredFolders = selectedUser ? (
                 (selectedUserIsLegacy || selectedUserIsSuper || (selectedUser.role==='super_admin' && (selectedUser.email||'').toLowerCase()===SUPER_ADMIN_EMAIL))
                     ? folders
-                    : folders.filter(f=>f.divisionId && f.divisionId===selectedUser.divisionId)
+                    : (selectedUser.divisionId ? folders.filter(f => String(f.divisionId || '') === String(selectedUser.divisionId)) : [])
             ) : [];
             const selectedUserDivision = selectedUser?.divisionId ? divisions.find(d=>d.id===selectedUser.divisionId) : null;
             const selectedFeatures = selectedUserIsLegacy ? ALL_DIVISION_FEATURES : normalizeDivisionFeatures(selectedUserDivision?.features || {});
+            const selectedCanSeeWeekend = !!selectedUser && (selectedUserIsLegacy || selectedFeatures.titipanWeekend === true);
 
             const filteredUsers = activeUsers.filter(u=>{
                 const matchSearch = !search.trim() || `${u.name||''} ${u.email||''} ${u.divisionName||''} ${u.role||''}`.toLowerCase().includes(search.toLowerCase());
@@ -2650,6 +2682,66 @@
                 </button>;
             };
 
+
+            const monitorShortcut = (enabled, href, title, icon) => enabled ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" title={title} className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center hover:bg-slate-700 transition shrink-0">{icon}</a>
+            ) : null;
+
+            const renderMonitorLiveView = () => {
+                if (!selectedUser) return <div className="py-28 text-center text-slate-400"><div className="text-5xl mb-4">👁️</div>Pilih akun untuk mulai pantauan.</div>;
+                const selectedIsDivisionAdmin = selectedUser.role === 'division_admin';
+                const selectedIsMember = selectedUser.role === 'member';
+                return (
+                    <div className="rounded-[2rem] overflow-hidden border border-slate-700 bg-slate-900 shadow-2xl">
+                        <div className="relative min-h-[720px] bg-slate-900 bg-cover bg-center p-4 sm:p-6 lg:p-8" style={monitorBackground ? {backgroundImage:`url(${monitorBackground})`} : {}}>
+                            <div className="absolute inset-0 bg-slate-900/75 backdrop-blur-[2px] pointer-events-none"></div>
+                            <div className="relative z-10">
+                                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-16">
+                                    <div className="flex items-center gap-3 text-white">
+                                        <span className="bg-slate-700 text-white px-2.5 py-2 rounded-lg text-2xl font-black">FL</span>
+                                        <div><div className="text-2xl sm:text-3xl font-black">Workspace</div><div className="text-[11px] text-slate-400 mt-0.5">Live view • {selectedUser.divisionName || (selectedUserIsLegacy ? 'Legacy Cipta Digital' : 'Tanpa divisi')}</div></div>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        {monitorShortcut(selectedFeatures.hitungNota, 'https://hitung-nota.vercel.app/', 'Hitung Nota', <NotepadIcon size={19} className="text-blue-400"/>)}
+                                        {monitorShortcut(selectedFeatures.hitungCompro, 'https://hitung-compro.vercel.app/', 'Hitung Compro', <CalculatorIcon size={19} className="text-rose-400"/>)}
+                                        {monitorShortcut(selectedFeatures.layoutBuku, 'https://gariscetak.vercel.app/', 'Layout Buku / Garis Cetak', <PrinterIcon size={19} className="text-purple-400"/>)}
+                                        {monitorShortcut(selectedFeatures.ruangPola, 'https://ruangpola.vercel.app/', 'Ruang Pola', <PatternIcon size={19} className="text-cyan-400"/>)}
+                                        {monitorShortcut(selectedFeatures.jadwal, 'https://jadwal.ciptagrafika.com/cg', 'Jadwal', <Calendar size={19} className="text-cyan-300"/>)}
+                                        <span title="Pengingat Absen" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><BellIcon size={19} className="text-violet-400"/></span>
+                                        {selectedIsDivisionAdmin && <span title="Kelola Pengguna Divisi" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><UsersIcon size={19} className="text-violet-400"/></span>}
+                                        {(selectedUserIsLegacy || selectedUserIsSuper) && <span title="Background" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><ImageIcon size={19} className="text-emerald-400"/></span>}
+                                        <div className="h-11 max-w-[210px] px-3 rounded-2xl border border-slate-700 bg-slate-800/80 flex items-center gap-2 text-white">
+                                            <UserIcon size={17} className="text-indigo-400 shrink-0"/>
+                                            <div className="min-w-0 leading-tight"><div className="text-xs font-black truncate">{selectedUser.name || selectedUser.email}</div><div className="text-[9px] text-slate-400 truncate">{selectedUserIsLegacy ? 'Legacy Cipta Digital' : (selectedUser.divisionName || selectedUser.role)}</div></div>
+                                        </div>
+                                        {selectedIsMember && <span title="Request Admin" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><ShieldIcon size={19} className="text-cyan-400"/></span>}
+                                        <span title="Feedback" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><MessageIcon size={19} className="text-fuchsia-400"/></span>
+                                        <span title="Tema" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><Moon size={19} className="text-blue-400"/></span>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col 2xl:flex-row gap-8 items-start">
+                                    <div className="flex-1 w-full">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-x-6 gap-y-28 justify-items-center">
+                                            {monitoredFolders.map(renderCharacterRoom)}
+                                            {monitoredFolders.length===0 && <div className="col-span-full w-full py-24 rounded-3xl border-2 border-dashed border-slate-700 text-center text-slate-400">Akun ini belum mempunyai room pada divisinya.</div>}
+                                        </div>
+                                    </div>
+
+                                    {selectedCanSeeWeekend && <aside className="w-full 2xl:w-[330px] shrink-0 rounded-3xl border border-slate-700 bg-slate-800/75 backdrop-blur-xl p-5 text-white min-h-[470px]">
+                                        <div className="flex items-center gap-3 pb-4 border-b-2 border-dashed border-indigo-500/30"><div className="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-300 grid place-items-center"><ListIcon size={22}/></div><div><div className="font-black text-lg">Titipan Weekend</div><div className="text-[9px] font-black text-rose-400 uppercase tracking-wider mt-1">Otomatis bersih tiap Senin!</div></div></div>
+                                        <div className="mt-5 py-3 rounded-2xl border-2 border-dashed border-indigo-500/40 text-indigo-300 text-center font-bold text-sm">＋ Buat Titipan Baru</div>
+                                        <div className="mt-5 space-y-3 max-h-[390px] overflow-y-auto hide-scrollbar">
+                                            {monitorWeekendNotes.length===0 ? <div className="h-36 rounded-2xl border-2 border-dashed border-slate-600 grid place-items-center text-center text-xs text-slate-400 px-5">📬<br/>Belum ada titipan.<br/>Silakan buat untuk dikerjakan weekend!</div> : monitorWeekendNotes.slice(0,8).map(n=><div key={n.id} className={`${n.color||'bg-yellow-200'} text-slate-900 rounded-2xl p-3 shadow-md`}><div className="font-black text-sm truncate">{n.title||'Tanpa judul'}</div><div className="text-xs mt-1 line-clamp-3 whitespace-pre-wrap">{n.content||''}</div></div>)}
+                                        </div>
+                                    </aside>}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             return <div className={isDarkMode?'dark':''}>
                 <div className="min-h-screen bg-[#f6f7fb] dark:bg-[#080b12] text-slate-900 dark:text-white">
                     <div className="fixed inset-0 pointer-events-none overflow-hidden"><div className="absolute -top-40 -left-28 w-[34rem] h-[34rem] rounded-full bg-violet-500/10 blur-3xl"></div><div className="absolute top-1/3 -right-40 w-[32rem] h-[32rem] rounded-full bg-cyan-400/10 blur-3xl"></div></div>
@@ -2684,9 +2776,19 @@
                                 </div>
                             </>}
 
-                            {tab==='monitor' && <div className="grid xl:grid-cols-[340px_minmax(0,1fr)] gap-5">
-                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 h-fit xl:sticky xl:top-6"><div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-2xl bg-violet-100 dark:bg-violet-950 text-violet-600 grid place-items-center"><UserIcon size={20}/></div><div><h2 className="font-black">Pilih akun</h2><p className="text-[11px] text-slate-500">Preview akses seperti user asli.</p></div></div><select value={monitorUid} onChange={e=>setMonitorUid(e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none"><option value="">-- pilih akun --</option>{activeUsers.filter(u=>u.active!==false).map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} • {u.divisionName||u.role}</option>)}</select>{selectedUser&&<div className="mt-4 p-4 rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-950/40 dark:to-indigo-950/30 border border-violet-100 dark:border-violet-900"><div className="flex items-center gap-3"><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white grid place-items-center font-black">{(selectedUser.name||selectedUser.email||'?').slice(0,2).toUpperCase()}</div><div className="min-w-0"><div className="font-black truncate">{selectedUser.name||selectedUser.email}</div><div className="text-xs text-slate-500 truncate">{selectedUser.email}</div></div></div><div className="mt-3 text-[11px] font-bold text-violet-700 dark:text-violet-300">{selectedUser.role} • {selectedUser.divisionName||'Tanpa divisi'} • {monitoredFolders.length} room</div><div className="mt-3 flex flex-wrap gap-1.5">{DIVISION_FEATURE_CATALOG.filter(f=>selectedFeatures[f.key]).map(f=><span key={f.key} className="px-2 py-1 rounded-lg bg-white/80 dark:bg-slate-900/60 text-[10px] font-bold">{f.icon} {f.short}</span>)}{!selectedUserIsLegacy&&Object.values(selectedFeatures).every(v=>!v)&&<span className="text-[10px] text-slate-400">Belum ada fitur tambahan.</span>}</div></div>}</section>
-                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 min-h-[460px]"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-12"><div><h2 className="font-black text-lg">Tampilan room akun</h2><p className="text-xs text-slate-500">Karakter, warna, dan room dibuat sama seperti yang dilihat akun tersebut.</p></div>{selectedUser&&<span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">LIVE VIEW</span>}</div>{!selectedUser?<div className="py-24 text-center text-slate-400"><div className="text-5xl mb-4">👁️</div>Pilih akun untuk mulai pantauan.</div>:<div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-24">{monitoredFolders.map(renderCharacterRoom)}{monitoredFolders.length===0&&<div className="col-span-full py-20 text-center text-slate-400">Akun ini belum mempunyai room.</div>}</div>}</section>
+                            {tab==='monitor' && <div className="space-y-5">
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5">
+                                    <div className="grid lg:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                            <div className="w-11 h-11 rounded-2xl bg-violet-100 dark:bg-violet-950 text-violet-600 grid place-items-center shrink-0"><UserIcon size={20}/></div>
+                                            <div className="min-w-0"><h2 className="font-black">Pantau sebagai akun</h2><p className="text-[11px] text-slate-500">Live View sekarang meniru beranda akun asli: background, shortcut fitur, karakter room, dan Titipan Weekend.</p></div>
+                                            <select value={monitorUid} onChange={e=>setMonitorUid(e.target.value)} className="sm:ml-auto w-full sm:w-[330px] px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none"><option value="">-- pilih akun --</option>{activeUsers.filter(u=>u.active!==false).map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} • {u.divisionName||u.role}</option>)}</select>
+                                        </div>
+                                        {selectedUser&&<div className="flex flex-wrap gap-2 items-center lg:justify-end"><span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">● LIVE VIEW</span><span className="px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{monitoredFolders.length} room</span><span className="px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{selectedUser.divisionName||selectedUser.role}</span></div>}
+                                    </div>
+                                    {selectedUser&&<div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-1.5">{DIVISION_FEATURE_CATALOG.filter(f=>selectedFeatures[f.key]).map(f=><span key={f.key} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">{f.icon} {f.short}</span>)}{!selectedUserIsLegacy&&Object.values(selectedFeatures).every(v=>!v)&&<span className="text-[10px] text-slate-400">Tidak ada fitur tambahan aktif untuk divisi ini.</span>}<span className="ml-auto text-[10px] text-slate-400 font-bold">Isolasi aktif: room divisi lain tidak ditampilkan.</span></div>}
+                                </section>
+                                {renderMonitorLiveView()}
                             </div>}
 
                             {tab==='access' && <div className="grid xl:grid-cols-3 gap-5">
@@ -2697,7 +2799,7 @@
                             {tab==='divisions' && <div className="space-y-5">
                                 <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col lg:flex-row gap-3 justify-between lg:items-center"><div><h2 className="font-black text-lg">Divisi & Feature Flags</h2><p className="text-xs text-slate-500">Core workspace selalu tersedia. Fitur tambahan di bawah dapat ditampilkan dengan satu ceklis.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newDivisionName} onChange={e=>setNewDivisionName(e.target.value)} placeholder="Nama divisi baru" className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button disabled={busyAction==='new-division'} onClick={createDivisionQuick} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Divisi</button></div></div></section>
                                 <div className="grid xl:grid-cols-2 gap-4">{divisions.map(d=>{const features=normalizeDivisionFeatures(d.features||{});const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const ac=activeUsers.filter(u=>u.divisionId===d.id&&u.role==='division_admin'&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;return <section key={d.id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-4"><div><div className="flex items-center gap-2"><h3 className="font-black text-lg">{d.name}</h3><span className={`px-2 py-1 rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><p className="text-xs text-slate-500 mt-1">{uc} akun • {ac} admin • {rc} room</p></div><button onClick={()=>toggleDivisionActive(d)} className="px-3 py-2 h-fit rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">{d.active===false?'Aktifkan':'Nonaktifkan'}</button></div><div className="mt-5 grid sm:grid-cols-2 gap-2">{DIVISION_FEATURE_CATALOG.map(f=><label key={f.key} className={`cursor-pointer p-3 rounded-2xl border flex items-center gap-3 transition ${features[f.key]?'border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60'}`}><input type="checkbox" checked={features[f.key]} disabled={busyAction===`features-${d.id}`} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/><span className="text-xl">{f.icon}</span><span className="min-w-0"><span className="block text-sm font-black">{f.label}</span><span className="block text-[10px] text-slate-500 leading-tight mt-0.5">{f.description}</span></span></label>)}</div><div className="mt-3 flex gap-2"><button onClick={()=>setAllDivisionFeatures(d,true)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-black">Aktifkan Semua</button><button onClick={()=>setAllDivisionFeatures(d,false)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black">Matikan Semua</button></div></section>})}</div>
-                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Assign room lama ke grup tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div></div>})}</div></section>
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div></div>})}</div></section>
                             </div>}
 
                             {tab==='accounts' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row gap-3 justify-between xl:items-center mb-5"><div><h2 className="font-black text-lg">Semua Akun</h2><p className="text-xs text-slate-500">Cari, filter, edit, reset password, atau cabut akses.</p></div><div className="flex flex-col sm:flex-row gap-2"><select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="all">Semua role</option><option value="admins">Admin Divisi</option><option value="members">Member</option><option value="inactive">Nonaktif</option></select><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari akun..." className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button onClick={()=>setManagerOpen(true)} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Buat / Edit Akun</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{filteredUsers.map(u=><div key={u.uid} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{u.name||u.email}</div><div className="text-xs text-slate-500 truncate">{u.email}</div><div className="flex flex-wrap gap-1 mt-2"><span className="px-2 py-1 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{u.role}</span>{u.divisionName&&<span className="px-2 py-1 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-1 rounded-full text-[10px] font-black ${u.active===false?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>{![SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())&&<button onClick={()=>deleteAccess(u)} className="self-center px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button>}</div>)}</div></section>}
@@ -2716,11 +2818,16 @@
         const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user, accountProfile, onLogout }) => {
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
-            const FOLDERS_CACHE_KEY = `flFoldersCacheV17:${user?.uid || 'guest'}`;
+            const homeAccountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
+            const homeFolderScope = homeAccountEmail === SUPER_ADMIN_EMAIL ? 'all' : (homeAccountEmail === LEGACY_OWNER_EMAIL ? 'legacy' : (accountProfile?.divisionId || 'none'));
+            const FOLDERS_CACHE_KEY = `flFoldersCacheV25:${user?.uid || 'guest'}:${homeFolderScope}`;
             const [folders, setFolders] = useState(() => {
                 try {
                     const cached = JSON.parse(localStorage.getItem(FOLDERS_CACHE_KEY) || '[]');
-                    return Array.isArray(cached) ? cached : [];
+                    if (!Array.isArray(cached)) return [];
+                    if (homeFolderScope === 'all' || homeFolderScope === 'legacy') return cached;
+                    if (homeFolderScope === 'none') return [];
+                    return cached.filter(f => String(f.divisionId || '') === String(homeFolderScope));
                 } catch {
                     return [];
                 }
@@ -2736,7 +2843,7 @@
             const [divisions, setDivisions] = useState([]);
             const [selectedDivisionId, setSelectedDivisionId] = useState('');
             
-            const accountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
+            const accountEmail = homeAccountEmail;
             const isSuperAdmin = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
             const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
             const isCiptaDigital = accountEmail === LEGACY_OWNER_EMAIL;
@@ -2809,6 +2916,9 @@
                 }
 
                 const divisionId = accountProfile?.divisionId || '';
+                // Jangan pernah tampilkan cache divisi lama ketika akun pindah grup.
+                // Sebelum query baru selesai, bersihkan room yang scope-nya tidak cocok.
+                setFolders(prev => prev.filter(f => divisionId && String(f.divisionId || '') === String(divisionId)));
                 if (!divisionId) {
                     setFolders([]); saveCache([]); setFoldersStatus('ready');
                     return;
