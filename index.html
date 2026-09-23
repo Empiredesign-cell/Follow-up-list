@@ -2491,6 +2491,15 @@
             const [notice, setNotice] = useState('');
             const [monitorBackground, setMonitorBackground] = useState(null);
             const [monitorWeekendNotes, setMonitorWeekendNotes] = useState([]);
+            // V31: editor global khusus Super Admin. Bisa mengubah room dari divisi mana pun.
+            const [roomEditorOpen, setRoomEditorOpen] = useState(false);
+            const [roomEditId, setRoomEditId] = useState('');
+            const [roomEditName, setRoomEditName] = useState('');
+            const [roomEditAvatar, setRoomEditAvatar] = useState('boy');
+            const [roomEditGradient, setRoomEditGradient] = useState(Gradients[0]);
+            const [roomEditCustomColor, setRoomEditCustomColor] = useState('#F59E0B');
+            const [roomEditDivisionId, setRoomEditDivisionId] = useState('');
+            const [roomEditPin, setRoomEditPin] = useState('');
             const legacyCleanupDoneRef = useRef(false);
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
@@ -2767,6 +2776,58 @@
                 } finally { setBusyAction(''); }
             };
 
+            const openSuperRoomEditor = (event, folder) => {
+                if (event?.stopPropagation) event.stopPropagation();
+                const parsed = parseGradientValue(folder.gradient || Gradients[0].classes);
+                setRoomEditId(folder.id);
+                setRoomEditName(folder.name || '');
+                setRoomEditAvatar(folder.avatarId || 'boy');
+                setRoomEditDivisionId(folder.divisionId || '');
+                setRoomEditPin(folder.pin || '');
+                if (parsed.type === 'custom') {
+                    setRoomEditGradient({ id:'custom', classes:'', type:'custom' });
+                    setRoomEditCustomColor(parsed.color || '#F59E0B');
+                } else {
+                    setRoomEditGradient(parsed);
+                    setRoomEditCustomColor('#F59E0B');
+                }
+                setRoomEditorOpen(true);
+            };
+
+            const saveSuperRoomEditor = async (event) => {
+                event.preventDefault();
+                if (!roomEditId || !roomEditName.trim()) return;
+                if (!roomEditDivisionId) { alert('Pilih divisi untuk room ini.'); return; }
+                const division = divisions.find(d => d.id === roomEditDivisionId);
+                if (!division) { alert('Divisi tidak ditemukan.'); return; }
+                const gradientValue = roomEditGradient.id === 'custom' ? 'custom:' + roomEditCustomColor : roomEditGradient.classes;
+                setBusyAction('global-room-edit');
+                try {
+                    await updateDoc(doc(db,'folders',roomEditId), {
+                        name: roomEditName.trim(),
+                        avatarId: roomEditAvatar,
+                        gradient: gradientValue,
+                        pin: roomEditPin || '',
+                        divisionId: division.id,
+                        divisionName: division.name,
+                        updatedAt: serverTimestamp(),
+                        updatedBy: user.uid,
+                        updatedBySuperAdmin: true
+                    });
+                    setNotice('Room berhasil diperbarui oleh Super Admin.');
+                    setRoomEditorOpen(false);
+                } catch (err) {
+                    console.error('Super Admin edit room gagal:', err);
+                    alert(err?.message || 'Gagal memperbarui room.');
+                } finally {
+                    setBusyAction('');
+                }
+            };
+
+            const RoomEditAvatarComp = Avatars[roomEditAvatar] || Avatars.boy;
+            const roomEditGradientValue = roomEditGradient.id === 'custom' ? 'custom:' + roomEditCustomColor : (roomEditGradient.classes || Gradients[0].classes);
+            const roomEditBg = getFolderBackground(roomEditGradientValue);
+
             const tabItems = [
                 ['overview','Overview','✦'],['monitor','Pantau Akun','👁'],['access','ACC & Admin','✓'],['divisions','Divisi & Fitur','⚙'],['accounts','Semua Akun','👥'],['feedback','Feedback','💬']
             ];
@@ -2775,14 +2836,15 @@
             const renderCharacterRoom = (f) => {
                 const AvatarComp=Avatars[f.avatarId||'boy'] || Avatars.boy;
                 const bgConfig=getFolderBackground(f.gradient);
-                return <button key={f.id} onClick={()=>onSelectFolder(f.id,f.name)} className="relative character-card cursor-pointer group w-56 h-72 mx-auto text-left">
-                    <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 ${bgConfig.className}`} style={bgConfig.style}>
-                        <div className="absolute top-4 right-4 z-30 w-8 h-8 rounded-full bg-black/20 backdrop-blur grid place-items-center opacity-0 group-hover:opacity-100 transition"><ExternalLinkIcon size={14}/></div>
+                return <div key={f.id} className="relative character-card group w-56 h-72 mx-auto text-left">
+                    <div onClick={()=>onSelectFolder(f.id,f.name)} className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 cursor-pointer ${bgConfig.className}`} style={bgConfig.style}>
+                        <button type="button" onClick={(e)=>openSuperRoomEditor(e,f)} className="absolute top-4 left-4 z-40 w-9 h-9 rounded-full bg-violet-600/95 text-white grid place-items-center shadow-lg hover:bg-violet-500 hover:scale-110 transition" title="Edit room sebagai Super Admin"><EditIcon size={15}/></button>
+                        <div className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/25 backdrop-blur grid place-items-center"><ExternalLinkIcon size={14}/></div>
                         <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{f.name}</h3>
                         <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">{f.divisionName || (f.divisionId ? 'Divisi' : 'Belum masuk grup')}</p>
                     </div>
                     <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20"><AvatarComp/></div>
-                </button>;
+                </div>;
             };
 
 
@@ -2902,7 +2964,7 @@
                             {tab==='divisions' && <div className="space-y-5">
                                 <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col lg:flex-row gap-3 justify-between lg:items-center"><div><h2 className="font-black text-lg">Divisi & Feature Flags</h2><p className="text-xs text-slate-500">Core workspace selalu tersedia. Fitur tambahan di bawah dapat ditampilkan dengan satu ceklis.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newDivisionName} onChange={e=>setNewDivisionName(e.target.value)} placeholder="Nama divisi baru" className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button disabled={busyAction==='new-division'} onClick={createDivisionQuick} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Divisi</button></div></div></section>
                                 <div className="grid xl:grid-cols-2 gap-4">{divisions.map(d=>{const features=normalizeDivisionFeatures(d.features||{});const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const ac=activeUsers.filter(u=>u.divisionId===d.id&&u.role==='division_admin'&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;return <section key={d.id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-4"><div><div className="flex items-center gap-2"><h3 className="font-black text-lg">{d.name}</h3><span className={`px-2 py-1 rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><p className="text-xs text-slate-500 mt-1">{uc} akun • {ac} admin • {rc} room</p></div><button onClick={()=>toggleDivisionActive(d)} className="px-3 py-2 h-fit rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">{d.active===false?'Aktifkan':'Nonaktifkan'}</button></div><div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><div className="text-xs font-black">Warna Card Default</div><div className="text-[10px] text-slate-500 mt-0.5">Room baru di divisi ini otomatis memakai warna ini.</div></div><div className="flex items-center gap-2"><label className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-600 shadow cursor-pointer" style={{background:`linear-gradient(180deg, ${getDivisionDefaultHex(d)} 0%, ${darkenHex(getDivisionDefaultHex(d),28)} 100%)`}}><input type="color" value={getDivisionDefaultHex(d)} onChange={e=>setDivisionDefaultColor(d,e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /></label><code className="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-[10px] font-black">{getDivisionDefaultHex(d)}</code><button disabled={busyAction===`apply-color-${d.id}`} onClick={()=>applyDivisionDefaultToRooms(d)} className="px-3 py-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black disabled:opacity-50">Terapkan ke Room</button></div></div></div><div className="mt-5 grid sm:grid-cols-2 gap-2">{DIVISION_FEATURE_CATALOG.map(f=><label key={f.key} className={`cursor-pointer p-3 rounded-2xl border flex items-center gap-3 transition ${features[f.key]?'border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60'}`}><input type="checkbox" checked={features[f.key]} disabled={busyAction===`features-${d.id}`} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/><span className="text-xl">{f.icon}</span><span className="min-w-0"><span className="block text-sm font-black">{f.label}</span><span className="block text-[10px] text-slate-500 leading-tight mt-0.5">{f.description}</span></span></label>)}</div><div className="mt-3 flex gap-2"><button onClick={()=>setAllDivisionFeatures(d,true)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-black">Aktifkan Semua</button><button onClick={()=>setAllDivisionFeatures(d,false)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black">Matikan Semua</button></div></section>})}</div>
-                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div></div>})}</div></section>
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><button type="button" onClick={(e)=>openSuperRoomEditor(e,f)} className="shrink-0 w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 grid place-items-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition" title="Edit room"><EditIcon size={15}/></button></div>})}</div></section>
                             </div>}
 
                             {tab==='accounts' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row gap-3 justify-between xl:items-center mb-5"><div><h2 className="font-black text-lg">Semua Akun</h2><p className="text-xs text-slate-500">Cari, filter, edit, reset password, atau cabut akses.</p></div><div className="flex flex-col sm:flex-row gap-2"><select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="all">Semua role</option><option value="admins">Admin Divisi</option><option value="members">Member</option><option value="inactive">Nonaktif</option></select><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari akun..." className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button onClick={()=>setManagerOpen(true)} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Buat / Edit Akun</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{filteredUsers.map(u=><div key={u.uid} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{u.name||u.email}</div><div className="text-xs text-slate-500 truncate">{u.email}</div><div className="flex flex-wrap gap-1 mt-2"><span className="px-2 py-1 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{u.role}</span>{u.divisionName&&<span className="px-2 py-1 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-1 rounded-full text-[10px] font-black ${u.active===false?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>{![SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())&&<button onClick={()=>deleteAccess(u)} className="self-center px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button>}</div>)}</div></section>}
@@ -2910,6 +2972,68 @@
                             {tab==='feedback' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex items-center justify-between mb-5"><div><h2 className="font-black text-lg">Feedback Developer</h2><p className="text-xs text-slate-500">Pesan dari pengguna, termasuk screenshot bila dilampirkan.</p></div><span className="px-3 py-1.5 rounded-full bg-fuchsia-100 text-fuchsia-700 text-xs font-black">{unresolvedFeedback.length} baru</span></div><div className="grid xl:grid-cols-2 gap-4">{feedbacks.map(f=><article key={f.id} className={`p-4 rounded-2xl border ${f.status==='resolved'?'border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'}`}><div className="flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{f.accountName||f.accountEmail}</div><div className="text-xs text-slate-500 truncate">{f.accountEmail} • {f.divisionName||'-'}</div></div><div className="flex gap-2 shrink-0">{f.status!=='resolved'&&<button onClick={()=>resolveFeedback(f)} className="px-3 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 text-xs font-black">Selesai</button>}<button onClick={()=>deleteFeedback(f)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button></div></div><p className="mt-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{f.message}</p>{f.imageData&&<a href={f.imageData} target="_blank" rel="noopener noreferrer"><img src={f.imageData} className="mt-3 max-h-64 rounded-2xl object-contain border border-slate-200 dark:border-slate-700"/></a>}</article>)}{feedbacks.length===0&&<div className="col-span-full py-14 text-center text-slate-400">Belum ada feedback.</div>}</div></section>}
                         </main>
                     </div>
+                    {roomEditorOpen && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5">
+                            <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={()=>setRoomEditorOpen(false)}></div>
+                            <form onSubmit={saveSuperRoomEditor} className="relative z-10 w-full max-w-4xl max-h-[94vh] overflow-y-auto rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-5 sm:p-7">
+                                <div className="flex items-start justify-between gap-4 mb-6">
+                                    <div><div className="inline-flex px-3 py-1 rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase tracking-wider mb-2">Super Admin Exclusive</div><h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">Edit Room Global</h2><p className="text-xs sm:text-sm text-slate-500 mt-1">Edit room, karakter, warna, PIN, dan divisi dari mana pun.</p></div>
+                                    <button type="button" onClick={()=>setRoomEditorOpen(false)} className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 grid place-items-center"><X size={19}/></button>
+                                </div>
+
+                                <div className="grid lg:grid-cols-[280px_1fr] gap-6">
+                                    <div className="pt-16">
+                                        <div className="relative w-56 h-72 mx-auto">
+                                            <div className={`relative w-full h-full rounded-[2rem] p-6 flex flex-col justify-end text-white shadow-xl ${roomEditBg.className}`} style={roomEditBg.style}>
+                                                <div className="absolute top-4 left-4 px-2.5 py-1 rounded-full bg-black/25 text-[9px] font-black">PREVIEW</div>
+                                                <h3 className="text-2xl font-black mb-1 truncate drop-shadow">{roomEditName || 'Nama Room'}</h3>
+                                                <p className="text-sm font-medium opacity-90">{divisions.find(d=>d.id===roomEditDivisionId)?.name || 'Pilih divisi'}</p>
+                                            </div>
+                                            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 h-48 pointer-events-none"><RoomEditAvatarComp/></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-5">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Nama Room</label>
+                                            <input value={roomEditName} onChange={e=>setRoomEditName(e.target.value)} className="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white outline-none border-2 border-transparent focus:border-violet-500" placeholder="Nama room"/>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Karakter</label>
+                                            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 max-h-40 overflow-y-auto p-2 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                                {Object.keys(Avatars).map(key=>{ const A=Avatars[key]; return <button key={key} type="button" onClick={()=>setRoomEditAvatar(key)} className={`h-16 rounded-2xl border-2 p-1 transition ${roomEditAvatar===key?'border-violet-500 bg-violet-50 dark:bg-violet-950/30 scale-105':'border-transparent bg-slate-50 dark:bg-slate-800 hover:border-slate-300'}`} title={key}><A/></button> })}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex items-center justify-between gap-3 mb-2"><label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Warna Card</label><code className="text-[10px] font-black text-violet-600">{roomEditGradient.id==='custom'?roomEditCustomColor:'PRESET'}</code></div>
+                                            <div className="flex flex-wrap gap-2 items-center">
+                                                {Gradients.map(g=><button key={g.id} type="button" onClick={()=>setRoomEditGradient(g)} className={`w-9 h-9 rounded-full bg-gradient-to-b ${g.classes} border-2 transition ${roomEditGradient.id===g.id?'scale-110 border-slate-900 dark:border-white ring-2 ring-violet-400':'border-transparent'}`} title={g.id}></button>)}
+                                                <label className={`relative w-11 h-11 rounded-full overflow-hidden cursor-pointer border-2 ${roomEditGradient.id==='custom'?'border-slate-900 dark:border-white ring-2 ring-violet-400':'border-slate-300 dark:border-slate-600'}`} style={{background:'linear-gradient(180deg,'+roomEditCustomColor+' 0%,'+darkenHex(roomEditCustomColor,28)+' 100%)'}} title="Pilih warna bebas">
+                                                    <span className="absolute inset-0 grid place-items-center text-white font-black drop-shadow">+</span>
+                                                    <input type="color" value={roomEditCustomColor} onChange={e=>{setRoomEditCustomColor(e.target.value);setRoomEditGradient({id:'custom',classes:'',type:'custom'});}} className="absolute inset-0 opacity-0 cursor-pointer"/>
+                                                </label>
+                                                <input value={roomEditCustomColor} onChange={e=>{let v=e.target.value.toUpperCase();setRoomEditCustomColor(v);if(/^#[0-9A-F]{6}$/.test(v))setRoomEditGradient({id:'custom',classes:'',type:'custom'});}} className="w-28 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black uppercase outline-none" maxLength="7"/>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid sm:grid-cols-2 gap-4">
+                                            <div><label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Divisi / Grup</label><select value={roomEditDivisionId} onChange={e=>setRoomEditDivisionId(e.target.value)} className="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none font-bold"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                                            <div><label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">PIN Room</label><input value={roomEditPin} onChange={e=>setRoomEditPin(e.target.value)} placeholder="Kosong = tanpa PIN" className="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none font-bold"/></div>
+                                        </div>
+
+                                        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-700 dark:text-amber-300"><b>Hak Super Admin:</b> perpindahan divisi akan langsung mengubah siapa yang boleh melihat room ini. Isi <code>workspace_data</code> tidak dipindahkan atau dihapus.</div>
+
+                                        <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                                            <button type="button" onClick={()=>setRoomEditorOpen(false)} className="sm:w-1/3 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 font-black text-slate-600 dark:text-slate-300">Batal</button>
+                                            <button disabled={busyAction==='global-room-edit'} className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-black shadow-lg shadow-violet-500/20 disabled:opacity-50">{busyAction==='global-room-edit'?'Menyimpan...':'Simpan Perubahan Room'}</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    )}
                     {managerOpen&&<UserManagerModal folders={folders} onClose={()=>setManagerOpen(false)} isDarkMode={isDarkMode} accountProfile={accountProfile}/>} 
                 </div>
             </div>;
