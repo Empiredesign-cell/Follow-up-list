@@ -65,6 +65,16 @@ service cloud.firestore {
         divisionId == myDivisionId();
     }
 
+    function hasWeekendFeature() {
+      let divisionId = myDivisionId();
+      return accountActive() &&
+        divisionId != '' &&
+        exists(/databases/$(database)/documents/divisions/$(divisionId)) &&
+        ('features' in get(/databases/$(database)/documents/divisions/$(divisionId)).data) &&
+        ('titipanWeekend' in get(/databases/$(database)/documents/divisions/$(divisionId)).data.features) &&
+        get(/databases/$(database)/documents/divisions/$(divisionId)).data.features.titipanWeekend == true;
+    }
+
     function folderAccessible(folderId) {
       return isSuperAdmin() ||
         isLegacyOwner() ||
@@ -230,9 +240,10 @@ service cloud.firestore {
       allow read, write: if folderAccessible(workspaceId);
     }
 
-    // Titipan Weekend / data bersama lama KHUSUS akun Cipta Digital.
+    // Titipan Weekend default milik Cipta Digital, tetapi Super Admin dapat
+    // mengaktifkannya untuk divisi tertentu dari Feature Flags.
     match /shared_data/{document=**} {
-      allow read, write: if isLegacyOwner();
+      allow read, write: if isLegacyOwner() || isSuperAdmin() || hasWeekendFeature();
     }
 
     match /global_workspace/{document=**} {
