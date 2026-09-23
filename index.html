@@ -2439,6 +2439,7 @@
             const [newRoomDivisionId, setNewRoomDivisionId] = useState('');
             const [busyAction, setBusyAction] = useState('');
             const [notice, setNotice] = useState('');
+            const legacyCleanupDoneRef = useRef(false);
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
                 const rows=[]; snap.forEach(d=>rows.push({uid:d.id,...d.data()}));
@@ -2461,6 +2462,62 @@
                 rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setFeedbacks(rows);
             }),[]);
 
+            // V24: bersihkan profil lama ciptadigi@gmail.com yang masih tercatat sebagai super_admin.
+            // Satu-satunya Super Admin adalah empiredesign1510@gmail.com.
+            // Bila ada duplikat profil Cipta Digital, pertahankan satu Legacy Owner dan soft-delete sisanya.
+            useEffect(() => {
+                if (legacyCleanupDoneRef.current || !users.length) return;
+                const legacyRows = users.filter(u => (u.email || '').toLowerCase() === LEGACY_OWNER_EMAIL);
+                if (!legacyRows.length) return;
+
+                const needsCleanup = legacyRows.length > 1 || legacyRows.some(u => u.role !== 'legacy_owner' || u.deleted || u.active === false);
+                if (!needsCleanup) return;
+
+                legacyCleanupDoneRef.current = true;
+                const preferred = legacyRows.find(u => u.role === 'legacy_owner' && !u.deleted) || legacyRows[0];
+
+                (async () => {
+                    try {
+                        await Promise.all(legacyRows.map(async (u) => {
+                            if (u.uid === preferred.uid) {
+                                await setDoc(doc(db, 'users', u.uid), {
+                                    email: LEGACY_OWNER_EMAIL,
+                                    name: u.name || 'Cipta Digital',
+                                    role: 'legacy_owner',
+                                    divisionId: '',
+                                    divisionName: 'Data Lama Cipta Digital',
+                                    active: true,
+                                    deleted: false,
+                                    ownsLegacyData: true,
+                                    allowSharedLegacy: true,
+                                    canManageUsers: false,
+                                    canCreateWorkspaces: false,
+                                    systemAccount: true,
+                                    normalizedByV24: true,
+                                    updatedAt: serverTimestamp()
+                                }, { merge: true });
+                            } else {
+                                await setDoc(doc(db, 'users', u.uid), {
+                                    active: false,
+                                    deleted: true,
+                                    staleDuplicate: true,
+                                    duplicateOf: preferred.uid,
+                                    role: 'legacy_owner',
+                                    canManageUsers: false,
+                                    canCreateWorkspaces: false,
+                                    normalizedByV24: true,
+                                    deletedAt: serverTimestamp(),
+                                    deletedBy: user.uid
+                                }, { merge: true });
+                            }
+                        }));
+                        setNotice('Profil lama Cipta Digital sudah dibersihkan. Cipta Digital kini hanya Legacy Owner.');
+                    } catch (e) {
+                        console.warn('Cleanup profil Cipta Digital gagal', e);
+                    }
+                })();
+            }, [users, user.uid]);
+
             const activeUsers = users.filter(u=>!u.deleted);
             const pending = requests.filter(r=>r.status==='pending');
             const unresolvedFeedback = feedbacks.filter(f=>f.status!=='resolved');
@@ -2471,7 +2528,7 @@
             const selectedUserIsLegacy = (selectedUser?.email||'').toLowerCase()===LEGACY_OWNER_EMAIL;
             const selectedUserIsSuper = (selectedUser?.email||'').toLowerCase()===SUPER_ADMIN_EMAIL;
             const monitoredFolders = selectedUser ? (
-                (selectedUserIsLegacy || selectedUserIsSuper || selectedUser.role==='super_admin')
+                (selectedUserIsLegacy || selectedUserIsSuper || (selectedUser.role==='super_admin' && (selectedUser.email||'').toLowerCase()===SUPER_ADMIN_EMAIL))
                     ? folders
                     : folders.filter(f=>f.divisionId && f.divisionId===selectedUser.divisionId)
             ) : [];
