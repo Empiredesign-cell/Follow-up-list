@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Follow Up List & Folders</title>
+    <title>WELCOME TO FOLLUP</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -61,19 +61,17 @@
         .date-input-hidden::-webkit-calendar-picker-indicator { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; opacity: 0; }
 
         .mailbox-hover { transform: scale(1.2) rotate(-5deg); filter: drop-shadow(0 0 15px rgba(234, 179, 8, 0.8)); }
-        .global-crafted-footer { padding: 18px 16px 22px; text-align:center; font: 700 13px/1.4 ui-sans-serif,system-ui; background:#111827; color:#9ca3af; }
-        .global-crafted-footer a { color:#38bdf8; text-decoration:underline; text-underline-offset:3px; }
+
         @media (max-width: 640px) {
-            html, body, #root { width: 100%; max-width: 100%; overflow-x: hidden; }
-            button,a,input,select,textarea { min-height:44px; }
-            input,select,textarea { font-size:16px; }
-            .global-crafted-footer{padding:20px 16px calc(28px + env(safe-area-inset-bottom));}
+            .glass-panel { border-radius: 1.25rem !important; }
+            button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+            input, select, textarea { font-size: 16px; }
+            .character-card { width: min(14rem, 86vw); }
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
-    <footer class="global-crafted-footer">crafted by <a href="https://www.instagram.com/xdaniel04/" target="_blank" rel="noopener noreferrer">xdaniel04</a></footer>
 
     <script type="text/babel" data-type="module">
         // IMPORT MODULES
@@ -106,22 +104,10 @@
         const userCreatorAuth = getAuth(userCreatorApp);
         const SUPER_ADMIN_EMAIL = 'empiredesign1510@gmail.com';
         const LEGACY_OWNER_EMAIL = 'ciptadigi@gmail.com';
-        const ADMIN_ACCESS_TELEGRAM = 'xdaniel04';
-        const buildAdminAccessTelegramUrl = (email = '') => {
-            const message = [
-                'Halo @xdaniel04, saya ingin mengajukan akses Admin FOLLUP.',
-                '',
-                `Email akun: ${email || '-'}`,
-                'Kebutuhan: akses Admin / membuat & mengelola room.',
-                '',
-                'Mohon dibantu untuk proses ACC. Terima kasih.'
-            ].join('\n');
-            return `https://t.me/${ADMIN_ACCESS_TELEGRAM}?text=${encodeURIComponent(message)}`;
-        };
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
-        const ATTENDANCE_REMINDER_VERSION = 'v19-single-superadmin-legacy-owner';
+        const ATTENDANCE_REMINDER_VERSION = 'v22-major-accounts-feedback-mobile';
         const ATTENDANCE_SW_URL = `./attendance-reminder-sw.js?v=${ATTENDANCE_REMINDER_VERSION}`;
 
         // --- IKON SVG ---
@@ -149,6 +135,12 @@
         const UsersIcon = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></Icon>;
         const LogOutIcon = (p) => <Icon {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></Icon>;
         const UserIcon = (p) => <Icon {...p}><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="7" r="4"></circle></Icon>;
+        const MessageIcon = (p) => <Icon {...p}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></Icon>;
+        const ShieldIcon = (p) => <Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></Icon>;
+        const CameraIcon = (p) => <Icon {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></Icon>;
+        const CheckCircleIcon = (p) => <Icon {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></Icon>;
+        const SearchIcon = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></Icon>;
+        const ExternalLinkIcon = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></Icon>;
         const VolumeIcon = (p) => <Icon {...p}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></Icon>;
         const CheckSquare = (p) => <Icon {...p}><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></Icon>;
         const Square = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></Icon>;
@@ -738,6 +730,7 @@
                 const accountEmail = (accountProfile?.email || auth.currentUser?.email || '').toLowerCase();
                 const isSuper = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
                 const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
+            const isCiptaDigital = accountEmail === LEGACY_OWNER_EMAIL;
                 const canAccessAllLegacy = isSuper || isLegacyOwner;
                 if (canAccessAllLegacy) {
                     const unsub = onSnapshot(collection(db, 'folders'), (snap) => {
@@ -1004,7 +997,7 @@
                             </div>
                         )}
 
-                        <div className="flex justify-between items-start mb-6 relative z-10 max-w-7xl mx-auto w-full pt-6 px-4">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6 relative z-10 max-w-7xl mx-auto w-full pt-4 md:pt-6 px-3 md:px-4">
                             <div className="w-auto flex justify-start pt-2 pl-2 gap-3 pointer-events-auto">
                                 <button onClick={onBack} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><HomeIcon size={24} className="text-pink-500 dark:text-pink-400" /></div>
@@ -1069,7 +1062,11 @@
                                 </div>
                             </div>
                             
-                            <div className="w-auto flex justify-end pt-2 pr-2 pointer-events-auto">
+                            <div className="w-full md:w-auto flex justify-center md:justify-end gap-3 pt-2 md:pr-2 pointer-events-auto">
+                                <button onClick={()=>window.dispatchEvent(new CustomEvent('open-feedback'))} className="flex flex-col items-center group">
+                                    <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><MessageIcon size={24} className="text-fuchsia-500" /></div>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Feedback</span>
+                                </button>
                                 <button onClick={() => setIsArchiveOpen(true)} className="flex flex-col items-center group">
                                     <div className="bg-white/60 dark:bg-gray-800/60 p-3 rounded-2xl shadow-lg border-2 border-white dark:border-gray-700 group-hover:scale-110 transition-transform"><Archive size={24} className="text-purple-600 dark:text-purple-400" /></div>
                                     <span className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-2 rounded-full">Arsip</span>
@@ -1077,7 +1074,7 @@
                             </div>
                         </div>
 
-                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 px-4 pb-32 pointer-events-auto">
+                        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 relative z-10 px-3 md:px-4 pb-24 md:pb-32 pointer-events-auto">
                             <div className="lg:col-span-3 hidden lg:flex flex-col h-full z-10">
                                 <div className="flex-1 space-y-6 overflow-y-auto hide-scrollbar pb-10">
                                     {stickies.filter((_, i) => i % 2 === 0).map((s) => <TearableStickyNote key={s.id} {...s} initialColor={s.color} initialTitle={s.title} initialText={s.content} onUpdate={updateSticky} onTear={archiveSticky} onDelete={deleteSticky} />)}
@@ -1858,140 +1855,207 @@
             );
         };
 
+        const CraftedFooter = () => (
+            <footer className="relative z-20 w-full px-4 py-7 text-center text-xs text-gray-500 dark:text-gray-400 bg-white/40 dark:bg-gray-950/30 backdrop-blur-sm border-t border-gray-200/60 dark:border-gray-800/60">
+                Crafted by <a href="https://www.instagram.com/xdaniel04/" target="_blank" rel="noopener noreferrer" className="font-black text-violet-600 dark:text-violet-400 hover:underline">xdaniel04</a>
+            </footer>
+        );
+
+        const openAdminTelegramRequest = ({ email = '', name = '', division = '' } = {}) => {
+            const raw = `Halo kak, saya ingin mengajukan AKSES ADMIN Follow Up Workspace.\n\nNama: ${name || '-'}\nEmail: ${email || '-'}\nDivisi: ${division || '-'}\nAlasan membutuhkan akses admin: `;
+            window.open('https://t.me/xdaniel04?text=' + encodeURIComponent(raw), '_blank', 'noopener,noreferrer');
+        };
+
+        const FeedbackLauncher = ({ user, accountProfile, isDarkMode }) => {
+            const [open, setOpen] = useState(false);
+            const [message, setMessage] = useState('');
+            const [imageData, setImageData] = useState('');
+            const [busy, setBusy] = useState(false);
+            const [status, setStatus] = useState('');
+            useEffect(() => { const fn=()=>setOpen(true); window.addEventListener('open-feedback',fn); return()=>window.removeEventListener('open-feedback',fn); }, []);
+
+            const submit = async (e) => {
+                e.preventDefault();
+                if (!message.trim()) return;
+                setBusy(true); setStatus('');
+                try {
+                    await addDoc(collection(db, 'feedback'), {
+                        accountUid: user.uid,
+                        accountName: accountProfile?.name || '',
+                        accountEmail: (accountProfile?.email || user.email || '').toLowerCase(),
+                        divisionId: accountProfile?.divisionId || '',
+                        divisionName: accountProfile?.divisionName || '',
+                        message: message.trim(),
+                        imageData: imageData || '',
+                        status: 'new',
+                        createdAt: serverTimestamp()
+                    });
+                    setMessage(''); setImageData(''); setStatus('Feedback terkirim. Terima kasih.');
+                    setTimeout(() => { setOpen(false); setStatus(''); }, 1000);
+                } catch (err) { setStatus(err?.message || 'Feedback gagal dikirim.'); }
+                finally { setBusy(false); }
+            };
+
+            return (
+                <>
+                    <button onClick={() => setOpen(true)} className="fixed bottom-5 right-4 md:bottom-6 md:right-6 z-[70] flex items-center gap-2 px-3.5 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white shadow-2xl border border-violet-400/50" title="Kirim feedback ke developer">
+                        <MessageIcon size={18}/><span className="hidden sm:inline text-xs font-black">Feedback</span>
+                    </button>
+                    {open && <ModalPortal>
+                        <div className={isDarkMode ? 'dark' : ''}>
+                            <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={(e)=>{ if(e.target===e.currentTarget) setOpen(false); }}>
+                                <form onSubmit={submit} className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div className="p-5 md:p-6 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+                                        <div><h2 className="text-xl font-black text-gray-900 dark:text-white">Feedback Developer</h2><p className="text-xs text-gray-500 mt-1">Kirim kendala, saran, atau screenshot.</p></div>
+                                        <button type="button" onClick={()=>setOpen(false)} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800"><X size={18}/></button>
+                                    </div>
+                                    <div className="p-5 md:p-6 space-y-4">
+                                        <div className="rounded-2xl bg-gray-50 dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700">
+                                            <div className="text-[10px] font-black uppercase tracking-wider text-gray-400">Akun</div>
+                                            <div className="font-black text-sm text-gray-900 dark:text-white">{accountProfile?.name || '-'}</div>
+                                            <div className="text-xs text-gray-500">{accountProfile?.email || user.email}</div>
+                                        </div>
+                                        <textarea required value={message} onChange={e=>setMessage(e.target.value)} rows="5" placeholder="Tulis feedback atau kendala..." className="w-full px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none border-2 border-transparent focus:border-violet-500 resize-none"/>
+                                        <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 p-4 hover:border-violet-400 transition">
+                                            <input type="file" accept="image/*" className="hidden" onChange={async e=>{ const f=e.target.files?.[0]; if(!f)return; setImageData(await resizeImage(f, 1000, .72)); e.target.value=''; }}/>
+                                            <div className="flex items-center gap-3 text-sm font-bold text-gray-600 dark:text-gray-300"><CameraIcon size={20} className="text-violet-500"/> {imageData ? 'Ganti foto / screenshot' : 'Tambahkan foto / screenshot (opsional)'}</div>
+                                        </label>
+                                        {imageData && <div className="relative"><img src={imageData} className="w-full max-h-56 object-contain rounded-2xl border border-gray-200 dark:border-gray-700 bg-black/5"/><button type="button" onClick={()=>setImageData('')} className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-xl"><X size={14}/></button></div>}
+                                        {status && <div className="text-sm font-bold text-violet-600 dark:text-violet-300">{status}</div>}
+                                        <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black disabled:opacity-50">{busy ? 'Mengirim...' : 'KIRIM FEEDBACK'}</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </ModalPortal>}
+                </>
+            );
+        };
+
         // ==========================================
-        // LOGIN AKUN + USER MANAGEMENT V17
+        // LOGIN + REGISTER + USER MANAGEMENT V22
         // ==========================================
         const AccountLoginScreen = ({ isDarkMode, setIsDarkMode }) => {
+            const [mode, setMode] = useState('login');
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+            const [name, setName] = useState('');
+            const [divisionRequest, setDivisionRequest] = useState('');
             const [busy, setBusy] = useState(false);
             const [error, setError] = useState('');
             const [info, setInfo] = useState('');
-            const [signupMode, setSignupMode] = useState(false);
-            const [name, setName] = useState('');
 
             const login = async (e) => {
-                e.preventDefault();
-                setBusy(true); setError(''); setInfo('');
-                try {
-                    await signInWithEmailAndPassword(auth, email.trim(), password);
-                } catch (err) {
+                e.preventDefault(); setBusy(true); setError(''); setInfo('');
+                try { await signInWithEmailAndPassword(auth, email.trim(), password); }
+                catch (err) {
                     const code = err?.code || '';
-                    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-                        setError('Email atau password salah.');
-                    } else if (code === 'auth/too-many-requests') {
-                        setError('Terlalu banyak percobaan login. Coba lagi beberapa menit lagi.');
-                    } else {
-                        setError(err?.message || 'Login gagal.');
-                    }
+                    if (['auth/invalid-credential','auth/wrong-password','auth/user-not-found'].includes(code)) setError('Email atau password salah.');
+                    else if (code === 'auth/too-many-requests') setError('Terlalu banyak percobaan login. Coba lagi beberapa menit.');
+                    else setError(err?.message || 'Login gagal.');
                 } finally { setBusy(false); }
             };
 
-            const signup = async (e) => {
-                e.preventDefault();
-                setBusy(true); setError(''); setInfo('');
+            const register = async (e) => {
+                e.preventDefault(); setBusy(true); setError(''); setInfo('');
                 try {
-                    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-                    await setDoc(doc(db, 'users', cred.user.uid), {
-                        name: name.trim() || email.trim().split('@')[0], email: email.trim().toLowerCase(),
-                        role: 'member', divisionId: '', divisionName: '', active: false, deleted: false,
-                        accessStatus: 'pending', requestedAt: serverTimestamp(), updatedAt: serverTimestamp()
+                    const normalizedEmail = email.trim().toLowerCase();
+                    if (!name.trim()) throw new Error('Nama wajib diisi.');
+                    if (password.length < 6) throw new Error('Password minimal 6 karakter.');
+                    if (password !== confirmPassword) throw new Error('Konfirmasi password tidak sama.');
+                    const created = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+                    await setDoc(doc(db, 'users', created.user.uid), {
+                        name: name.trim(), email: normalizedEmail, role: 'member',
+                        divisionId: '', divisionName: '', requestedDivisionName: divisionRequest.trim(),
+                        active: false, deleted: false, pendingApproval: true,
+                        ownsLegacyData: false, allowSharedLegacy: false,
+                        createdAt: serverTimestamp(), signupSource: 'self_register_v22'
                     });
-                    setInfo('Akun berhasil dibuat dan sedang menunggu ACC Super Admin. Jika membutuhkan akses Admin/Room, gunakan tombol Telegram di bawah.');
+                    await setDoc(doc(db, 'access_requests', created.user.uid), {
+                        uid: created.user.uid, name: name.trim(), email: normalizedEmail,
+                        requestedDivisionName: divisionRequest.trim(), type: 'member_access',
+                        status: 'pending', createdAt: serverTimestamp()
+                    }, { merge: true });
+                    setInfo('Akun berhasil dibuat dan menunggu ACC Super Admin.');
                 } catch (err) {
                     const code = err?.code || '';
-                    setError(code === 'auth/email-already-in-use' ? 'Email sudah terdaftar.' : (code === 'auth/weak-password' ? 'Password minimal 6 karakter.' : (err?.message || 'Gagal membuat akun.')));
+                    if (code === 'auth/email-already-in-use') setError('Email sudah terdaftar. Silakan login.');
+                    else if (code === 'auth/invalid-email') setError('Format email tidak valid.');
+                    else setError(err?.message || 'Gagal membuat akun.');
                 } finally { setBusy(false); }
             };
 
             const resetPassword = async () => {
                 setError(''); setInfo('');
-                if (!email.trim()) { setError('Isi email dulu untuk mengirim reset password.'); return; }
-                try {
-                    await sendPasswordResetEmail(auth, email.trim());
-                    setInfo('Link reset password sudah dikirim ke email tersebut.');
-                } catch (err) { setError(err?.message || 'Gagal mengirim reset password.'); }
-            };
-
-            const requestAccess = () => {
-                const target = 'https://t.me/xdaniel04';
-                const draftEmail = (email || '').trim();
-                const rawMessage = 'Halo kak, saya ingin request akses ADMIN Follow Up Workspace agar dapat membuat/mengelola room.\n\n' +
-                    'Email: ' + (draftEmail || '-') + '\n' +
-                    'Nama: \n' +
-                    'Divisi: \n' +
-                    'Keterangan: ';
-                const message = encodeURIComponent(rawMessage);
-                window.open(target + '?text=' + message, '_blank', 'noopener,noreferrer');
+                if (!email.trim()) { setError('Masukkan email dulu untuk reset password.'); return; }
+                try { await sendPasswordResetEmail(auth, email.trim()); setInfo('Link reset password sudah dikirim.'); }
+                catch (err) { setError(err?.message || 'Gagal mengirim reset password.'); }
             };
 
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
-                    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-violet-50 to-indigo-100 dark:from-gray-950 dark:via-gray-900 dark:to-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-                        <div className="absolute -top-24 -left-24 w-80 h-80 bg-violet-400/20 rounded-full blur-3xl"></div>
-                        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-cyan-400/15 rounded-full blur-3xl"></div>
-                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="absolute top-6 right-6 p-3 rounded-2xl bg-white/80 dark:bg-gray-800/80 border border-white/70 dark:border-gray-700 shadow-sm">
-                            {isDarkMode ? <Moon size={20} className="text-blue-400"/> : <Sun size={20} className="text-amber-500"/>}
-                        </button>
-                        <div className="w-full max-w-md bg-white/85 dark:bg-gray-900/85 backdrop-blur-2xl border border-white dark:border-gray-700 rounded-[2rem] shadow-2xl p-8 relative z-10">
-                            <div className="flex items-center gap-3 mb-8">
-                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white flex items-center justify-center font-black text-xl shadow-lg">FL</div>
-                                <div>
-                                    <h1 className="text-2xl font-black text-gray-900 dark:text-white">WELCOME TO FOLLUP</h1>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Masukkan akun dengan benar</p>
-                                </div>
-                            </div>
-                            <form onSubmit={signupMode ? signup : login} className="space-y-4">
-                                {signupMode && <div>
-                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Nama</label>
-                                    <input type="text" required value={name} onChange={e => setName(e.target.value)} placeholder="Nama lengkap" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
-                                </div>}
-                                <div>
-                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Email</label>
-                                    <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="Masukkan email" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Password</label>
-                                    <input type="password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" className="mt-2 w-full px-4 py-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-transparent focus:border-violet-500 outline-none text-gray-900 dark:text-white" />
-                                </div>
-                                {error && <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900 p-3 text-sm font-bold text-red-600 dark:text-red-300">{error}</div>}
-                                {info && <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900 p-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">{info}</div>}
-                                <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-black shadow-lg disabled:opacity-60">{busy ? 'Memproses...' : (signupMode ? 'Buat Akun' : 'Masuk')}</button>
-                            </form>
-                            <div className="mt-4 grid grid-cols-1 gap-3">
-                                <button type="button" onClick={() => { setSignupMode(!signupMode); setError(''); setInfo(''); }} className="w-full text-sm font-black text-indigo-600 dark:text-indigo-400 hover:underline">{signupMode ? 'Sudah punya akun? Masuk' : 'Belum punya akun? Buat akun'}</button>
-                                {!signupMode && <a
-                                href={buildAdminAccessTelegramUrl(email.trim().toLowerCase())}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-black transition-colors"
-                            >
-                                <SendIcon size={18}/> Ajukan Akses Admin via Telegram
-                            </a>
-                            <button type="button" onClick={resetPassword} className="w-full text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button>}
-                                <button type="button" onClick={requestAccess} className="w-full py-3.5 rounded-2xl border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-black bg-violet-50/80 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition">REQUEST AKSES ADMIN VIA TELEGRAM</button>
-                            </div>
+                    <div className="min-h-screen flex flex-col bg-[#07101f] dark:bg-[#07101f] relative overflow-hidden">
+                        <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-violet-600/25 blur-3xl"></div>
+                            <div className="absolute top-1/3 -right-32 w-[30rem] h-[30rem] rounded-full bg-cyan-500/15 blur-3xl"></div>
+                            <div className="absolute bottom-0 left-1/3 w-[24rem] h-[24rem] rounded-full bg-fuchsia-500/10 blur-3xl"></div>
                         </div>
+                        <button onClick={()=>setIsDarkMode(!isDarkMode)} className="absolute z-30 top-4 right-4 md:top-6 md:right-6 p-3 rounded-2xl bg-white/10 border border-white/10 text-white backdrop-blur-xl hover:bg-white/15">
+                            {isDarkMode ? <Moon size={20}/> : <Sun size={20}/>} 
+                        </button>
+
+                        <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-16 md:px-8">
+                            <div className="w-full max-w-6xl grid lg:grid-cols-2 rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,.45)] bg-slate-950/70 backdrop-blur-2xl">
+                                <section className="relative p-7 md:p-10 lg:p-12 bg-gradient-to-br from-violet-700 via-indigo-700 to-slate-950 text-white min-h-[250px] lg:min-h-[650px] flex flex-col justify-between overflow-hidden">
+                                    <div className="absolute -right-16 -top-16 w-64 h-64 border-[36px] border-white/5 rounded-full"></div>
+                                    <div className="absolute right-10 bottom-16 w-36 h-36 bg-cyan-300/10 rounded-[2rem] rotate-12"></div>
+                                    <div>
+                                        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 text-xs font-black tracking-widest">FL • WORKSPACE</div>
+                                        <h1 className="mt-6 text-4xl md:text-5xl xl:text-6xl font-black leading-[.95] tracking-tight">WELCOME TO<br/><span className="text-cyan-300">FOLLUP</span></h1>
+                                        <p className="mt-5 max-w-md text-sm md:text-base text-indigo-100 leading-relaxed">Workspace kolaborasi untuk follow up tugas, sticky notes, reminder, dan koordinasi antar divisi.</p>
+                                    </div>
+                                    <div className="hidden lg:grid grid-cols-2 gap-3 mt-10">
+                                        {[['Akun per pengguna','Data dan akses lebih terkontrol'],['Divisi terisolasi','Setiap grup hanya melihat area kerjanya'],['Reminder kerja','Pengingat masuk dan pulang'],['Feedback developer','Laporkan kendala langsung dari aplikasi']].map(([t,d])=><div key={t} className="p-4 rounded-2xl bg-white/10 border border-white/10"><div className="font-black text-sm">{t}</div><div className="text-xs text-indigo-100 mt-1">{d}</div></div>)}
+                                    </div>
+                                </section>
+
+                                <section className="p-6 md:p-10 lg:p-12 flex flex-col justify-center bg-[#0b1425]/95">
+                                    <div className="mb-7">
+                                        <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-black">FL</div><div><h2 className="text-2xl md:text-3xl font-black text-white">{mode==='login' ? 'Masuk ke Workspace' : 'Buat Akun'}</h2><p className="text-sm text-slate-400 mt-1">masukkan akun dengan benar</p></div></div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 mb-6">
+                                        <button type="button" onClick={()=>{setMode('login');setError('');setInfo('')}} className={`py-2.5 rounded-xl text-sm font-black ${mode==='login'?'bg-violet-600 text-white':'text-slate-400'}`}>LOGIN</button>
+                                        <button type="button" onClick={()=>{setMode('register');setError('');setInfo('')}} className={`py-2.5 rounded-xl text-sm font-black ${mode==='register'?'bg-violet-600 text-white':'text-slate-400'}`}>BUAT AKUN</button>
+                                    </div>
+
+                                    <form onSubmit={mode==='login'?login:register} className="space-y-4">
+                                        {mode==='register' && <>
+                                            <input required value={name} onChange={e=>setName(e.target.value)} placeholder="nama lengkap" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
+                                            <input value={divisionRequest} onChange={e=>setDivisionRequest(e.target.value)} placeholder="divisi yang dituju (contoh: Design)" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
+                                        </>}
+                                        <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="masukkan email" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
+                                        <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
+                                        {mode==='register' && <input type="password" required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="ulangi password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>}
+                                        {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-sm font-bold text-red-300">{error}</div>}
+                                        {info && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm font-bold text-emerald-300">{info}</div>}
+                                        <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-black shadow-xl disabled:opacity-50">{busy ? 'MEMPROSES...' : (mode==='login'?'MASUK':'BUAT AKUN')}</button>
+                                    </form>
+
+                                    {mode==='login' ? <button onClick={resetPassword} className="mt-4 text-sm font-bold text-violet-400 hover:underline">Lupa password?</button> : <div className="mt-4 text-xs text-slate-500 leading-relaxed">Akun Member akan menunggu ACC dari Super Admin sebelum dapat membuka room.</div>}
+
+                                    <div className="mt-6 pt-5 border-t border-slate-800">
+                                        <div className="text-xs text-slate-400 mb-3">Butuh akses sebagai Admin Divisi? Akses admin tidak diberikan otomatis.</div>
+                                        <button type="button" onClick={()=>openAdminTelegramRequest({email,name,division:divisionRequest})} className="w-full py-3 rounded-2xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-black hover:bg-cyan-400/15 flex items-center justify-center gap-2"><ShieldIcon size={17}/> REQUEST ADMIN VIA TELEGRAM</button>
+                                    </div>
+                                </section>
+                            </div>
+                        </main>
+                        <CraftedFooter/>
                     </div>
                 </div>
             );
-        };
-
-        const FeedbackWidget = ({ user, accountProfile, isDarkMode }) => {
-            const [open, setOpen] = useState(false), [message, setMessage] = useState(''), [imageData, setImageData] = useState(''), [busy, setBusy] = useState(false), [status, setStatus] = useState('');
-            const submit = async (e) => { e.preventDefault(); if (!message.trim()) return; setBusy(true); setStatus(''); try {
-                await addDoc(collection(db,'feedback'), { uid:user.uid, account: accountProfile?.email || user.email || '', name: accountProfile?.name || '', message:message.trim(), imageData:imageData || '', status:'new', createdAt:serverTimestamp() });
-                setMessage(''); setImageData(''); setStatus('Feedback terkirim. Terima kasih.');
-            } catch(err){ setStatus('Gagal mengirim: '+(err?.message||err)); } finally { setBusy(false); } };
-            const pick = async(e)=>{ const f=e.target.files?.[0]; if(!f)return; if(f.size>8*1024*1024){setStatus('Foto maksimal 8 MB.');return;} setImageData(await resizeImage(f,1280,0.72)); e.target.value=''; };
-            return <><button onClick={()=>setOpen(true)} className="fixed right-4 bottom-5 z-40 px-4 py-3 rounded-2xl bg-indigo-600 text-white font-black shadow-2xl text-sm">Feedback</button>
-            {open && <ModalPortal><div className={isDarkMode?'dark':''}><div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"><form onSubmit={submit} className="w-full max-w-lg rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5 sm:p-7 shadow-2xl">
-                <div className="flex justify-between gap-4"><div><h2 className="text-xl font-black text-gray-900 dark:text-white">Feedback untuk Developer</h2><p className="text-xs text-gray-500 mt-1">Akun: {accountProfile?.email || user.email}</p></div><button type="button" onClick={()=>setOpen(false)} className="p-2 text-gray-500"><X size={20}/></button></div>
-                <textarea required value={message} onChange={e=>setMessage(e.target.value)} rows="5" placeholder="Tulis pesan, bug, atau saran..." className="mt-5 w-full p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white outline-none border-2 border-transparent focus:border-indigo-500"></textarea>
-                <label className="mt-3 block p-3 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-center text-sm font-bold text-gray-600 dark:text-gray-300 cursor-pointer">{imageData?'Ganti foto':'Lampirkan foto (opsional)'}<input type="file" accept="image/*" onChange={pick} className="hidden"/></label>
-                {imageData && <img src={imageData} className="mt-3 max-h-48 w-full object-contain rounded-2xl bg-gray-100 dark:bg-gray-800"/>}{status && <p className="mt-3 text-sm font-bold text-indigo-600 dark:text-indigo-300">{status}</p>}
-                <button disabled={busy} className="mt-4 w-full py-3 rounded-2xl bg-indigo-600 text-white font-black disabled:opacity-50">{busy?'Mengirim...':'Kirim Feedback'}</button>
-            </form></div></div></ModalPortal>}</>;
         };
 
         const UserManagerModal = ({ folders, onClose, isDarkMode, accountProfile }) => {
@@ -2010,6 +2074,7 @@
             const [info, setInfo] = useState('');
             const [newDivisionName, setNewDivisionName] = useState('');
             const [showDeleted, setShowDeleted] = useState(false);
+            const [adminRequestVerified, setAdminRequestVerified] = useState(false);
 
             // Super Admin melihat semua divisi. Admin divisi hanya mengetahui grupnya sendiri.
             useEffect(() => {
@@ -2055,6 +2120,7 @@
                 setForm({ ...EMPTY, divisionId: isSuperAdmin ? '' : myDivisionId });
                 setError('');
                 setInfo('');
+                setAdminRequestVerified(false);
             };
 
             const startEdit = (u) => {
@@ -2068,6 +2134,7 @@
                     divisionId: u.divisionId || (isSuperAdmin ? '' : myDivisionId), active: u.active !== false
                 });
                 setError(''); setInfo('');
+                setAdminRequestVerified(u.role === 'division_admin');
             };
 
             const createDivision = async (e) => {
@@ -2104,6 +2171,7 @@
                     const division = divisionById(divisionId);
 
                     if (!['super_admin','legacy_owner'].includes(roleToSave) && !divisionId) throw new Error('Pilih divisi/grup terlebih dahulu.');
+                    if (roleToSave === 'division_admin' && isSuperAdmin && !adminRequestVerified) throw new Error('Akses Admin Divisi harus sudah diverifikasi melalui request Telegram @xdaniel04.');
                     if (!isSuperAdmin && !myDivisionId) throw new Error('Akun admin ini belum ditempatkan ke divisi.');
 
                     if (editingUid) {
@@ -2269,6 +2337,10 @@
                                                             <option value="">-- Pilih Divisi / Grup --</option>
                                                             {divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
                                                         </select>
+                                                        {form.role === 'division_admin' && <div className="rounded-xl bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-900 p-3 space-y-2">
+                                                            <div className="text-xs font-bold text-cyan-700 dark:text-cyan-300">Admin hanya boleh diberikan setelah pengguna request melalui Telegram @xdaniel04.</div>
+                                                            <label className="flex items-center gap-2 text-xs font-black text-gray-700 dark:text-gray-200"><input type="checkbox" checked={adminRequestVerified} onChange={e=>setAdminRequestVerified(e.target.checked)}/> Request Telegram sudah diverifikasi</label>
+                                                        </div>}
                                                     </>
                                                 )
                                             ) : (
@@ -2333,25 +2405,103 @@
             );
         };
 
+        const SuperAdminDashboard = ({ user, accountProfile, isDarkMode, setIsDarkMode, onLogout, onSelectFolder }) => {
+            const [tab, setTab] = useState('monitor');
+            const [users, setUsers] = useState([]);
+            const [folders, setFolders] = useState([]);
+            const [divisions, setDivisions] = useState([]);
+            const [requests, setRequests] = useState([]);
+            const [feedbacks, setFeedbacks] = useState([]);
+            const [monitorUid, setMonitorUid] = useState('');
+            const [managerOpen, setManagerOpen] = useState(false);
+            const [approvalDivision, setApprovalDivision] = useState({});
+            const [search, setSearch] = useState('');
+
+            useEffect(()=>onSnapshot(collection(db,'users'), snap=>{ const rows=[]; snap.forEach(d=>rows.push({uid:d.id,...d.data()})); rows.sort((a,b)=>(a.name||a.email||'').localeCompare(b.name||b.email||'')); setUsers(rows); }),[]);
+            useEffect(()=>onSnapshot(collection(db,'folders'), snap=>{ const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); setFolders(rows); }),[]);
+            useEffect(()=>onSnapshot(collection(db,'divisions'), snap=>{ const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setDivisions(rows); }),[]);
+            useEffect(()=>onSnapshot(collection(db,'access_requests'), snap=>{ const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); rows.sort((a,b)=>String(b.createdAt?.seconds||0).localeCompare(String(a.createdAt?.seconds||0))); setRequests(rows); }),[]);
+            useEffect(()=>onSnapshot(collection(db,'feedback'), snap=>{ const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setFeedbacks(rows); }),[]);
+
+            const activeUsers = users.filter(u=>!u.deleted);
+            const pending = requests.filter(r=>r.status==='pending');
+            const selectedUser = activeUsers.find(u=>u.uid===monitorUid) || null;
+            const monitoredFolders = selectedUser ? (
+                ((selectedUser.email||'').toLowerCase()===LEGACY_OWNER_EMAIL || selectedUser.role==='super_admin')
+                    ? folders
+                    : folders.filter(f=>f.divisionId && f.divisionId===selectedUser.divisionId)
+            ) : [];
+            const filteredUsers = activeUsers.filter(u=>!search.trim() || `${u.name||''} ${u.email||''} ${u.divisionName||''}`.toLowerCase().includes(search.toLowerCase()));
+
+            const approve = async (r) => {
+                const divisionId=approvalDivision[r.uid]||'';
+                if(!divisionId){ alert('Pilih divisi terlebih dahulu.'); return; }
+                const div=divisions.find(d=>d.id===divisionId);
+                await setDoc(doc(db,'users',r.uid), { role:'member', divisionId, divisionName:div?.name||'', active:true, deleted:false, pendingApproval:false, accessDenied:false, approvedAt:serverTimestamp(), approvedBy:user.uid }, {merge:true});
+                await setDoc(doc(db,'access_requests',r.id), {status:'approved', divisionId, divisionName:div?.name||'', reviewedAt:serverTimestamp(), reviewedBy:user.uid},{merge:true});
+            };
+            const deny = async (r) => {
+                if(!confirm(`Tolak akses ${r.name||r.email}?`))return;
+                await setDoc(doc(db,'users',r.uid), {active:false,pendingApproval:false,accessDenied:true},{merge:true});
+                await setDoc(doc(db,'access_requests',r.id), {status:'denied',reviewedAt:serverTimestamp(),reviewedBy:user.uid},{merge:true});
+            };
+            const deleteAccess = async (u) => {
+                if([SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())) return;
+                if(!confirm(`Hapus akses akun ${u.name||u.email}?`)) return;
+                await updateDoc(doc(db,'users',u.uid), {active:false,deleted:true,deletedAt:serverTimestamp(),deletedBy:user.uid});
+            };
+            const resolveFeedback = async (f) => updateDoc(doc(db,'feedback',f.id), {status:'resolved',resolvedAt:serverTimestamp(),resolvedBy:user.uid});
+            const deleteFeedback = async (f) => { if(confirm('Hapus feedback ini?')) await deleteDoc(doc(db,'feedback',f.id)); };
+
+            const tabButton=(id,label,count)=> <button onClick={()=>setTab(id)} className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-black whitespace-nowrap ${tab===id?'bg-violet-600 text-white':'bg-white/70 dark:bg-gray-800/70 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'}`}>{label}{count?` (${count})`:''}</button>;
+
+            return <div className={isDarkMode?'dark':''}>
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white">
+                    <header className="sticky top-0 z-40 bg-white/85 dark:bg-gray-950/85 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
+                        <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div><div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-violet-600 text-white grid place-items-center font-black">SA</div><div><h1 className="font-black text-xl">Super Admin Control Center</h1><p className="text-xs text-gray-500">{SUPER_ADMIN_EMAIL}</p></div></div></div>
+                            <div className="flex flex-wrap gap-2">
+                                <button onClick={()=>setManagerOpen(true)} className="px-3 py-2 rounded-xl bg-violet-600 text-white text-xs font-black flex items-center gap-2"><UsersIcon size={16}/> Buat / Kelola Akun</button>
+                                <button onClick={()=>setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800">{isDarkMode?<Moon size={18}/>:<Sun size={18}/>}</button>
+                                <button onClick={onLogout} className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600"><LogOutIcon size={18}/></button>
+                            </div>
+                        </div>
+                    </header>
+                    <main className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                            {[['Akun Aktif',activeUsers.filter(u=>u.active!==false).length],['Request Menunggu',pending.length],['Room',folders.length],['Feedback Baru',feedbacks.filter(f=>f.status!=='resolved').length]].map(([l,v])=><div key={l} className="rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 md:p-5 shadow-sm"><div className="text-2xl font-black text-violet-600">{v}</div><div className="text-xs text-gray-500 mt-1">{l}</div></div>)}
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-2 mb-5">{tabButton('monitor','Pantau Akun')}{tabButton('accounts','Semua Akun')}{tabButton('requests','ACC Akses',pending.length)}{tabButton('feedback','Feedback',feedbacks.filter(f=>f.status!=='resolved').length)}</div>
+
+                        {tab==='monitor' && <div className="grid lg:grid-cols-12 gap-5">
+                            <section className="lg:col-span-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-5">
+                                <h2 className="font-black text-lg">Pilih akun yang dipantau</h2><p className="text-xs text-gray-500 mt-1 mb-4">Tampilan room mengikuti akses akun yang dipilih.</p>
+                                <select value={monitorUid} onChange={e=>setMonitorUid(e.target.value)} className="w-full px-4 py-3 rounded-2xl bg-gray-100 dark:bg-gray-800 outline-none"><option value="">-- pilih akun --</option>{activeUsers.map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} • {u.divisionName||u.role}</option>)}</select>
+                                {selectedUser && <div className="mt-4 p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900"><div className="font-black">{selectedUser.name||selectedUser.email}</div><div className="text-xs text-gray-500">{selectedUser.email}</div><div className="mt-2 text-xs font-bold text-violet-600">{selectedUser.role} • {selectedUser.divisionName||'Tanpa divisi'}</div></div>}
+                            </section>
+                            <section className="lg:col-span-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-5">
+                                <div className="flex items-center justify-between mb-4"><div><h2 className="font-black text-lg">Room yang terlihat</h2><p className="text-xs text-gray-500">Klik room untuk memantau data aktual.</p></div><SearchIcon size={20} className="text-gray-400"/></div>
+                                {!selectedUser?<div className="py-16 text-center text-gray-400">Pilih akun terlebih dahulu.</div>:<div className="grid sm:grid-cols-2 gap-3">{monitoredFolders.map(f=><button key={f.id} onClick={()=>onSelectFolder(f.id,f.name)} className="text-left p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-violet-400"><div className="font-black">{f.name}</div><div className="text-xs text-gray-500 mt-1">{f.divisionName||'Legacy / belum dikelompokkan'}</div></button>)}{monitoredFolders.length===0&&<div className="col-span-full py-10 text-center text-gray-400">Akun ini belum punya room.</div>}</div>}
+                            </section>
+                        </div>}
+
+                        {tab==='accounts' && <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-5">
+                            <div className="flex flex-col md:flex-row gap-3 justify-between md:items-center mb-5"><div><h2 className="font-black text-lg">Semua Akun</h2><p className="text-xs text-gray-500">Super Admin dapat melihat seluruh akun dan mencabut akses.</p></div><div className="flex gap-2"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari akun..." className="px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 outline-none text-sm"/><button onClick={()=>setManagerOpen(true)} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Buat Akun</button></div></div>
+                            <div className="grid md:grid-cols-2 gap-3">{filteredUsers.map(u=><div key={u.uid} className="p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{u.name||u.email}</div><div className="text-xs text-gray-500 truncate">{u.email}</div><div className="text-[11px] text-violet-600 font-bold mt-1">{u.role} • {u.divisionName||'-'} • {u.active===false?'Nonaktif':'Aktif'}</div></div>{![SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())&&<button onClick={()=>deleteAccess(u)} className="self-center px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button>}</div>)}</div>
+                        </section>}
+
+                        {tab==='requests' && <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-5"><h2 className="font-black text-lg">Request Akses Member</h2><p className="text-xs text-gray-500 mt-1 mb-5">Request Admin tetap wajib melalui Telegram @xdaniel04.</p><div className="space-y-3">{pending.map(r=><div key={r.id} className="p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"><div className="flex flex-col md:flex-row md:items-center justify-between gap-4"><div><div className="font-black">{r.name||r.email}</div><div className="text-xs text-gray-500">{r.email}</div><div className="text-xs text-cyan-600 font-bold mt-1">Request divisi: {r.requestedDivisionName||'-'}</div></div><div className="flex flex-col sm:flex-row gap-2"><select value={approvalDivision[r.uid]||''} onChange={e=>setApprovalDivision(p=>({...p,[r.uid]:e.target.value}))} className="px-3 py-2 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button onClick={()=>approve(r)} className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black">ACC</button><button onClick={()=>deny(r)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-950/30 text-red-600 text-xs font-black">Tolak</button></div></div></div>)}{pending.length===0&&<div className="py-12 text-center text-gray-400">Tidak ada request menunggu.</div>}</div></section>}
+
+                        {tab==='feedback' && <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl p-5"><h2 className="font-black text-lg">Feedback Developer</h2><p className="text-xs text-gray-500 mt-1 mb-5">Pesan dikirim dari akun pengguna, termasuk screenshot bila ada.</p><div className="space-y-4">{feedbacks.map(f=><article key={f.id} className={`p-4 rounded-2xl border ${f.status==='resolved'?'border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20':'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800'}`}><div className="flex flex-col md:flex-row justify-between gap-3"><div><div className="font-black">{f.accountName||f.accountEmail}</div><div className="text-xs text-gray-500">{f.accountEmail} • {f.divisionName||'-'}</div></div><div className="flex gap-2">{f.status!=='resolved'&&<button onClick={()=>resolveFeedback(f)} className="px-3 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 text-xs font-black">Selesai</button>}<button onClick={()=>deleteFeedback(f)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button></div></div><p className="mt-3 text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-200">{f.message}</p>{f.imageData&&<a href={f.imageData} target="_blank" rel="noopener noreferrer"><img src={f.imageData} className="mt-3 max-h-64 rounded-2xl object-contain border border-gray-200 dark:border-gray-700"/></a>}</article>)}{feedbacks.length===0&&<div className="py-12 text-center text-gray-400">Belum ada feedback.</div>}</div></section>}
+                    </main>
+                    {managerOpen&&<UserManagerModal folders={folders} onClose={()=>setManagerOpen(false)} isDarkMode={isDarkMode} accountProfile={accountProfile}/>} 
+                </div>
+            </div>;
+        };
+
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
-        const SuperAdminDashboard = ({ user, accountProfile, isDarkMode, setIsDarkMode, onLogout, onOpenFolder }) => {
-            const [users,setUsers]=useState([]), [folders,setFolders]=useState([]), [feedback,setFeedback]=useState([]), [selectedUid,setSelectedUid]=useState(''), [manager,setManager]=useState(false);
-            useEffect(()=>onSnapshot(collection(db,'users'),snap=>{const a=[];snap.forEach(d=>a.push({uid:d.id,...d.data()}));a.sort((x,y)=>(x.name||x.email||'').localeCompare(y.name||y.email||''));setUsers(a)}),[]);
-            useEffect(()=>onSnapshot(collection(db,'folders'),snap=>{const a=[];snap.forEach(d=>a.push({id:d.id,...d.data()}));setFolders(a)}),[]);
-            useEffect(()=>onSnapshot(collection(db,'feedback'),snap=>{const a=[];snap.forEach(d=>a.push({id:d.id,...d.data()}));a.sort((x,y)=>(y.createdAt?.seconds||0)-(x.createdAt?.seconds||0));setFeedback(a)}),[]);
-            const selected=users.find(u=>u.uid===selectedUid); const scoped=selected ? folders.filter(f=>selected.email===LEGACY_OWNER_EMAIL || f.divisionId===selected.divisionId) : [];
-            const pending=users.filter(u=>u.accessStatus==='pending'||u.active===false).length;
-            const approve=async(u)=>{ if(!u)return; await updateDoc(doc(db,'users',u.uid),{active:true,accessStatus:'approved',updatedAt:serverTimestamp()}); };
-            return <div className={isDarkMode?'dark':''}><div className="min-h-screen bg-slate-100 dark:bg-gray-950 p-4 sm:p-6 lg:p-10 text-gray-900 dark:text-white">
-                <div className="max-w-7xl mx-auto"><header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7"><div><p className="text-xs font-black tracking-[.25em] text-indigo-500">CONTROL CENTER</p><h1 className="text-3xl sm:text-4xl font-black">Super Admin Dashboard</h1><p className="text-sm text-gray-500 mt-1">Pantau akun, ACC akses, kelola room, dan feedback developer.</p></div><div className="flex flex-wrap gap-2"><button onClick={()=>setIsDarkMode(!isDarkMode)} className="px-4 py-3 rounded-xl bg-white dark:bg-gray-900 border dark:border-gray-700">Tema</button><button onClick={()=>setManager(true)} className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-black">Buat / Kelola Akun</button><button onClick={onLogout} className="px-4 py-3 rounded-xl bg-red-100 text-red-700 font-black">Keluar</button></div></header>
-                <div className="grid sm:grid-cols-3 gap-4 mb-6"><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{users.length}</div><div className="text-sm text-gray-500">Total akun</div></div><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{pending}</div><div className="text-sm text-gray-500">Menunggu ACC / nonaktif</div></div><div className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><div className="text-3xl font-black">{feedback.length}</div><div className="text-sm text-gray-500">Feedback masuk</div></div></div>
-                <div className="grid lg:grid-cols-2 gap-6"><section className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><h2 className="font-black text-xl">Pantau Akun</h2><select value={selectedUid} onChange={e=>setSelectedUid(e.target.value)} className="mt-4 w-full p-3 rounded-xl bg-gray-100 dark:bg-gray-800"><option value="">Pilih akun yang ingin dipantau</option>{users.map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} — {u.email}</option>)}</select>{selected&&<div className="mt-4"><div className="p-4 rounded-2xl bg-slate-50 dark:bg-gray-800"><b>{selected.name||selected.email}</b><div className="text-sm text-gray-500">{selected.email} • {selected.role||'member'} • {selected.divisionName||'Belum ada divisi'}</div>{selected.active===false&&<button onClick={()=>approve(selected)} className="mt-3 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black">ACC AKSES</button>}</div><div className="mt-4 grid sm:grid-cols-2 gap-3">{scoped.map(f=><button key={f.id} onClick={()=>onOpenFolder(f.id,f.name)} className="text-left p-4 rounded-2xl border border-gray-200 dark:border-gray-700 hover:border-indigo-500"><b>{f.name}</b><div className="text-xs text-gray-500">{f.divisionName||'Workspace'}</div></button>)}{!scoped.length&&<p className="text-sm text-gray-400">Tidak ada room yang terhubung.</p>}</div></div>}</section>
-                <section className="p-5 rounded-3xl bg-white dark:bg-gray-900 border dark:border-gray-800"><h2 className="font-black text-xl">Feedback Developer</h2><div className="mt-4 space-y-3 max-h-[520px] overflow-auto">{feedback.map(f=><div key={f.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-gray-800"><div className="flex justify-between gap-3"><div className="min-w-0"><b className="text-sm">{f.account||f.name||'Akun'}</b><p className="text-sm mt-1 whitespace-pre-wrap">{f.message}</p></div><button onClick={()=>deleteDoc(doc(db,'feedback',f.id))} className="text-red-500 shrink-0"><Trash2 size={18}/></button></div>{f.imageData&&<img src={f.imageData} className="mt-3 max-h-48 rounded-xl object-contain"/>}</div>)}{!feedback.length&&<p className="text-sm text-gray-400">Belum ada feedback.</p>}</div></section></div>
-                </div>{manager&&<UserManagerModal folders={folders} onClose={()=>setManager(false)} isDarkMode={isDarkMode} accountProfile={accountProfile}/>}</div></div>;
-        };
-
         const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user, accountProfile, onLogout }) => {
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
@@ -2378,12 +2528,12 @@
             const accountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
             const isSuperAdmin = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
             const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
+            const isCiptaDigital = accountEmail === LEGACY_OWNER_EMAIL;
             const isDivisionAdmin = accountProfile?.role === 'division_admin';
             const isAdmin = isSuperAdmin || isLegacyOwner; // visual/background pribadi tetap bisa dipakai legacy owner
             const canManageUsers = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah member
             const canManageWorkspaces = isSuperAdmin || isDivisionAdmin; // legacy owner tidak boleh tambah/edit/hapus room
-            const canSeeLegacyShared = isLegacyOwner;
-            const canUseCiptaTools = accountEmail === LEGACY_OWNER_EMAIL;
+            const canSeeLegacyShared = isCiptaDigital
             const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
             const [folderPin, setFolderPin] = useState('');
@@ -2570,18 +2720,18 @@
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
                     <div 
-                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-6 md:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
+                        className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans p-4 sm:p-6 md:p-10 lg:p-12 transition-colors duration-500 relative flex flex-col bg-cover-fixed"
                         style={homeBackground ? { backgroundImage: `url(${homeBackground})` } : {}}
                     >
                         <div className="absolute inset-0 bg-white/40 dark:bg-gray-900/60 backdrop-blur-sm z-0 pointer-events-none"></div>
 
-                        <div className="flex justify-between items-center relative z-10 w-full max-w-[1500px] mx-auto">
-                            <h1 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 relative z-10 w-full max-w-[1500px] mx-auto">
+                            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
                                 <span className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-1 rounded-md text-2xl">FL</span> Workspace
                             </h1>
-                            <div className="flex gap-3">
+                            <div className="w-full lg:w-auto flex flex-wrap gap-2 sm:gap-3 items-center justify-start lg:justify-end">
                                 
-                                {canUseCiptaTools && <>
+                                {isCiptaDigital && <>
                                 {/* Tombol Link Hitung Nota */}
                                 <a 
                                     href="https://hitung-nota.vercel.app/" 
@@ -2637,6 +2787,7 @@
                                     <Calendar size={20} className="text-cyan-500 dark:text-cyan-400" />
                                     <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 border border-white dark:border-gray-800"></span>
                                 </a>
+                                </>}
 
                                 {/* Launcher pengingat absensi. Engine alarm ada di level App agar tidak mati saat masuk workspace. */}
                                 <button
@@ -2646,8 +2797,6 @@
                                 >
                                     <BellIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                 </button>
-
-                                </>}
 
                                 {canManageUsers && (
                                     <button onClick={() => setIsUserManagerOpen(true)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-violet-300 dark:border-violet-700 hover:scale-110 transition-transform" title="Kelola Pengguna">
@@ -2674,6 +2823,8 @@
                                     <UserIcon size={18} className="text-indigo-500 shrink-0" />
                                     <div className="min-w-0 leading-tight"><div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate">{accountProfile?.name || user?.email}</div><div className="text-[10px] text-gray-400 truncate">{isSuperAdmin ? 'Super Admin' : (isLegacyOwner ? 'Legacy Cipta Digital' : (accountProfile?.divisionName || (isDivisionAdmin ? 'Admin Divisi' : 'Member')))}</div></div>
                                 </div>
+                                {!isSuperAdmin && !isLegacyOwner && !isDivisionAdmin && <button onClick={()=>openAdminTelegramRequest({email:accountEmail,name:accountProfile?.name,division:accountProfile?.divisionName})} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-cyan-300 dark:border-cyan-800 hover:scale-110 transition-transform" title="Request akses Admin via Telegram"><ShieldIcon size={20} className="text-cyan-600 dark:text-cyan-400"/></button>}
+                                <button onClick={()=>window.dispatchEvent(new CustomEvent('open-feedback'))} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform" title="Kirim Feedback"><MessageIcon size={20} className="text-fuchsia-500"/></button>
                                 <button onClick={onLogout} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform" title="Keluar akun">
                                     <LogOutIcon size={20} className="text-red-500" />
                                 </button>
@@ -2686,7 +2837,7 @@
                         </div>
 
                         {/* KONTAINER UTAMA: GRID FOLDER (KIRI) & BOARD WEEKEND (KANAN) */}
-                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-4 pt-24 pb-32 flex flex-col xl:flex-row gap-8 items-start">
+                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 pt-10 md:pt-16 pb-24 md:pb-32 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
                             
                             {/* BAGIAN KIRI: GRID FOLDER */}
                             <div className="flex-1 w-full">
@@ -2911,7 +3062,7 @@
                                 ownsLegacyData: false,
                                 allowSharedLegacy: true,
                                 systemAccount: true,
-                                bootstrapVersion: 19,
+                                bootstrapVersion: 22,
                                 updatedAt: serverTimestamp()
                             }, { merge: true });
                         } else if (email === LEGACY_OWNER_EMAIL) {
@@ -2928,7 +3079,7 @@
                                 canManageUsers: false,
                                 canCreateWorkspaces: false,
                                 systemAccount: true,
-                                bootstrapVersion: 19,
+                                bootstrapVersion: 22,
                                 updatedAt: serverTimestamp()
                             }, { merge: true });
                         }
@@ -2998,57 +3149,53 @@
                 const missing = profileError === 'PROFILE_MISSING';
                 return (
                     <div className={isDarkMode ? 'dark' : ''}>
-                        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950 p-6">
+                        <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-950">
+                            <div className="flex-1 flex items-center justify-center p-6">
                             <div className="max-w-lg w-full bg-white dark:bg-gray-900 rounded-[2rem] shadow-xl border border-gray-200 dark:border-gray-700 p-7">
                                 <h1 className="text-2xl font-black text-gray-900 dark:text-white">{missing ? 'Akun belum diberi akses' : 'Profil akun gagal dimuat'}</h1>
                                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{missing ? `Akun ${user.email} sudah ada di Authentication, tetapi belum punya profil users/${user.uid}. Minta Super Admin menambahkan akun ini.` : profileError}</p>
                                 <button onClick={logout} className="mt-5 px-4 py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black">Keluar</button>
                             </div>
+                            </div>
+                            <CraftedFooter/>
                         </div>
                     </div>
                 );
             }
 
             if (accountProfile.active === false) {
+                const waiting = accountProfile.pendingApproval === true;
                 return (
                     <div className={isDarkMode ? 'dark' : ''}>
-                        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950 p-6">
-                            <div className="max-w-lg w-full bg-white dark:bg-gray-900 rounded-[2rem] shadow-xl border border-red-200 dark:border-red-900 p-7 text-center">
-                                <h1 className="text-2xl font-black text-gray-900 dark:text-white">Akun dinonaktifkan</h1>
-                                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Hubungi Super Admin untuk mengaktifkan akses.</p>
-                                <button onClick={logout} className="mt-5 px-5 py-3 rounded-xl bg-red-500 text-white font-black">Keluar</button>
+                        <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-gray-950">
+                            <div className="flex-1 flex items-center justify-center p-4 md:p-6">
+                                <div className={`max-w-lg w-full bg-white dark:bg-gray-900 rounded-[2rem] shadow-xl border p-6 md:p-8 text-center ${waiting?'border-violet-200 dark:border-violet-900':'border-red-200 dark:border-red-900'}`}>
+                                    <div className={`w-16 h-16 mx-auto rounded-2xl grid place-items-center ${waiting?'bg-violet-100 dark:bg-violet-950/40 text-violet-600':'bg-red-100 dark:bg-red-950/40 text-red-600'}`}>{waiting?<ShieldIcon size={28}/>:<X size={28}/>}</div>
+                                    <h1 className="mt-4 text-2xl font-black text-gray-900 dark:text-white">{waiting?'Menunggu ACC Super Admin':'Akun dinonaktifkan'}</h1>
+                                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{waiting?'Akun sudah dibuat. Super Admin akan menentukan divisi dan mengaktifkan akses kamu.':'Akses akun sedang tidak aktif. Hubungi Super Admin bila diperlukan.'}</p>
+                                    {waiting && <button onClick={()=>openAdminTelegramRequest({email:accountProfile.email||user.email,name:accountProfile.name,division:accountProfile.requestedDivisionName})} className="mt-5 w-full py-3 rounded-xl border border-cyan-300 bg-cyan-50 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-300 font-black">Butuh akses Admin? Request Telegram</button>}
+                                    <button onClick={logout} className="mt-3 w-full py-3 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-black">Keluar</button>
+                                </div>
                             </div>
+                            <CraftedFooter/>
                         </div>
                     </div>
                 );
             }
 
+            const systemIsSuper = (accountProfile.email || user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL && accountProfile.role === 'super_admin';
             return (
                 <>
-                    {(user.email || '').toLowerCase() === LEGACY_OWNER_EMAIL && <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />}
-                    {accountProfile?.role !== 'super_admin' && <FeedbackWidget user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />}
-
+                    <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
                     {currentFolder ? (
-                        <BoardScreen
-                            folderId={currentFolder.id}
-                            folderName={currentFolder.name}
-                            onBack={() => setCurrentFolder(null)}
-                            isDarkMode={isDarkMode}
-                            setIsDarkMode={setIsDarkMode}
-                            accountProfile={accountProfile}
-                        />
-                    ) : accountProfile?.role === 'super_admin' && (user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL ? (
-                        <SuperAdminDashboard user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onLogout={logout} onOpenFolder={(id,name)=>setCurrentFolder({id,name})} />
+                        <BoardScreen folderId={currentFolder.id} folderName={currentFolder.name} onBack={()=>setCurrentFolder(null)} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} accountProfile={accountProfile}/>
+                    ) : systemIsSuper ? (
+                        <SuperAdminDashboard user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} onLogout={logout} onSelectFolder={(id,name)=>setCurrentFolder({id,name})}/>
                     ) : (
-                        <HomeScreen
-                            onSelectFolder={(id, name) => setCurrentFolder({ id, name })}
-                            isDarkMode={isDarkMode}
-                            setIsDarkMode={setIsDarkMode}
-                            user={user}
-                            accountProfile={accountProfile}
-                            onLogout={logout}
-                        />
+                        <HomeScreen onSelectFolder={(id,name)=>setCurrentFolder({id,name})} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} user={user} accountProfile={accountProfile} onLogout={logout}/>
                     )}
+                    <CraftedFooter/>
+                    <FeedbackLauncher user={user} accountProfile={accountProfile} isDarkMode={isDarkMode}/>
                 </>
             );
         }
