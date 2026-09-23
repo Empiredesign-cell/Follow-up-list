@@ -2091,18 +2091,18 @@
 
             return (
                 <div className={isDarkMode ? 'dark' : ''}>
-                    <div className="min-h-screen flex flex-col bg-[#07101f] dark:bg-[#07101f] relative overflow-hidden">
+                    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#07101f] text-slate-900 dark:text-white relative overflow-hidden transition-colors duration-300">
                         <div className="absolute inset-0 pointer-events-none">
-                            <div className="absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-violet-600/25 blur-3xl"></div>
-                            <div className="absolute top-1/3 -right-32 w-[30rem] h-[30rem] rounded-full bg-cyan-500/15 blur-3xl"></div>
-                            <div className="absolute bottom-0 left-1/3 w-[24rem] h-[24rem] rounded-full bg-fuchsia-500/10 blur-3xl"></div>
+                            <div className="absolute -top-32 -left-24 w-[28rem] h-[28rem] rounded-full bg-violet-300/35 dark:bg-violet-600/25 blur-3xl"></div>
+                            <div className="absolute top-1/3 -right-32 w-[30rem] h-[30rem] rounded-full bg-cyan-300/25 dark:bg-cyan-500/15 blur-3xl"></div>
+                            <div className="absolute bottom-0 left-1/3 w-[24rem] h-[24rem] rounded-full bg-fuchsia-300/20 dark:bg-fuchsia-500/10 blur-3xl"></div>
                         </div>
-                        <button onClick={()=>setIsDarkMode(!isDarkMode)} className="absolute z-30 top-4 right-4 md:top-6 md:right-6 p-3 rounded-2xl bg-white/10 border border-white/10 text-white backdrop-blur-xl hover:bg-white/15">
-                            {isDarkMode ? <Moon size={20}/> : <Sun size={20}/>} 
+                        <button onClick={()=>setIsDarkMode(!isDarkMode)} className="absolute z-30 top-4 right-4 md:top-6 md:right-6 p-3 rounded-2xl bg-white/85 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-white backdrop-blur-xl shadow-lg hover:scale-105 transition" title={isDarkMode ? 'Gunakan mode terang' : 'Gunakan mode gelap'}>
+                            {isDarkMode ? <Sun size={20} className="text-amber-400"/> : <Moon size={20} className="text-indigo-600"/>}
                         </button>
 
                         <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-16 md:px-8">
-                            <div className="w-full max-w-6xl grid lg:grid-cols-2 rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,.45)] bg-slate-950/70 backdrop-blur-2xl">
+                            <div className="w-full max-w-6xl grid lg:grid-cols-2 rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-slate-200 dark:border-white/10 shadow-[0_30px_100px_rgba(15,23,42,.18)] dark:shadow-[0_30px_100px_rgba(0,0,0,.45)] bg-white/85 dark:bg-slate-950/70 backdrop-blur-2xl transition-colors duration-300">
                                 <section className="relative p-7 md:p-10 lg:p-12 bg-gradient-to-br from-violet-700 via-indigo-700 to-slate-950 text-white min-h-[250px] lg:min-h-[650px] flex flex-col justify-between overflow-hidden">
                                     <div className="absolute -right-16 -top-16 w-64 h-64 border-[36px] border-white/5 rounded-full"></div>
                                     <div className="absolute right-10 bottom-16 w-36 h-36 bg-cyan-300/10 rounded-[2rem] rotate-12"></div>
@@ -2116,34 +2116,34 @@
                                     </div>
                                 </section>
 
-                                <section className="p-6 md:p-10 lg:p-12 flex flex-col justify-center bg-[#0b1425]/95">
+                                <section className="p-6 md:p-10 lg:p-12 flex flex-col justify-center bg-white/95 dark:bg-[#0b1425]/95 transition-colors duration-300">
                                     <div className="mb-7">
-                                        <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-black">FL</div><div><h2 className="text-2xl md:text-3xl font-black text-white">{mode==='login' ? 'Masuk ke Workspace' : 'Buat Akun'}</h2><p className="text-sm text-slate-400 mt-1">masukkan akun dengan benar</p></div></div>
+                                        <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-black">FL</div><div><h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">{mode==='login' ? 'Masuk ke Workspace' : 'Buat Akun'}</h2><p className="text-sm text-slate-500 dark:text-slate-400 mt-1">masukkan akun dengan benar</p></div></div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-900 border border-slate-800 mb-6">
+                                    <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 mb-6">
                                         <button type="button" onClick={()=>{setMode('login');setError('');setInfo('')}} className={`py-2.5 rounded-xl text-sm font-black ${mode==='login'?'bg-violet-600 text-white':'text-slate-400'}`}>LOGIN</button>
                                         <button type="button" onClick={()=>{setMode('register');setError('');setInfo('')}} className={`py-2.5 rounded-xl text-sm font-black ${mode==='register'?'bg-violet-600 text-white':'text-slate-400'}`}>BUAT AKUN</button>
                                     </div>
 
                                     <form onSubmit={mode==='login'?login:register} className="space-y-4">
                                         {mode==='register' && <>
-                                            <input required value={name} onChange={e=>setName(e.target.value)} placeholder="nama lengkap" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
-                                            <input value={divisionRequest} onChange={e=>setDivisionRequest(e.target.value)} placeholder="divisi yang dituju (contoh: Design)" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
+                                            <input required value={name} onChange={e=>setName(e.target.value)} placeholder="nama lengkap" className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-violet-500 outline-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"/>
+                                            <input value={divisionRequest} onChange={e=>setDivisionRequest(e.target.value)} placeholder="divisi yang dituju (contoh: Design)" className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-violet-500 outline-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"/>
                                         </>}
-                                        <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="masukkan email" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
-                                        <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>
-                                        {mode==='register' && <input type="password" required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="ulangi password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-900 border border-slate-700 focus:border-violet-500 outline-none text-white placeholder-slate-500"/>}
+                                        <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="masukkan email" className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-violet-500 outline-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"/>
+                                        <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-violet-500 outline-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"/>
+                                        {mode==='register' && <input type="password" required value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="ulangi password" className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-violet-500 outline-none text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 transition-colors"/>}
                                         {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-sm font-bold text-red-300">{error}</div>}
                                         {info && <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm font-bold text-emerald-300">{info}</div>}
                                         <button disabled={busy} className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-black shadow-xl disabled:opacity-50">{busy ? 'MEMPROSES...' : (mode==='login'?'MASUK':'BUAT AKUN')}</button>
                                     </form>
 
-                                    {mode==='login' ? <button onClick={resetPassword} className="mt-4 text-sm font-bold text-violet-400 hover:underline">Lupa password?</button> : <div className="mt-4 text-xs text-slate-500 leading-relaxed">Akun Member akan menunggu ACC dari Super Admin sebelum dapat membuka room.</div>}
+                                    {mode==='login' ? <button onClick={resetPassword} className="mt-4 text-sm font-bold text-violet-600 dark:text-violet-400 hover:underline">Lupa password?</button> : <div className="mt-4 text-xs text-slate-500 leading-relaxed">Akun Member akan menunggu ACC dari Super Admin sebelum dapat membuka room.</div>}
 
-                                    <div className="mt-6 pt-5 border-t border-slate-800">
-                                        <div className="text-xs text-slate-400 mb-3">Butuh akses sebagai Admin Divisi? Akses admin tidak diberikan otomatis.</div>
-                                        <button type="button" onClick={()=>openAdminTelegramRequest({email,name,division:divisionRequest})} className="w-full py-3 rounded-2xl border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-black hover:bg-cyan-400/15 flex items-center justify-center gap-2"><ShieldIcon size={17}/> REQUEST ADMIN VIA TELEGRAM</button>
+                                    <div className="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
+                                        <div className="text-xs text-slate-500 dark:text-slate-400 mb-3">Butuh akses sebagai Admin Divisi? Akses admin tidak diberikan otomatis.</div>
+                                        <button type="button" onClick={()=>openAdminTelegramRequest({email,name,division:divisionRequest})} className="w-full py-3 rounded-2xl border border-cyan-300 dark:border-cyan-400/40 bg-cyan-50 dark:bg-cyan-400/10 text-cyan-700 dark:text-cyan-300 font-black hover:bg-cyan-100 dark:hover:bg-cyan-400/15 flex items-center justify-center gap-2"><ShieldIcon size={17}/> REQUEST ADMIN VIA TELEGRAM</button>
                                     </div>
                                 </section>
                             </div>
@@ -2579,11 +2579,14 @@
             const [notice, setNotice] = useState('');
             const [monitorBackground, setMonitorBackground] = useState(null);
             const [monitorWeekendNotes, setMonitorWeekendNotes] = useState([]);
+            const [customIcons, setCustomIcons] = useState([]);
+            const [iconUploadBusy, setIconUploadBusy] = useState(false);
             // V31: editor global khusus Super Admin. Bisa mengubah room dari divisi mana pun.
             const [roomEditorOpen, setRoomEditorOpen] = useState(false);
             const [roomEditId, setRoomEditId] = useState('');
             const [roomEditName, setRoomEditName] = useState('');
             const [roomEditAvatar, setRoomEditAvatar] = useState('boy');
+            const [roomEditAvatarData, setRoomEditAvatarData] = useState('');
             const [roomEditGradient, setRoomEditGradient] = useState(Gradients[0]);
             const [roomEditCustomColor, setRoomEditCustomColor] = useState('#F59E0B');
             const [roomEditDivisionId, setRoomEditDivisionId] = useState('');
@@ -2635,6 +2638,10 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setFeedbacks(rows);
             }),[]);
+            useEffect(()=>onSnapshot(collection(db,'custom_icons'), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setCustomIcons(rows);
+            },()=>setCustomIcons([])),[]);
 
 
             // TRUE LIVE VIEW: baca background akun yang sedang dipantau.
@@ -2922,12 +2929,40 @@
                 setNotice('Backup lokal dimuat ke preview. Klik Simpan Perubahan Room untuk menerapkannya.');
             };
 
+            const uploadCustomIcon = async (event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+                if (file.type !== 'image/png') { alert('Icon harus file PNG.'); return; }
+                if (file.size > 6 * 1024 * 1024) { alert('PNG maksimal 6 MB sebelum diproses.'); return; }
+                setIconUploadBusy(true);
+                try {
+                    const dataUrl = await resizeImage(file, 220, 0.92);
+                    const cleanName = (file.name || 'Icon Custom').replace(/\.png$/i,'').replace(/[_-]+/g,' ').trim() || 'Icon Custom';
+                    await addDoc(collection(db,'custom_icons'), {
+                        name: cleanName, dataUrl, sourceName: file.name || '',
+                        createdAt: serverTimestamp(), createdBy: user.uid, active: true
+                    });
+                    setNotice(`Icon "${cleanName}" berhasil ditambahkan.`);
+                } catch (err) {
+                    console.error('Upload icon gagal:', err);
+                    alert(err?.message || 'Gagal menambahkan icon.');
+                } finally { setIconUploadBusy(false); }
+            };
+
+            const deleteCustomIcon = async (icon) => {
+                if (!window.confirm(`Hapus icon "${icon.name || 'Custom'}" dari pustaka? Room yang sudah memakainya tetap aman.`)) return;
+                try { await deleteDoc(doc(db,'custom_icons',icon.id)); }
+                catch (err) { alert(err?.message || 'Gagal menghapus icon.'); }
+            };
+
             const openSuperRoomEditor = (event, folder) => {
                 if (event?.stopPropagation) event.stopPropagation();
                 const parsed = parseGradientValue(folder.gradient || Gradients[0].classes);
                 setRoomEditId(folder.id);
                 setRoomEditName(folder.name || '');
                 setRoomEditAvatar(folder.avatarId || 'boy');
+                setRoomEditAvatarData(folder.avatarDataUrl || '');
                 setRoomEditDivisionId(folder.divisionId || '');
                 setRoomEditPin(folder.pin || '');
                 const localBackups = findLocalRoomBackups(folder);
@@ -2959,6 +2994,7 @@
                                 roomId: roomEditId,
                                 name: currentRoom.name || '',
                                 avatarId: currentRoom.avatarId || 'boy',
+                                avatarDataUrl: currentRoom.avatarDataUrl || '',
                                 gradient: currentRoom.gradient || Gradients[0].classes,
                                 pin: currentRoom.pin || '',
                                 divisionId: currentRoom.divisionId || '',
@@ -2972,6 +3008,7 @@
                     await updateDoc(doc(db,'folders',roomEditId), {
                         name: roomEditName.trim(),
                         avatarId: roomEditAvatar,
+                        avatarDataUrl: roomEditAvatar.startsWith('custom:') ? roomEditAvatarData : '',
                         gradient: gradientValue,
                         pin: roomEditPin || '',
                         divisionId: division.id,
@@ -3009,7 +3046,7 @@
                         <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{f.name}</h3>
                         <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">{f.divisionName || (f.divisionId ? 'Divisi' : 'Belum masuk grup')}</p>
                     </div>
-                    <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20"><AvatarComp/></div>
+                    <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">{f.avatarDataUrl ? <img src={f.avatarDataUrl} alt={f.name || 'Custom icon'} className="w-full h-full object-contain object-center drop-shadow-xl"/> : <AvatarComp/>}</div>
                 </div>;
             };
 
@@ -3128,9 +3165,26 @@
                             </div>}
 
                             {tab==='divisions' && <div className="space-y-5">
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
+                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                        <div><h2 className="font-black text-lg">Pustaka Icon / Karakter PNG</h2><p className="text-xs text-slate-500 mt-1">Upload PNG saja. Sistem otomatis mengecilkan gambar dan menjadikannya opsi karakter room.</p></div>
+                                        <label className={`px-4 py-3 rounded-2xl bg-cyan-600 text-white text-xs font-black cursor-pointer hover:bg-cyan-500 transition ${iconUploadBusy?'opacity-50 pointer-events-none':''}`}>
+                                            {iconUploadBusy?'Memproses PNG...':'+ Upload PNG'}
+                                            <input type="file" accept="image/png" onChange={uploadCustomIcon} className="hidden"/>
+                                        </label>
+                                    </div>
+                                    <div className="mt-4 flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+                                        {customIcons.map(icon=><div key={icon.id} className="relative shrink-0 w-24 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-2">
+                                            <div className="h-16 rounded-xl bg-white dark:bg-slate-900 p-1"><img src={icon.dataUrl} alt={icon.name||'Icon'} className="w-full h-full object-contain"/></div>
+                                            <div className="mt-1 text-[10px] font-black truncate text-center">{icon.name||'Icon Custom'}</div>
+                                            <button onClick={()=>deleteCustomIcon(icon)} className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white grid place-items-center shadow" title="Hapus dari pustaka"><X size={12}/></button>
+                                        </div>)}
+                                        {customIcons.length===0&&<div className="text-xs text-slate-400 py-7">Belum ada icon custom.</div>}
+                                    </div>
+                                </section>
                                 <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col lg:flex-row gap-3 justify-between lg:items-center"><div><h2 className="font-black text-lg">Divisi & Feature Flags</h2><p className="text-xs text-slate-500">Core workspace selalu tersedia. Fitur tambahan di bawah dapat ditampilkan dengan satu ceklis.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newDivisionName} onChange={e=>setNewDivisionName(e.target.value)} placeholder="Nama divisi baru" className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button disabled={busyAction==='new-division'} onClick={createDivisionQuick} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Divisi</button></div></div></section>
                                 <div className="grid xl:grid-cols-2 gap-4">{divisions.map(d=>{const features=normalizeDivisionFeatures(d.features||{});const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const ac=activeUsers.filter(u=>u.divisionId===d.id&&u.role==='division_admin'&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;return <section key={d.id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-4"><div><div className="flex items-center gap-2"><h3 className="font-black text-lg">{d.name}</h3><span className={`px-2 py-1 rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><p className="text-xs text-slate-500 mt-1">{uc} akun • {ac} admin • {rc} room</p></div><div className="flex flex-col sm:flex-row gap-2 items-end sm:items-center"><label className={`px-3 py-2 rounded-xl border text-[10px] font-black flex items-center gap-2 cursor-pointer ${d.ciptaDigiAccess===true?'bg-cyan-50 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300':'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`} title="Jika aktif, ciptadigi@gmail.com dapat melihat seluruh room divisi ini"><input type="checkbox" checked={d.ciptaDigiAccess===true} disabled={busyAction===`cipta-digi-scope-${d.id}`} onChange={()=>toggleCiptaDigiDivisionAccess(d)} className="accent-cyan-600"/> Cipta Digi</label><button onClick={()=>toggleDivisionActive(d)} className="px-3 py-2 h-fit rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">{d.active===false?'Aktifkan':'Nonaktifkan'}</button></div></div><div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><div className="text-xs font-black">Warna Card Default</div><div className="text-[10px] text-slate-500 mt-0.5">Room baru di divisi ini otomatis memakai warna ini.</div></div><div className="flex items-center gap-2"><label className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-600 shadow cursor-pointer" style={{background:`linear-gradient(180deg, ${getDivisionDefaultHex(d)} 0%, ${darkenHex(getDivisionDefaultHex(d),28)} 100%)`}}><input type="color" value={getDivisionDefaultHex(d)} onChange={e=>setDivisionDefaultColor(d,e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /></label><code className="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-[10px] font-black">{getDivisionDefaultHex(d)}</code><button disabled={busyAction===`apply-color-${d.id}`} onClick={()=>applyDivisionDefaultToRooms(d)} className="px-3 py-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black disabled:opacity-50">Terapkan ke Room</button></div></div></div><div className="mt-5 grid sm:grid-cols-2 gap-2">{DIVISION_FEATURE_CATALOG.map(f=><label key={f.key} className={`cursor-pointer p-3 rounded-2xl border flex items-center gap-3 transition ${features[f.key]?'border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60'}`}><input type="checkbox" checked={features[f.key]} disabled={busyAction===`features-${d.id}`} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/><span className="text-xl">{f.icon}</span><span className="min-w-0"><span className="block text-sm font-black">{f.label}</span><span className="block text-[10px] text-slate-500 leading-tight mt-0.5">{f.description}</span></span></label>)}</div><div className="mt-3 flex gap-2"><button onClick={()=>setAllDivisionFeatures(d,true)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-black">Aktifkan Semua</button><button onClick={()=>setAllDivisionFeatures(d,false)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black">Matikan Semua</button></div></section>})}</div>
-                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><button type="button" onClick={(e)=>openSuperRoomEditor(e,f)} className="shrink-0 w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 grid place-items-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition" title="Edit room"><EditIcon size={15}/></button></div>})}</div></section>
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden">{f.avatarDataUrl ? <img src={f.avatarDataUrl} alt={f.name || 'Custom icon'} className="w-full h-full object-contain"/> : <AvatarComp/>}</div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><button type="button" onClick={(e)=>openSuperRoomEditor(e,f)} className="shrink-0 w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 grid place-items-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition" title="Edit room"><EditIcon size={15}/></button></div>})}</div></section>
                             </div>}
 
                             {tab==='accounts' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row gap-3 justify-between xl:items-center mb-5"><div><h2 className="font-black text-lg">Semua Akun</h2><p className="text-xs text-slate-500">Cari, filter, edit, reset password, atau cabut akses.</p></div><div className="flex flex-col sm:flex-row gap-2"><select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="all">Semua role</option><option value="admins">Admin Divisi</option><option value="members">Member</option><option value="inactive">Nonaktif</option></select><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari akun..." className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button onClick={()=>setManagerOpen(true)} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Buat / Edit Akun</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{filteredUsers.map(u=><div key={u.uid} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{u.name||u.email}</div><div className="text-xs text-slate-500 truncate">{u.email}</div><div className="flex flex-wrap gap-1 mt-2"><span className="px-2 py-1 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{u.role}</span>{u.divisionName&&<span className="px-2 py-1 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-1 rounded-full text-[10px] font-black ${u.active===false?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>{![SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())&&<button onClick={()=>deleteAccess(u)} className="self-center px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button>}</div>)}</div></section>}
@@ -3155,7 +3209,7 @@
                                                 <h3 className="text-2xl font-black mb-1 truncate drop-shadow">{roomEditName || 'Nama Room'}</h3>
                                                 <p className="text-sm font-medium opacity-90">{divisions.find(d=>d.id===roomEditDivisionId)?.name || 'Pilih divisi'}</p>
                                             </div>
-                                            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 h-48 pointer-events-none"><RoomEditAvatarComp/></div>
+                                            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-48 h-48 pointer-events-none">{roomEditAvatarData ? <img src={roomEditAvatarData} alt="Custom icon" className="w-full h-full object-contain object-center drop-shadow-xl"/> : <RoomEditAvatarComp/>}</div>
                                         </div>
                                     </div>
 
@@ -3168,7 +3222,8 @@
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Karakter</label>
                                             <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 max-h-40 overflow-y-auto p-2 rounded-2xl border border-slate-200 dark:border-slate-700">
-                                                {Object.keys(Avatars).map(key=>{ const A=Avatars[key]; return <button key={key} type="button" onClick={()=>setRoomEditAvatar(key)} className={`h-16 rounded-2xl border-2 p-1 transition ${roomEditAvatar===key?'border-violet-500 bg-violet-50 dark:bg-violet-950/30 scale-105':'border-transparent bg-slate-50 dark:bg-slate-800 hover:border-slate-300'}`} title={key}><A/></button> })}
+                                                {Object.keys(Avatars).map(key=>{ const A=Avatars[key]; return <button key={key} type="button" onClick={()=>{setRoomEditAvatar(key);setRoomEditAvatarData('')}} className={`h-16 rounded-2xl border-2 p-1 transition ${roomEditAvatar===key?'border-violet-500 bg-violet-50 dark:bg-violet-950/30 scale-105':'border-transparent bg-slate-50 dark:bg-slate-800 hover:border-slate-300'}`} title={key}><A/></button> })}
+                                                {customIcons.map(icon=><button key={icon.id} type="button" onClick={()=>{setRoomEditAvatar('custom:'+icon.id);setRoomEditAvatarData(icon.dataUrl||'')}} className={`h-16 rounded-2xl border-2 p-1 transition ${roomEditAvatar==='custom:'+icon.id?'border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30 scale-105':'border-transparent bg-slate-50 dark:bg-slate-800 hover:border-slate-300'}`} title={icon.name||'Custom icon'}><img src={icon.dataUrl} alt={icon.name||'Custom icon'} className="w-full h-full object-contain"/></button>)}
                                             </div>
                                         </div>
 
@@ -3248,6 +3303,8 @@
             const [customColor, setCustomColor] = useState('#F59E0B');
             const [colorHexInput, setColorHexInput] = useState('#F59E0B');
             const [favoriteColors, setFavoriteColors] = useState([]);
+            const [customIcons, setCustomIcons] = useState([]);
+            const [selectedAvatarData, setSelectedAvatarData] = useState('');
             const [divisions, setDivisions] = useState([]);
             const [selectedDivisionId, setSelectedDivisionId] = useState('');
             
@@ -3279,6 +3336,16 @@
                 });
                 return () => unsubscribe();
             }, [user?.uid]);
+
+            useEffect(() => {
+                const unsubscribe = onSnapshot(collection(db, 'custom_icons'), (snap) => {
+                    const rows = [];
+                    snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+                    rows.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                    setCustomIcons(rows);
+                }, () => setCustomIcons([]));
+                return () => unsubscribe();
+            }, []);
 
             const [folderPin, setFolderPin] = useState('');
             const [showPinInput, setShowPinInput] = useState(false);
@@ -3499,7 +3566,7 @@
             const applyFavoriteColor = (hex) => updateCustomColor(hex);
 
             const openCreateModal = () => {
-                setEditingId(null); setNewFolderName(''); setSelectedAvatar('boy'); setFolderPin(''); setShowPinInput(false);
+                setEditingId(null); setNewFolderName(''); setSelectedAvatar('boy'); setSelectedAvatarData(''); setFolderPin(''); setShowPinInput(false);
                 const defaultDivisionId = isSuperAdmin ? '' : (accountProfile?.divisionId || '');
                 setSelectedDivisionId(defaultDivisionId);
                 const defaultDivision = divisions.find(d => d.id === defaultDivisionId) || currentDivision;
@@ -3507,7 +3574,7 @@
                 setIsModalOpen(true);
             };
             const openEditModal = (e, folder) => {
-                e.stopPropagation(); setEditingId(folder.id); setNewFolderName(folder.name); setSelectedAvatar(folder.avatarId || 'boy');
+                e.stopPropagation(); setEditingId(folder.id); setNewFolderName(folder.name); setSelectedAvatar(folder.avatarId || 'boy'); setSelectedAvatarData(folder.avatarDataUrl || '');
                 setEditorColorFromValue(folder.gradient || Gradients[0].classes);
                 setFolderPin(folder.pin || ''); setShowPinInput(!!folder.pin);
                 setSelectedDivisionId(folder.divisionId || (isSuperAdmin ? '' : (accountProfile?.divisionId || ''))); setIsModalOpen(true);
@@ -3518,7 +3585,7 @@
                 if (!divisionId) { alert('Pilih divisi/grup untuk workspace ini.'); return; }
                 const div = divisions.find(d => d.id === divisionId);
                 const gradientValue = selectedGradient.id === 'custom' ? 'custom:' + customColor : selectedGradient.classes;
-                const payload = { name: newFolderName, avatarId: selectedAvatar, gradient: gradientValue, pin: folderPin, divisionId, divisionName: div?.name || accountProfile?.divisionName || '' };
+                const payload = { name: newFolderName, avatarId: selectedAvatar, avatarDataUrl: selectedAvatar.startsWith('custom:') ? selectedAvatarData : '', gradient: gradientValue, pin: folderPin, divisionId, divisionName: div?.name || accountProfile?.divisionName || '' };
                 try {
                     if (editingId) await updateDoc(doc(db, 'folders', editingId), payload);
                     else await addDoc(collection(db, 'folders'), { ...payload, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || null });
@@ -3641,6 +3708,7 @@
                                 >
                                     <BellIcon size={20} className="text-violet-600 dark:text-violet-400" />
                                 </button>
+                                <button onClick={() => window.dispatchEvent(new CustomEvent('open-due-reminder-settings'))} className="relative bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:scale-110 transition-transform flex items-center justify-center" title="Pengingat Due Date"><ClockIcon size={20} className="text-emerald-500 dark:text-emerald-400"/></button>
 
                                 {canManageUsers && (
                                     <button onClick={() => setIsUserManagerOpen(true)} className="bg-white/80 dark:bg-gray-800/80 p-3 rounded-2xl shadow-sm border border-violet-300 dark:border-violet-700 hover:scale-110 transition-transform" title="Kelola Pengguna">
@@ -3717,7 +3785,7 @@
                                                     <p className="text-sm font-medium opacity-90 drop-shadow-sm z-10 relative">{folder.divisionName || (folder.divisionId ? 'Divisi' : 'Belum masuk grup')}</p>
                                                 </div>
                                                 <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 w-48 h-48 character-img transition-transform duration-300 pointer-events-none z-20">
-                                                    {AvatarComp ? <AvatarComp /> : <Avatars.boy />}
+                                                    {folder.avatarDataUrl ? <img src={folder.avatarDataUrl} alt={folder.name || 'Custom icon'} className="w-full h-full object-contain object-center drop-shadow-xl"/> : (AvatarComp ? <AvatarComp /> : <Avatars.boy />)}
                                             </div>
                                         </div>
                                     );
@@ -3781,9 +3849,14 @@
                                         {Object.keys(Avatars).map(avKey => {
                                             const AvatarC = Avatars[avKey];
                                             return (
-                                                <button key={avKey} type="button" onClick={() => setSelectedAvatar(avKey)} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === avKey ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}><div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><AvatarC /></div></button>
+                                                <button key={avKey} type="button" onClick={() => { setSelectedAvatar(avKey); setSelectedAvatarData(''); }} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === avKey ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`}><div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><AvatarC /></div></button>
                                             );
                                         })}
+                                        {customIcons.map(icon => (
+                                            <button key={icon.id} type="button" onClick={() => { setSelectedAvatar('custom:' + icon.id); setSelectedAvatarData(icon.dataUrl || ''); }} className={`p-2 rounded-2xl border-4 transition-all ${selectedAvatar === 'custom:' + icon.id ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 scale-105 shadow-md' : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-700'}`} title={icon.name || 'Custom icon'}>
+                                                <div className="w-12 h-12 md:w-14 md:h-14 mx-auto"><img src={icon.dataUrl} alt={icon.name || 'Custom icon'} className="w-full h-full object-contain"/></div>
+                                            </button>
+                                        ))}
                                     </div>
                                     <div className="w-full mb-5">
                                         <div className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 text-center mb-3">Preview Card</div>
@@ -3792,7 +3865,7 @@
                                                 <div className="text-lg font-black truncate">{newFolderName.trim() || 'Workspace'}</div>
                                                 <div className="text-[11px] font-bold opacity-90">{(divisions.find(d=>d.id===selectedDivisionId)?.name) || accountProfile?.divisionName || 'Divisi'}</div>
                                             </div>
-                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-28 h-28 pointer-events-none"><PreviewAvatar/></div>
+                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-28 h-28 pointer-events-none">{selectedAvatarData ? <img src={selectedAvatarData} alt="Custom icon preview" className="w-full h-full object-contain drop-shadow-xl"/> : <PreviewAvatar/>}</div>
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap justify-center items-center gap-2 mb-3 w-full max-h-24 overflow-y-auto p-2 hide-scrollbar">
@@ -3866,6 +3939,218 @@
                     </div>
                 </div>
             );
+        };
+
+
+        // ==========================================
+        // DUE DATE REMINDER GLOBAL V34
+        // ==========================================
+        const DueDateReminder = ({ user, accountProfile, isDarkMode }) => {
+            const storageKey = `flDueSettings:${user?.uid || 'guest'}`;
+            const [isOpen, setIsOpen] = useState(false);
+            const [settingsReady, setSettingsReady] = useState(false);
+            const [enabled, setEnabled] = useState(false);
+            const [browserNotification, setBrowserNotification] = useState(true);
+            const [soundEnabled, setSoundEnabled] = useState(true);
+            const [dueTasks, setDueTasks] = useState([]);
+            const [folderCount, setFolderCount] = useState(0);
+            const taskBucketsRef = useRef(new Map());
+            const workspaceUnsubsRef = useRef([]);
+            const scopeUnsubsRef = useRef([]);
+            const dueTimerRef = useRef(null);
+            const heartbeatRef = useRef(null);
+            const audioCtxRef = useRef(null);
+
+            const accountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
+            const isSuper = accountEmail === SUPER_ADMIN_EMAIL && accountProfile?.role === 'super_admin';
+            const isLegacy = accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.role === 'legacy_owner' || accountProfile?.ownsLegacyData;
+            const divisionId = accountProfile?.divisionId || '';
+
+            const readLocal = () => { try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch { return {}; } };
+            const saveLocal = (next) => { try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {} };
+
+            useEffect(() => {
+                const ref = doc(db,'users',user.uid,'appState','dueDateReminder');
+                const unsub = onSnapshot(ref, snap => {
+                    const data = snap.exists() ? snap.data() : readLocal();
+                    setEnabled(data.enabled === true);
+                    setBrowserNotification(data.browserNotification !== false);
+                    setSoundEnabled(data.soundEnabled !== false);
+                    setSettingsReady(true);
+                }, () => {
+                    const data = readLocal();
+                    setEnabled(data.enabled === true);
+                    setBrowserNotification(data.browserNotification !== false);
+                    setSoundEnabled(data.soundEnabled !== false);
+                    setSettingsReady(true);
+                });
+                return () => unsub();
+            }, [user?.uid]);
+
+            const persistSettings = async (patch) => {
+                const next = {
+                    enabled: patch.enabled ?? enabled,
+                    browserNotification: patch.browserNotification ?? browserNotification,
+                    soundEnabled: patch.soundEnabled ?? soundEnabled
+                };
+                setEnabled(next.enabled);
+                setBrowserNotification(next.browserNotification);
+                setSoundEnabled(next.soundEnabled);
+                saveLocal(next);
+                try { await setDoc(doc(db,'users',user.uid,'appState','dueDateReminder'), { ...next, updatedAt:serverTimestamp() }, {merge:true}); }
+                catch (e) { console.warn('Simpan setting due date gagal', e); }
+            };
+
+            const ensureNotificationPermission = async () => {
+                if (!('Notification' in window)) return 'unsupported';
+                if (Notification.permission === 'granted') return 'granted';
+                if (Notification.permission === 'denied') return 'denied';
+                try { return await Notification.requestPermission(); } catch { return Notification.permission; }
+            };
+
+            const playDueSound = (force = false) => {
+                if (!soundEnabled && !force) return;
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    const ctx = audioCtxRef.current || new AudioCtx();
+                    audioCtxRef.current = ctx;
+                    if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+                    const start = ctx.currentTime + 0.02;
+                    [0,0.22,0.44].forEach((offset,i)=>{
+                        const osc=ctx.createOscillator(), gain=ctx.createGain();
+                        osc.type='sine'; osc.frequency.value=i===1?660:880;
+                        gain.gain.setValueAtTime(0.0001,start+offset);
+                        gain.gain.exponentialRampToValueAtTime(0.22,start+offset+0.02);
+                        gain.gain.exponentialRampToValueAtTime(0.0001,start+offset+0.16);
+                        osc.connect(gain); gain.connect(ctx.destination);
+                        osc.start(start+offset); osc.stop(start+offset+0.18);
+                    });
+                } catch(e) { console.warn('Due sound gagal',e); }
+            };
+
+            useEffect(()=>{
+                const open=()=>setIsOpen(true);
+                window.addEventListener('open-due-reminder-settings',open);
+                return ()=>window.removeEventListener('open-due-reminder-settings',open);
+            },[]);
+
+            const emitTasks=()=>{ const all=[]; taskBucketsRef.current.forEach(v=>all.push(...v)); setDueTasks(all); };
+            const parseWorkspaceTasks=(folder,data)=>{
+                let history={}; try{history=data?.tasksHistory?JSON.parse(data.tasksHistory):{}}catch{history={}}
+                const rows=[];
+                Object.values(history||{}).forEach(list=>{
+                    if(!Array.isArray(list))return;
+                    list.forEach(task=>{
+                        if(!task?.dueDate || task.status==='done')return;
+                        const dueAt=new Date(task.dueDate).getTime();
+                        if(!Number.isFinite(dueAt))return;
+                        rows.push({folderId:folder.id,folderName:folder.name||'Workspace',taskId:String(task.id||''),content:task.content||'Task',dueAt,dueDate:task.dueDate});
+                    });
+                });
+                return rows;
+            };
+
+            const watchWorkspaces=(folders)=>{
+                workspaceUnsubsRef.current.forEach(u=>{try{u()}catch{}});
+                workspaceUnsubsRef.current=[];
+                taskBucketsRef.current=new Map();
+                setFolderCount(folders.length);
+                folders.forEach(folder=>{
+                    const unsub=onSnapshot(doc(db,'workspace_data',folder.id),snap=>{
+                        taskBucketsRef.current.set(folder.id,snap.exists()?parseWorkspaceTasks(folder,snap.data()):[]);
+                        emitTasks();
+                    },()=>{taskBucketsRef.current.set(folder.id,[]);emitTasks()});
+                    workspaceUnsubsRef.current.push(unsub);
+                });
+                emitTasks();
+            };
+
+            useEffect(()=>{
+                scopeUnsubsRef.current.forEach(u=>{try{u()}catch{}});
+                workspaceUnsubsRef.current.forEach(u=>{try{u()}catch{}});
+                scopeUnsubsRef.current=[]; workspaceUnsubsRef.current=[]; taskBucketsRef.current=new Map(); setDueTasks([]);
+                if(!user?.uid || accountProfile?.active===false)return;
+
+                if(isSuper){
+                    scopeUnsubsRef.current.push(onSnapshot(collection(db,'folders'),snap=>{const rows=[];snap.forEach(d=>rows.push({id:d.id,...d.data()}));watchWorkspaces(rows)},()=>watchWorkspaces([])));
+                }else if(isLegacy){
+                    const buckets=new Map(), child=[];
+                    const emitFolders=()=>{const all=[];buckets.forEach(v=>all.push(...v));watchWorkspaces(Array.from(new Map(all.map(f=>[f.id,f])).values()))};
+                    const watch=(key,qRef)=>child.push(onSnapshot(qRef,snap=>{const rows=[];snap.forEach(d=>rows.push({id:d.id,...d.data()}));buckets.set(key,rows);emitFolders()},()=>{buckets.set(key,[]);emitFolders()}));
+                    watch('legacy',query(collection(db,'folders'),where('divisionId','==','')));
+                    const du=onSnapshot(query(collection(db,'divisions'),where('ciptaDigiAccess','==',true)),snap=>{
+                        while(child.length>1){try{child.pop()()}catch{}}
+                        Array.from(buckets.keys()).filter(k=>k!=='legacy').forEach(k=>buckets.delete(k));
+                        snap.forEach(d=>watch('d:'+d.id,query(collection(db,'folders'),where('divisionId','==',d.id))));
+                        emitFolders();
+                    },()=>emitFolders());
+                    scopeUnsubsRef.current.push(du,()=>child.forEach(u=>{try{u()}catch{}}));
+                }else if(divisionId){
+                    scopeUnsubsRef.current.push(onSnapshot(query(collection(db,'folders'),where('divisionId','==',divisionId)),snap=>{const rows=[];snap.forEach(d=>rows.push({id:d.id,...d.data()}));watchWorkspaces(rows)},()=>watchWorkspaces([])));
+                }
+                return ()=>{scopeUnsubsRef.current.forEach(u=>{try{u()}catch{}});workspaceUnsubsRef.current.forEach(u=>{try{u()}catch{}})};
+            },[user?.uid,accountProfile?.role,accountProfile?.divisionId,accountProfile?.ownsLegacyData,accountProfile?.active,accountEmail]);
+
+            const triggerDue=async(task)=>{
+                if(!enabled)return;
+                const fingerprint=`${task.folderId}|${task.dueAt}|${(task.content||'').trim().toLowerCase()}`;
+                const key=`flDueNotified:${user.uid}:${fingerprint}`;
+                if(localStorage.getItem(key))return;
+                localStorage.setItem(key,String(Date.now()));
+
+                if(browserNotification){
+                    const perm=await ensureNotificationPermission();
+                    if(perm==='granted'){
+                        const title='⏰ Due Date Habis', body=`${task.content} • ${task.folderName}`;
+                        try{
+                            if('serviceWorker' in navigator){
+                                const reg=await navigator.serviceWorker.ready;
+                                await reg.showNotification(title,{body,icon:'./icon.png',badge:'./icon.png',tag:`due-${fingerprint}`,renotify:true,silent:true,data:{folderId:task.folderId}});
+                            }else new Notification(title,{body,icon:'./icon.png',tag:`due-${fingerprint}`,silent:true});
+                        }catch(e){console.warn('Due notification gagal',e)}
+                    }
+                }
+                if(soundEnabled)playDueSound();
+            };
+
+            const evaluateDue=()=>{
+                if(!enabled)return;
+                const now=Date.now();
+                dueTasks.filter(t=>t.dueAt<=now && now-t.dueAt<=24*60*60*1000).sort((a,b)=>a.dueAt-b.dueAt).slice(0,3).forEach(triggerDue);
+            };
+
+            useEffect(()=>{
+                if(dueTimerRef.current)clearTimeout(dueTimerRef.current);
+                if(heartbeatRef.current)clearInterval(heartbeatRef.current);
+                if(!enabled)return;
+                evaluateDue();
+                heartbeatRef.current=setInterval(evaluateDue,15000);
+                const future=dueTasks.filter(t=>t.dueAt>Date.now()).sort((a,b)=>a.dueAt-b.dueAt)[0];
+                if(future)dueTimerRef.current=setTimeout(evaluateDue,Math.max(250,Math.min(future.dueAt-Date.now(),2147483000)));
+                return()=>{if(dueTimerRef.current)clearTimeout(dueTimerRef.current);if(heartbeatRef.current)clearInterval(heartbeatRef.current)};
+            },[enabled,browserNotification,soundEnabled,dueTasks]);
+
+            const toggleMaster=async(next)=>{
+                if(next && browserNotification)await ensureNotificationPermission();
+                await persistSettings({enabled:next});
+                if(next && soundEnabled)playDueSound(true);
+            };
+
+            if(!settingsReady)return null;
+            return <>
+                <button onClick={()=>setIsOpen(true)} className={`fixed z-[90] bottom-5 left-5 sm:bottom-6 sm:left-6 w-12 h-12 rounded-2xl shadow-xl border backdrop-blur grid place-items-center transition hover:scale-105 ${enabled?'bg-emerald-500 text-white border-emerald-300':'bg-white/90 dark:bg-slate-900/90 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`} title="Pengingat Due Date"><ClockIcon size={20}/>{enabled&&<span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-300 border-2 border-white dark:border-slate-900"></span>}</button>
+                {isOpen&&<ModalPortal><div className={isDarkMode?'dark':''}><div className="fixed inset-0 z-[180] flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={()=>setIsOpen(false)}></div><div className="relative z-10 w-full max-w-md rounded-[2rem] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-6 text-slate-900 dark:text-white">
+                    <div className="flex items-start justify-between gap-4"><div><div className="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 grid place-items-center mb-3"><ClockIcon size={21}/></div><h2 className="text-xl font-black">Pengingat Due Date</h2><p className="text-xs text-slate-500 mt-1">Tetap berjalan selama Follow Up terbuka, walau kamu sedang membuka tab website lain.</p></div><button onClick={()=>setIsOpen(false)} className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 grid place-items-center"><X size={17}/></button></div>
+                    <div className="mt-5 space-y-3">
+                        <label className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 cursor-pointer"><span><span className="block font-black text-sm">Aktifkan Due Date Reminder</span><span className="block text-[11px] text-slate-500 mt-0.5">Memantau {folderCount} room yang boleh diakses akun.</span></span><input type="checkbox" checked={enabled} onChange={e=>toggleMaster(e.target.checked)} className="w-5 h-5 accent-emerald-600"/></label>
+                        <label className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 cursor-pointer"><span><span className="block font-black text-sm">Notifikasi Browser</span><span className="block text-[11px] text-slate-500 mt-0.5">Muncul di Windows / notification center.</span></span><input type="checkbox" checked={browserNotification} onChange={async e=>{const v=e.target.checked;if(v)await ensureNotificationPermission();persistSettings({browserNotification:v})}} className="w-5 h-5 accent-violet-600"/></label>
+                        <label className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 cursor-pointer"><span><span className="block font-black text-sm">Bunyi Alarm</span><span className="block text-[11px] text-slate-500 mt-0.5">Bunyi tiga nada saat due date lewat.</span></span><input type="checkbox" checked={soundEnabled} onChange={e=>persistSettings({soundEnabled:e.target.checked})} className="w-5 h-5 accent-amber-500"/></label>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>playDueSound(true)} className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">Tes Bunyi</button><button onClick={async()=>{const p=await ensureNotificationPermission();alert(p==='granted'?'Notifikasi browser aktif.':p==='denied'?'Notifikasi diblokir browser. Buka Site Settings untuk mengaktifkan.':'Browser tidak mendukung notifikasi.')}} className="px-4 py-3 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-xs font-black">Tes Notifikasi</button></div>
+                    <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-[11px] text-slate-500">Deadline aktif terdeteksi: <b className="text-slate-800 dark:text-white">{dueTasks.length}</b>. Task Done otomatis diabaikan.</div>
+                </div></div></div></ModalPortal>}
+            </>;
         };
 
         function App() {
@@ -4057,6 +4342,7 @@
             return (
                 <>
                     <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
+                    <DueDateReminder user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />
                     {currentFolder ? (
                         <BoardScreen folderId={currentFolder.id} folderName={currentFolder.name} onBack={()=>setCurrentFolder(null)} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} accountProfile={accountProfile}/>
                     ) : systemIsSuper ? (

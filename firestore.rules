@@ -302,6 +302,14 @@ service cloud.firestore {
       allow list, update, delete: if isSuperAdmin();
     }
 
+    // =========================================================
+    // CUSTOM ICON / CHARACTER PNG
+    // =========================================================
+    match /custom_icons/{iconId} {
+      allow read: if accountActive();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
     match /attendance_reminders/{uid} {
       allow read, create, update, delete: if signedIn() && (
         request.auth.uid == uid || isSuperAdmin()
