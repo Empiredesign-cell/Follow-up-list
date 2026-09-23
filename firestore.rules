@@ -65,6 +65,14 @@ service cloud.firestore {
         divisionId == myDivisionId();
     }
 
+    function isCiptaDigiDivision(divisionId) {
+      return divisionId is string &&
+        divisionId != '' &&
+        exists(/databases/$(database)/documents/divisions/$(divisionId)) &&
+        ('ciptaDigiAccess' in get(/databases/$(database)/documents/divisions/$(divisionId)).data) &&
+        get(/databases/$(database)/documents/divisions/$(divisionId)).data.ciptaDigiAccess == true;
+    }
+
     function hasWeekendFeature() {
       let divisionId = myDivisionId();
       return accountActive() &&
@@ -81,7 +89,10 @@ service cloud.firestore {
           isLegacyOwner() &&
           exists(/databases/$(database)/documents/folders/$(folderId)) &&
           ('divisionId' in get(/databases/$(database)/documents/folders/$(folderId)).data) &&
-          get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == ''
+          (
+            get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId == '' ||
+            isCiptaDigiDivision(get(/databases/$(database)/documents/folders/$(folderId)).data.divisionId)
+          )
         ) ||
         (
           accountActive() &&
@@ -212,8 +223,8 @@ service cloud.firestore {
     // DIVISI / GROUP
     // =========================================================
     match /divisions/{divisionId} {
-      allow get: if isSuperAdmin() || sameDivision(divisionId);
-      allow list: if isSuperAdmin();
+      allow get: if isSuperAdmin() || sameDivision(divisionId) || (isLegacyOwner() && resource.data.ciptaDigiAccess == true);
+      allow list: if isSuperAdmin() || (isLegacyOwner() && resource.data.ciptaDigiAccess == true);
       allow create, update, delete: if isSuperAdmin();
     }
 
@@ -221,10 +232,14 @@ service cloud.firestore {
     // WORKSPACE / ROOM
     // =========================================================
     match /folders/{folderId} {
-      // PRIVASI V28: satu room hanya boleh terlihat oleh satu divisi.
-      // Cipta Digital legacy owner hanya boleh membaca room yang belum ditempatkan ke divisi.
+      // PRIVASI V32: satu room tetap hanya dimiliki satu divisi.
+      // Cipta Digital membaca room legacy + room dari divisi yang dicentang Cipta Digi oleh Super Admin.
       allow read: if isSuperAdmin() ||
-        (isLegacyOwner() && ('divisionId' in resource.data) && resource.data.divisionId == '') ||
+        (
+          isLegacyOwner() &&
+          ('divisionId' in resource.data) &&
+          (resource.data.divisionId == '' || isCiptaDigiDivision(resource.data.divisionId))
+        ) ||
         (accountActive() && ('divisionId' in resource.data) && resource.data.divisionId == myDivisionId());
 
       // ciptadigi tidak boleh membuat room baru.
@@ -246,6 +261,12 @@ service cloud.firestore {
     // Task/sticky/archive lama tetap memakai document ID workspace yang sama.
     match /workspace_data/{workspaceId} {
       allow read, write: if folderAccessible(workspaceId);
+    }
+
+    // Riwayat perubahan room khusus Super Admin.
+    match /room_history/{roomId}/versions/{versionId} {
+      allow read, create, delete: if isSuperAdmin();
+      allow update: if false;
     }
 
     // Titipan Weekend default milik Cipta Digital, tetapi Super Admin dapat

@@ -794,15 +794,47 @@
                 const accountEmail = (accountProfile?.email || auth.currentUser?.email || '').toLowerCase();
                 const isSuper = accountProfile?.role === 'super_admin' && accountEmail === SUPER_ADMIN_EMAIL;
                 const isLegacyOwner = accountProfile?.role === 'legacy_owner' || accountEmail === LEGACY_OWNER_EMAIL || accountProfile?.ownsLegacyData;
-            const isCiptaDigital = accountEmail === LEGACY_OWNER_EMAIL;
-                const canAccessAllLegacy = isSuper || isLegacyOwner;
-                if (canAccessAllLegacy) {
+                const isCiptaDigital = accountEmail === LEGACY_OWNER_EMAIL;
+                if (isSuper) {
                     const unsub = onSnapshot(collection(db, 'folders'), (snap) => {
                         const f = [];
                         snap.forEach(d => { if (d.id !== folderId) f.push({ id: d.id, name: d.data().name, divisionId: d.data().divisionId || '' }); });
                         setAvailableFolders(f);
                     }, () => setAvailableFolders([]));
                     return () => unsub();
+                }
+
+                // V32: Cipta Digital dapat mengirim ke room legacy + semua divisi yang ditandai Cipta Digi.
+                if (isCiptaDigital || isLegacyOwner) {
+                    const buckets = new Map();
+                    const folderUnsubs = [];
+                    let divisionUnsub = null;
+                    const emit = () => {
+                        const merged = [];
+                        buckets.forEach(rows => merged.push(...rows));
+                        const unique = Array.from(new Map(merged.filter(r => r.id !== folderId).map(r => [r.id, r])).values());
+                        unique.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                        setAvailableFolders(unique);
+                    };
+                    const watch = (key, qRef) => {
+                        const u = onSnapshot(qRef, snap => {
+                            const rows=[];
+                            snap.forEach(d=>rows.push({id:d.id,name:d.data().name,divisionId:d.data().divisionId||''}));
+                            buckets.set(key, rows); emit();
+                        }, ()=>{ buckets.set(key, []); emit(); });
+                        folderUnsubs.push(u);
+                    };
+                    watch('legacy', query(collection(db,'folders'), where('divisionId','==','')));
+                    divisionUnsub = onSnapshot(query(collection(db,'divisions'), where('ciptaDigiAccess','==',true)), snap => {
+                        while (folderUnsubs.length > 1) { const u=folderUnsubs.pop(); try{u();}catch{} }
+                        Array.from(buckets.keys()).filter(k=>k!=='legacy').forEach(k=>buckets.delete(k));
+                        snap.forEach(d=>watch('division:'+d.id, query(collection(db,'folders'), where('divisionId','==',d.id))));
+                        emit();
+                    }, ()=>emit());
+                    return () => {
+                        try{divisionUnsub && divisionUnsub();}catch{}
+                        folderUnsubs.forEach(u=>{try{u();}catch{}});
+                    };
                 }
 
                 const divisionId = accountProfile?.divisionId || '';
@@ -2500,6 +2532,8 @@
             const [roomEditCustomColor, setRoomEditCustomColor] = useState('#F59E0B');
             const [roomEditDivisionId, setRoomEditDivisionId] = useState('');
             const [roomEditPin, setRoomEditPin] = useState('');
+            const [roomBackupCandidates, setRoomBackupCandidates] = useState([]);
+            const [roomBackupIndex, setRoomBackupIndex] = useState('');
             const legacyCleanupDoneRef = useRef(false);
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
@@ -2638,11 +2672,12 @@
             const selectedUserIsSuper = (selectedUser?.email||'').toLowerCase()===SUPER_ADMIN_EMAIL;
             // Isolasi room V25: akun divisi HANYA melihat room dengan divisionId yang persis sama.
             // Satu room mempunyai satu divisionId, sehingga ketika dipindahkan divisi ia otomatis hilang dari divisi lama.
+            const ciptaDigiDivisionIds = new Set(divisions.filter(d=>d.ciptaDigiAccess===true).map(d=>String(d.id)));
             const monitoredFolders = selectedUser ? (
                 (selectedUserIsSuper || (selectedUser.role==='super_admin' && (selectedUser.email||'').toLowerCase()===SUPER_ADMIN_EMAIL))
                     ? folders
                     : selectedUserIsLegacy
-                        ? folders.filter(f => !String(f.divisionId || '').trim())
+                        ? folders.filter(f => !String(f.divisionId || '').trim() || ciptaDigiDivisionIds.has(String(f.divisionId || '')))
                         : (selectedUser.divisionId ? folders.filter(f => String(f.divisionId || '') === String(selectedUser.divisionId)) : [])
             ) : [];
             const selectedUserDivision = selectedUser?.divisionId ? divisions.find(d=>d.id===selectedUser.divisionId) : null;
@@ -2721,6 +2756,22 @@
             };
             const setAllDivisionFeatures = async (division, enabled) => saveDivisionFeatures(division, enabled ? ALL_DIVISION_FEATURES : EMPTY_DIVISION_FEATURES);
 
+            const toggleCiptaDigiDivisionAccess = async (division) => {
+                const next = division?.ciptaDigiAccess !== true;
+                setBusyAction('cipta-digi-scope-' + division.id);
+                try {
+                    await updateDoc(doc(db,'divisions',division.id), {
+                        ciptaDigiAccess: next,
+                        updatedAt: serverTimestamp(),
+                        updatedBy: user.uid
+                    });
+                    setNotice(next ? (division.name + ' sekarang masuk akses Cipta Digital.') : (division.name + ' dikeluarkan dari akses Cipta Digital.'));
+                } catch (err) {
+                    console.error('Update scope Cipta Digital gagal:', err);
+                    alert(err?.message || 'Gagal mengubah akses Cipta Digital.');
+                } finally { setBusyAction(''); }
+            };
+
             const getDivisionDefaultHex = (division) => gradientValueToHex(division?.defaultCardColor || 'custom:#F59E0B');
             const setDivisionDefaultColor = async (division, color) => {
                 const hex = normalizeHexColor(color);
@@ -2755,7 +2806,7 @@
                 const name=newDivisionName.trim(); if(!name)return;
                 setBusyAction('new-division');
                 try {
-                    await addDoc(collection(db,'divisions'), {name,active:true,features:EMPTY_DIVISION_FEATURES,defaultCardColor:'custom:#F59E0B',createdAt:serverTimestamp(),createdBy:user.uid});
+                    await addDoc(collection(db,'divisions'), {name,active:true,features:EMPTY_DIVISION_FEATURES,defaultCardColor:'custom:#F59E0B',ciptaDigiAccess:false,createdAt:serverTimestamp(),createdBy:user.uid});
                     setNewDivisionName(''); setNotice(`Divisi ${name} dibuat.`);
                 } finally { setBusyAction(''); }
             };
@@ -2776,6 +2827,45 @@
                 } finally { setBusyAction(''); }
             };
 
+            const findLocalRoomBackups = (folder) => {
+                const found = [];
+                const currentSig = JSON.stringify({name:folder.name||'',avatarId:folder.avatarId||'boy',gradient:folder.gradient||'',divisionId:folder.divisionId||'',divisionName:folder.divisionName||'',pin:folder.pin||''});
+                try {
+                    for (let i=0; i<localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (!key || !key.startsWith('flFoldersCache')) continue;
+                        let rows;
+                        try { rows = JSON.parse(localStorage.getItem(key) || '[]'); } catch { continue; }
+                        if (!Array.isArray(rows)) continue;
+                        rows.filter(r => r && (r.id===folder.id || String(r.name||'').toLowerCase()===String(folder.name||'').toLowerCase())).forEach(r => {
+                            const snapshot = {name:r.name||'',avatarId:r.avatarId||'boy',gradient:r.gradient||Gradients[0].classes,divisionId:r.divisionId||'',divisionName:r.divisionName||'',pin:r.pin||'',source:key};
+                            const sig = JSON.stringify({name:snapshot.name,avatarId:snapshot.avatarId,gradient:snapshot.gradient,divisionId:snapshot.divisionId,divisionName:snapshot.divisionName,pin:snapshot.pin});
+                            if (sig !== currentSig && !found.some(x=>x.sig===sig)) found.push({...snapshot,sig});
+                        });
+                    }
+                } catch (err) { console.warn('Scan backup lokal room gagal:', err); }
+                return found.slice(0,12);
+            };
+
+            const applyLocalRoomBackup = () => {
+                const idx = Number(roomBackupIndex);
+                if (!Number.isInteger(idx) || idx < 0 || idx >= roomBackupCandidates.length) return;
+                const b = roomBackupCandidates[idx];
+                setRoomEditName(b.name || roomEditName);
+                setRoomEditAvatar(b.avatarId || 'boy');
+                setRoomEditDivisionId(b.divisionId || '');
+                setRoomEditPin(b.pin || '');
+                const parsed = parseGradientValue(b.gradient || Gradients[0].classes);
+                if (parsed.type === 'custom') {
+                    setRoomEditGradient({id:'custom',classes:'',type:'custom'});
+                    setRoomEditCustomColor(parsed.color || '#F59E0B');
+                } else {
+                    setRoomEditGradient(parsed);
+                    setRoomEditCustomColor('#F59E0B');
+                }
+                setNotice('Backup lokal dimuat ke preview. Klik Simpan Perubahan Room untuk menerapkannya.');
+            };
+
             const openSuperRoomEditor = (event, folder) => {
                 if (event?.stopPropagation) event.stopPropagation();
                 const parsed = parseGradientValue(folder.gradient || Gradients[0].classes);
@@ -2784,6 +2874,9 @@
                 setRoomEditAvatar(folder.avatarId || 'boy');
                 setRoomEditDivisionId(folder.divisionId || '');
                 setRoomEditPin(folder.pin || '');
+                const localBackups = findLocalRoomBackups(folder);
+                setRoomBackupCandidates(localBackups);
+                setRoomBackupIndex(localBackups.length ? '0' : '');
                 if (parsed.type === 'custom') {
                     setRoomEditGradient({ id:'custom', classes:'', type:'custom' });
                     setRoomEditCustomColor(parsed.color || '#F59E0B');
@@ -2803,6 +2896,23 @@
                 const gradientValue = roomEditGradient.id === 'custom' ? 'custom:' + roomEditCustomColor : roomEditGradient.classes;
                 setBusyAction('global-room-edit');
                 try {
+                    const currentRoom = folders.find(f=>f.id===roomEditId);
+                    if (currentRoom) {
+                        try {
+                            await addDoc(collection(db,'room_history',roomEditId,'versions'), {
+                                roomId: roomEditId,
+                                name: currentRoom.name || '',
+                                avatarId: currentRoom.avatarId || 'boy',
+                                gradient: currentRoom.gradient || Gradients[0].classes,
+                                pin: currentRoom.pin || '',
+                                divisionId: currentRoom.divisionId || '',
+                                divisionName: currentRoom.divisionName || '',
+                                savedAt: serverTimestamp(),
+                                savedBy: user.uid,
+                                reason: 'before_superadmin_edit'
+                            });
+                        } catch (historyErr) { console.warn('Room history tidak tersimpan:', historyErr); }
+                    }
                     await updateDoc(doc(db,'folders',roomEditId), {
                         name: roomEditName.trim(),
                         avatarId: roomEditAvatar,
@@ -2864,7 +2974,7 @@
                                 <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-16">
                                     <div className="flex items-center gap-3 text-white">
                                         <span className="bg-slate-700 text-white px-2.5 py-2 rounded-lg text-2xl font-black">FL</span>
-                                        <div><div className="text-2xl sm:text-3xl font-black">Workspace</div><div className="text-[11px] text-slate-400 mt-0.5">Live view • {selectedUser.divisionName || (selectedUserIsLegacy ? 'Legacy Cipta Digital' : 'Tanpa divisi')}</div></div>
+                                        <div><div className="text-2xl sm:text-3xl font-black">Workspace</div><div className="text-[11px] text-slate-400 mt-0.5">Live view • {selectedUserIsLegacy ? 'Semua divisi Cipta Digi + legacy' : (selectedUser.divisionName || 'Tanpa divisi')}</div></div>
                                     </div>
                                     <div className="flex flex-wrap gap-2 items-center">
                                         {monitorShortcut(selectedFeatures.hitungNota, 'https://hitung-nota.vercel.app/', 'Hitung Nota', <NotepadIcon size={19} className="text-blue-400"/>)}
@@ -2877,7 +2987,7 @@
                                         {(selectedUserIsLegacy || selectedUserIsSuper) && <span title="Background" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><ImageIcon size={19} className="text-emerald-400"/></span>}
                                         <div className="h-11 max-w-[210px] px-3 rounded-2xl border border-slate-700 bg-slate-800/80 flex items-center gap-2 text-white">
                                             <UserIcon size={17} className="text-indigo-400 shrink-0"/>
-                                            <div className="min-w-0 leading-tight"><div className="text-xs font-black truncate">{selectedUser.name || selectedUser.email}</div><div className="text-[9px] text-slate-400 truncate">{selectedUserIsLegacy ? 'Legacy Cipta Digital' : (selectedUser.divisionName || selectedUser.role)}</div></div>
+                                            <div className="min-w-0 leading-tight"><div className="text-xs font-black truncate">{selectedUser.name || selectedUser.email}</div><div className="text-[9px] text-slate-400 truncate">{selectedUserIsLegacy ? 'Cipta Digital • multi-divisi' : (selectedUser.divisionName || selectedUser.role)}</div></div>
                                         </div>
                                         {selectedIsMember && <span title="Request Admin" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><ShieldIcon size={19} className="text-cyan-400"/></span>}
                                         <span title="Feedback" className="w-11 h-11 rounded-2xl border border-slate-700 bg-slate-800/80 grid place-items-center"><MessageIcon size={19} className="text-fuchsia-400"/></span>
@@ -2963,7 +3073,7 @@
 
                             {tab==='divisions' && <div className="space-y-5">
                                 <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col lg:flex-row gap-3 justify-between lg:items-center"><div><h2 className="font-black text-lg">Divisi & Feature Flags</h2><p className="text-xs text-slate-500">Core workspace selalu tersedia. Fitur tambahan di bawah dapat ditampilkan dengan satu ceklis.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newDivisionName} onChange={e=>setNewDivisionName(e.target.value)} placeholder="Nama divisi baru" className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button disabled={busyAction==='new-division'} onClick={createDivisionQuick} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Divisi</button></div></div></section>
-                                <div className="grid xl:grid-cols-2 gap-4">{divisions.map(d=>{const features=normalizeDivisionFeatures(d.features||{});const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const ac=activeUsers.filter(u=>u.divisionId===d.id&&u.role==='division_admin'&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;return <section key={d.id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-4"><div><div className="flex items-center gap-2"><h3 className="font-black text-lg">{d.name}</h3><span className={`px-2 py-1 rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><p className="text-xs text-slate-500 mt-1">{uc} akun • {ac} admin • {rc} room</p></div><button onClick={()=>toggleDivisionActive(d)} className="px-3 py-2 h-fit rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">{d.active===false?'Aktifkan':'Nonaktifkan'}</button></div><div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><div className="text-xs font-black">Warna Card Default</div><div className="text-[10px] text-slate-500 mt-0.5">Room baru di divisi ini otomatis memakai warna ini.</div></div><div className="flex items-center gap-2"><label className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-600 shadow cursor-pointer" style={{background:`linear-gradient(180deg, ${getDivisionDefaultHex(d)} 0%, ${darkenHex(getDivisionDefaultHex(d),28)} 100%)`}}><input type="color" value={getDivisionDefaultHex(d)} onChange={e=>setDivisionDefaultColor(d,e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /></label><code className="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-[10px] font-black">{getDivisionDefaultHex(d)}</code><button disabled={busyAction===`apply-color-${d.id}`} onClick={()=>applyDivisionDefaultToRooms(d)} className="px-3 py-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black disabled:opacity-50">Terapkan ke Room</button></div></div></div><div className="mt-5 grid sm:grid-cols-2 gap-2">{DIVISION_FEATURE_CATALOG.map(f=><label key={f.key} className={`cursor-pointer p-3 rounded-2xl border flex items-center gap-3 transition ${features[f.key]?'border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60'}`}><input type="checkbox" checked={features[f.key]} disabled={busyAction===`features-${d.id}`} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/><span className="text-xl">{f.icon}</span><span className="min-w-0"><span className="block text-sm font-black">{f.label}</span><span className="block text-[10px] text-slate-500 leading-tight mt-0.5">{f.description}</span></span></label>)}</div><div className="mt-3 flex gap-2"><button onClick={()=>setAllDivisionFeatures(d,true)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-black">Aktifkan Semua</button><button onClick={()=>setAllDivisionFeatures(d,false)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black">Matikan Semua</button></div></section>})}</div>
+                                <div className="grid xl:grid-cols-2 gap-4">{divisions.map(d=>{const features=normalizeDivisionFeatures(d.features||{});const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const ac=activeUsers.filter(u=>u.divisionId===d.id&&u.role==='division_admin'&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;return <section key={d.id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-4"><div><div className="flex items-center gap-2"><h3 className="font-black text-lg">{d.name}</h3><span className={`px-2 py-1 rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><p className="text-xs text-slate-500 mt-1">{uc} akun • {ac} admin • {rc} room</p></div><div className="flex flex-col sm:flex-row gap-2 items-end sm:items-center"><label className={`px-3 py-2 rounded-xl border text-[10px] font-black flex items-center gap-2 cursor-pointer ${d.ciptaDigiAccess===true?'bg-cyan-50 dark:bg-cyan-950/30 border-cyan-300 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300':'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}`} title="Jika aktif, ciptadigi@gmail.com dapat melihat seluruh room divisi ini"><input type="checkbox" checked={d.ciptaDigiAccess===true} disabled={busyAction===`cipta-digi-scope-${d.id}`} onChange={()=>toggleCiptaDigiDivisionAccess(d)} className="accent-cyan-600"/> Cipta Digi</label><button onClick={()=>toggleDivisionActive(d)} className="px-3 py-2 h-fit rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">{d.active===false?'Aktifkan':'Nonaktifkan'}</button></div></div><div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><div className="text-xs font-black">Warna Card Default</div><div className="text-[10px] text-slate-500 mt-0.5">Room baru di divisi ini otomatis memakai warna ini.</div></div><div className="flex items-center gap-2"><label className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-600 shadow cursor-pointer" style={{background:`linear-gradient(180deg, ${getDivisionDefaultHex(d)} 0%, ${darkenHex(getDivisionDefaultHex(d),28)} 100%)`}}><input type="color" value={getDivisionDefaultHex(d)} onChange={e=>setDivisionDefaultColor(d,e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" /></label><code className="px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 text-[10px] font-black">{getDivisionDefaultHex(d)}</code><button disabled={busyAction===`apply-color-${d.id}`} onClick={()=>applyDivisionDefaultToRooms(d)} className="px-3 py-2 rounded-xl bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black disabled:opacity-50">Terapkan ke Room</button></div></div></div><div className="mt-5 grid sm:grid-cols-2 gap-2">{DIVISION_FEATURE_CATALOG.map(f=><label key={f.key} className={`cursor-pointer p-3 rounded-2xl border flex items-center gap-3 transition ${features[f.key]?'border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60'}`}><input type="checkbox" checked={features[f.key]} disabled={busyAction===`features-${d.id}`} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/><span className="text-xl">{f.icon}</span><span className="min-w-0"><span className="block text-sm font-black">{f.label}</span><span className="block text-[10px] text-slate-500 leading-tight mt-0.5">{f.description}</span></span></label>)}</div><div className="mt-3 flex gap-2"><button onClick={()=>setAllDivisionFeatures(d,true)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-black">Aktifkan Semua</button><button onClick={()=>setAllDivisionFeatures(d,false)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black">Matikan Semua</button></div></section>})}</div>
                                 <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4"><div><h2 className="font-black text-lg">Room & Penempatan Divisi</h2><p className="text-xs text-slate-500">Satu room hanya boleh berada di satu divisi. Saat dipindahkan, room otomatis hilang dari divisi sebelumnya tanpa memindahkan workspace_data.</p></div><div className="flex flex-col sm:flex-row gap-2"><input value={newRoomName} onChange={e=>setNewRoomName(e.target.value)} placeholder="Nama room baru" className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><select value={newRoomDivisionId} onChange={e=>setNewRoomDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="">Pilih divisi</option>{divisions.filter(d=>d.active!==false).map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><button disabled={busyAction==='new-room'} onClick={createRoomQuick} className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black">+ Room</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{folders.map(f=>{const AvatarComp=Avatars[f.avatarId||'boy']||Avatars.boy;return <div key={f.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-3"><div className="w-12 h-12 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900 p-1 overflow-hidden"><AvatarComp/></div><div className="min-w-0 flex-1"><div className="font-black text-sm truncate">{f.name}</div><select value={f.divisionId||''} onChange={e=>assignRoomDivision(f,e.target.value)} className="mt-1 w-full bg-transparent text-[11px] text-violet-600 font-bold outline-none"><option value="">Belum masuk divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><button type="button" onClick={(e)=>openSuperRoomEditor(e,f)} className="shrink-0 w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 grid place-items-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition" title="Edit room"><EditIcon size={15}/></button></div>})}</div></section>
                             </div>}
 
@@ -3023,7 +3133,18 @@
                                             <div><label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">PIN Room</label><input value={roomEditPin} onChange={e=>setRoomEditPin(e.target.value)} placeholder="Kosong = tanpa PIN" className="w-full px-4 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none font-bold"/></div>
                                         </div>
 
-                                        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-700 dark:text-amber-300"><b>Hak Super Admin:</b> perpindahan divisi akan langsung mengubah siapa yang boleh melihat room ini. Isi <code>workspace_data</code> tidak dipindahkan atau dihapus.</div>
+                                        {roomBackupCandidates.length > 0 && <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 p-3">
+                                            <div className="text-xs font-black text-emerald-700 dark:text-emerald-300 mb-2">Backup lokal ditemukan ({roomBackupCandidates.length})</div>
+                                            <div className="flex flex-col sm:flex-row gap-2">
+                                                <select value={roomBackupIndex} onChange={e=>setRoomBackupIndex(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900 text-xs">
+                                                    {roomBackupCandidates.map((b,i)=><option key={i} value={String(i)}>{b.name || 'Room'} • {b.divisionName || 'tanpa divisi'} • {b.avatarId} • {b.source.replace('flFoldersCache','cache')}</option>)}
+                                                </select>
+                                                <button type="button" onClick={applyLocalRoomBackup} className="px-3 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-black">Pulihkan ke Preview</button>
+                                            </div>
+                                            <div className="mt-2 text-[10px] text-emerald-700/70 dark:text-emerald-300/70">Bisa dipakai untuk room Bulan jika browser masih menyimpan versi sebelum perubahan.</div>
+                                        </div>}
+
+                                        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-3 text-xs text-amber-700 dark:text-amber-300"><b>Hak Super Admin:</b> perpindahan divisi akan langsung mengubah siapa yang boleh melihat room ini. Isi <code>workspace_data</code> tidak dipindahkan atau dihapus. Mulai V32, versi room sebelum edit Super Admin otomatis disimpan ke <code>room_history</code>.</div>
 
                                         <div className="flex flex-col sm:flex-row gap-3 pt-1">
                                             <button type="button" onClick={()=>setRoomEditorOpen(false)} className="sm:w-1/3 py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 font-black text-slate-600 dark:text-slate-300">Batal</button>
@@ -3046,7 +3167,7 @@
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
             const homeAccountEmail = (accountProfile?.email || user?.email || '').toLowerCase();
-            const homeFolderScope = homeAccountEmail === SUPER_ADMIN_EMAIL ? 'all' : (homeAccountEmail === LEGACY_OWNER_EMAIL ? 'legacy-unassigned' : (accountProfile?.divisionId || 'none'));
+            const homeFolderScope = homeAccountEmail === SUPER_ADMIN_EMAIL ? 'all' : (homeAccountEmail === LEGACY_OWNER_EMAIL ? 'cipta-digi-scope' : (accountProfile?.divisionId || 'none'));
             const FOLDERS_CACHE_KEY = `flFoldersCacheV28:${user?.uid || 'guest'}:${homeFolderScope}`;
             const [folders, setFolders] = useState(() => {
                 try {
@@ -3124,6 +3245,16 @@
                     }, () => setDivisions([]));
                     return () => unsub();
                 }
+                if (isCiptaDigital) {
+                    const q = query(collection(db, 'divisions'), where('ciptaDigiAccess', '==', true));
+                    const unsub = onSnapshot(q, (snap) => {
+                        const rows=[];
+                        snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                        rows.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+                        setDivisions(rows);
+                    }, ()=>setDivisions([]));
+                    return () => unsub();
+                }
                 if (accountProfile?.divisionId) {
                     const unsub = onSnapshot(doc(db, 'divisions', accountProfile.divisionId), (snap) => {
                         setDivisions(snap.exists() ? [{ id: snap.id, ...snap.data() }] : []);
@@ -3164,20 +3295,29 @@
                     return () => unsubscribe();
                 }
 
-                // PRIVASI KETAT V28: akun Cipta Digital hanya melihat room legacy yang BELUM masuk divisi.
-                // Begitu sebuah room diberi divisionId, room tersebut hanya terlihat oleh divisi itu + Super Admin.
+                // V32: Cipta Digital melihat room legacy + semua room divisi yang dicentang Cipta Digi oleh Super Admin.
                 if (isLegacyOwner) {
-                    const qLegacy = query(collection(db, 'folders'), where('divisionId', '==', ''));
-                    const unsubscribe = onSnapshot(qLegacy, { includeMetadataChanges: true }, (snapshot) => {
-                        const fresh = [];
-                        snapshot.forEach(folderDoc => fresh.push({ id: folderDoc.id, ...folderDoc.data() }));
-                        const sorted = sortFolders(fresh);
+                    const buckets = new Map();
+                    const unsubs = [];
+                    const emit = () => {
+                        const merged=[]; buckets.forEach(rows=>merged.push(...rows));
+                        const unique=Array.from(new Map(merged.map(row=>[row.id,row])).values());
+                        const sorted=sortFolders(unique);
                         setFolders(sorted); saveCache(sorted); setFoldersStatus('ready');
-                    }, (error) => {
-                        console.error('Gagal memuat workspace legacy Cipta Digital:', error);
-                        setFolders([]); saveCache([]); setFoldersStatus('error');
-                    });
-                    return () => unsubscribe();
+                    };
+                    const watch=(key,qRef)=>{
+                        const u=onSnapshot(qRef,{includeMetadataChanges:true},snap=>{
+                            const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                            buckets.set(key,rows); emit();
+                        },err=>{
+                            console.error('Gagal memuat scope Cipta Digital:',err);
+                            buckets.set(key,[]); emit();
+                        });
+                        unsubs.push(u);
+                    };
+                    watch('legacy', query(collection(db,'folders'), where('divisionId','==','')));
+                    divisions.filter(d=>d.ciptaDigiAccess===true).forEach(d=>watch('division:'+d.id, query(collection(db,'folders'), where('divisionId','==',d.id))));
+                    return () => unsubs.forEach(u=>{try{u();}catch{}});
                 }
 
                 const divisionId = accountProfile?.divisionId || '';
@@ -3200,7 +3340,7 @@
                     setFoldersStatus('error');
                 });
                 return () => unsubscribe();
-            }, [user?.uid, isSuperAdmin, isLegacyOwner, accountProfile?.divisionId]);
+            }, [user?.uid, isSuperAdmin, isLegacyOwner, accountProfile?.divisionId, divisions.map(d=>d.id+':'+(d.ciptaDigiAccess===true?'1':'0')).sort().join('|')]);
 
             // FETCH WEEKEND BOARD & LOGIKA RESET HARI SENIN
             useEffect(() => {
