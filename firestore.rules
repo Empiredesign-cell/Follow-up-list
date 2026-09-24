@@ -311,6 +311,69 @@ service cloud.firestore {
       allow create, update, delete: if isSuperAdmin();
     }
 
+
+    // =========================================================
+    // V41 USAGE LEADERBOARD
+    // Semua akun aktif dapat membaca klasemen global.
+    // Member/Admin Divisi hanya boleh menambah statistik miliknya sendiri.
+    // Delta per flush dibatasi maksimal 3 menit agar tidak bisa mengubah skor
+    // besar dalam satu request dari client.
+    // =========================================================
+    match /usage_stats/{uid} {
+      allow read: if accountActive();
+
+      allow create: if accountActive() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.divisionId == myDivisionId() &&
+        (myProfile().role == 'member' || myProfile().role == 'division_admin') &&
+        request.resource.data.role == myProfile().role &&
+        request.resource.data.totalActiveMinutes is number &&
+        request.resource.data.totalActiveMinutes >= 0 &&
+        request.resource.data.totalActiveMinutes <= 3 &&
+        request.resource.data.weeklyMinutes is number &&
+        request.resource.data.weeklyMinutes >= 0 &&
+        request.resource.data.weeklyMinutes <= 3 &&
+        request.resource.data.monthlyMinutes is number &&
+        request.resource.data.monthlyMinutes >= 0 &&
+        request.resource.data.monthlyMinutes <= 3;
+
+      allow update: if accountActive() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.divisionId == myDivisionId() &&
+        (myProfile().role == 'member' || myProfile().role == 'division_admin') &&
+        request.resource.data.role == myProfile().role &&
+        request.resource.data.totalActiveMinutes >= resource.data.totalActiveMinutes &&
+        request.resource.data.totalActiveMinutes <= resource.data.totalActiveMinutes + 3 &&
+        (
+          (
+            request.resource.data.weekKey == resource.data.weekKey &&
+            request.resource.data.weeklyMinutes >= resource.data.weeklyMinutes &&
+            request.resource.data.weeklyMinutes <= resource.data.weeklyMinutes + 3
+          ) ||
+          (
+            request.resource.data.weekKey != resource.data.weekKey &&
+            request.resource.data.weeklyMinutes >= 0 &&
+            request.resource.data.weeklyMinutes <= 3
+          )
+        ) &&
+        (
+          (
+            request.resource.data.monthKey == resource.data.monthKey &&
+            request.resource.data.monthlyMinutes >= resource.data.monthlyMinutes &&
+            request.resource.data.monthlyMinutes <= resource.data.monthlyMinutes + 3
+          ) ||
+          (
+            request.resource.data.monthKey != resource.data.monthKey &&
+            request.resource.data.monthlyMinutes >= 0 &&
+            request.resource.data.monthlyMinutes <= 3
+          )
+        );
+
+      allow delete: if isSuperAdmin();
+    }
+
     // =========================================================
     // V40 AUDIT LOGS - user aktif boleh menulis, hanya Super Admin membaca global.
     // =========================================================

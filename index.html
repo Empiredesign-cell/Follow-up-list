@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP • V40.3</title>
+    <title>WELCOME TO FOLLUP • V41</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -101,7 +101,7 @@
                 box.style.cssText = 'min-height:100vh;background:#0f172a;color:white;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;';
                 box.innerHTML = `
                     <div style="width:min(620px,100%);background:#111827;border:1px solid #334155;border-radius:24px;padding:28px;box-shadow:0 20px 70px rgba(0,0,0,.35)">
-                        <div style="font-size:14px;font-weight:900;color:#a78bfa;margin-bottom:8px">FOLLOW UP V40.2</div>
+                        <div style="font-size:14px;font-weight:900;color:#a78bfa;margin-bottom:8px">FOLLOW UP V41</div>
                         <div style="font-size:26px;font-weight:900;margin-bottom:10px">Aplikasi gagal dimuat</div>
                         <div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:18px">Bukan lagi white screen kosong. Detail error terakhir ditampilkan di bawah agar bug bisa dilacak.</div>
                         <pre style="white-space:pre-wrap;word-break:break-word;background:#020617;border-radius:14px;padding:14px;color:#fca5a5;font-size:11px;max-height:220px;overflow:auto">${saved || 'Tidak ada detail error. Coba Ctrl+F5 atau cek koneksi CDN.'}</pre>
@@ -120,7 +120,7 @@
         import { createPortal } from "react-dom";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, limit, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, limit, serverTimestamp, deleteDoc, getDoc, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Portal modal ke <body> agar tidak terjebak stacking-context/z-index parent.
         const ModalPortal = ({ children }) => createPortal(children, document.body);
@@ -3541,6 +3541,7 @@
                             {notice&&<div className="mb-5 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 text-sm font-bold flex justify-between gap-3"><span>{notice}</span><button onClick={()=>setNotice('')}><X size={16}/></button></div>}
 
                             {tab==='overview' && <>
+                                <div className="mb-6"><UsageLeaderboard user={user} accountProfile={accountProfile} compact={true} /></div>
                                 <section className="rounded-[2rem] p-5 sm:p-7 bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-950 text-white shadow-2xl overflow-hidden relative mb-6"><div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-violet-400/20 blur-3xl"></div><div className="relative grid lg:grid-cols-[1.3fr_.7fr] gap-6 items-center"><div><div className="text-xs font-black text-violet-300 uppercase tracking-[0.2em]">Command Center</div><h2 className="mt-2 text-2xl sm:text-3xl font-black">Seluruh FOLLUP dalam satu kontrol.</h2><p className="mt-2 text-sm text-slate-300 max-w-xl">View As User, audit global, restore, version history, bulk action, session control, broadcast, analytics, dan health monitoring dalam satu panel.</p><div className="flex flex-wrap gap-2 mt-5"><button onClick={()=>setTab('center')} className="px-4 py-2.5 rounded-xl bg-white text-slate-950 text-xs font-black">Notification Center</button><button onClick={()=>setTab('analytics')} className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-xs font-black">Analytics & AI</button><button onClick={()=>setTab('recovery')} className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-xs font-black">Restore Center</button></div></div><div className="grid grid-cols-2 gap-3">{[[activeUsers.filter(u=>u.active!==false).length,'Akun Aktif'],[folders.length,'Room'],[pending.length,'Menunggu ACC'],[unresolvedFeedback.length,'Feedback Baru']].map(([v,l])=><div key={l} className="rounded-2xl bg-white/10 border border-white/10 p-4"><div className="text-2xl font-black">{v}</div><div className="text-[11px] text-slate-300 mt-1">{l}</div></div>)}</div></div></section>
                                 <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">{[[divisionAdmins.length,'Admin Divisi','🛡️'],[members.length,'Member Aktif','👤'],[divisions.filter(d=>d.active!==false).length,'Divisi Aktif','🏢'],[orphanRooms.length,'Room Belum Grup','⚠️']].map(([v,l,i])=><div key={l} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm"><div className="flex justify-between"><div className="text-2xl font-black">{v}</div><span className="text-xl">{i}</span></div><div className="text-xs text-slate-500 mt-2">{l}</div></div>)}</div>
                                 <div className="grid xl:grid-cols-3 gap-5">
@@ -3712,6 +3713,307 @@
         // ==========================================
         // KOMPONEN 2: HALAMAN BERANDA (KARAKTER GRID)
         // ==========================================
+
+        // =========================================================
+        // V41 — USAGE LEADERBOARD
+        // Klasemen memakai waktu aktif nyata, bukan sekadar halaman dibuka.
+        // Tab harus visible dan user masih berinteraksi dalam 5 menit terakhir.
+        // =========================================================
+        const getUsagePeriodKeys = (date = new Date()) => {
+            const local = new Date(date);
+            const y = local.getFullYear();
+            const m = String(local.getMonth() + 1).padStart(2, '0');
+            const d = String(local.getDate()).padStart(2, '0');
+
+            const monday = new Date(local);
+            monday.setHours(0,0,0,0);
+            const day = monday.getDay();
+            const diff = day === 0 ? -6 : 1 - day;
+            monday.setDate(monday.getDate() + diff);
+            const wy = monday.getFullYear();
+            const wm = String(monday.getMonth() + 1).padStart(2, '0');
+            const wd = String(monday.getDate()).padStart(2, '0');
+
+            return {
+                dateKey: `${y}-${m}-${d}`,
+                weekKey: `${wy}-${wm}-${wd}`,
+                monthKey: `${y}-${m}`
+            };
+        };
+
+        const formatUsageMinutes = (minutes = 0) => {
+            const safe = Math.max(0, Math.floor(Number(minutes) || 0));
+            if (safe < 60) return `${safe} mnt`;
+            const hours = Math.floor(safe / 60);
+            const mins = safe % 60;
+            return mins ? `${hours}j ${mins}m` : `${hours}j`;
+        };
+
+        const UsageTracker = ({ user, accountProfile }) => {
+            const pendingMinutesRef = useRef(0);
+            const lastInteractionRef = useRef(Date.now());
+            const flushBusyRef = useRef(false);
+            const mountedRef = useRef(true);
+
+            const eligible = !!user?.uid &&
+                !!accountProfile?.divisionId &&
+                ['member','division_admin'].includes(accountProfile?.role) &&
+                accountProfile?.active !== false;
+
+            useEffect(() => {
+                mountedRef.current = true;
+                return () => { mountedRef.current = false; };
+            }, []);
+
+            useEffect(() => {
+                if (!eligible) return;
+
+                const statRef = doc(db, 'usage_stats', user.uid);
+                const markActive = () => { lastInteractionRef.current = Date.now(); };
+
+                const activityEvents = ['pointerdown','keydown','touchstart','scroll'];
+                activityEvents.forEach(eventName => {
+                    window.addEventListener(eventName, markActive, { passive: true });
+                });
+
+                const flushUsage = async () => {
+                    if (flushBusyRef.current || pendingMinutesRef.current <= 0) return;
+                    const minutes = Math.min(3, pendingMinutesRef.current);
+                    pendingMinutesRef.current -= minutes;
+                    flushBusyRef.current = true;
+
+                    try {
+                        const snap = await getDoc(statRef);
+                        const previous = snap.exists() ? snap.data() : {};
+                        const keys = getUsagePeriodKeys();
+                        const sameWeek = previous.weekKey === keys.weekKey;
+                        const sameMonth = previous.monthKey === keys.monthKey;
+
+                        const payload = {
+                            uid: user.uid,
+                            name: accountProfile?.name || 'User',
+                            divisionId: accountProfile?.divisionId || '',
+                            divisionName: accountProfile?.divisionName || 'Tanpa Divisi',
+                            role: accountProfile?.role || 'member',
+                            weekKey: keys.weekKey,
+                            monthKey: keys.monthKey,
+                            lastActiveDate: keys.dateKey,
+                            lastSeenAt: serverTimestamp(),
+                            updatedAt: serverTimestamp(),
+                            totalActiveMinutes: snap.exists() ? increment(minutes) : minutes,
+                            weeklyMinutes: snap.exists() && sameWeek ? increment(minutes) : minutes,
+                            monthlyMinutes: snap.exists() && sameMonth ? increment(minutes) : minutes
+                        };
+
+                        await setDoc(statRef, payload, { merge: true });
+                    } catch (err) {
+                        pendingMinutesRef.current += minutes;
+                        console.warn('Usage leaderboard heartbeat gagal:', err);
+                    } finally {
+                        flushBusyRef.current = false;
+                        if (pendingMinutesRef.current >= 3 && mountedRef.current) {
+                            setTimeout(flushUsage, 400);
+                        }
+                    }
+                };
+
+                const tick = setInterval(() => {
+                    const visible = document.visibilityState === 'visible';
+                    const recentlyActive = Date.now() - lastInteractionRef.current <= 5 * 60 * 1000;
+                    if (!visible || !recentlyActive) return;
+
+                    pendingMinutesRef.current += 1;
+                    if (pendingMinutesRef.current >= 3) flushUsage();
+                }, 60 * 1000);
+
+                const handleVisibility = () => {
+                    if (document.visibilityState === 'hidden' && pendingMinutesRef.current > 0) {
+                        flushUsage();
+                    } else if (document.visibilityState === 'visible') {
+                        markActive();
+                    }
+                };
+                document.addEventListener('visibilitychange', handleVisibility);
+
+                return () => {
+                    clearInterval(tick);
+                    document.removeEventListener('visibilitychange', handleVisibility);
+                    activityEvents.forEach(eventName => window.removeEventListener(eventName, markActive));
+                    if (pendingMinutesRef.current > 0) flushUsage();
+                };
+            }, [
+                eligible,
+                user?.uid,
+                accountProfile?.name,
+                accountProfile?.divisionId,
+                accountProfile?.divisionName,
+                accountProfile?.role
+            ]);
+
+            return null;
+        };
+
+        const UsageLeaderboard = ({ user, accountProfile, compact = false }) => {
+            const [rows, setRows] = useState([]);
+            const [period, setPeriod] = useState('week');
+            const [scope, setScope] = useState('global');
+            const [selectedDivisionId, setSelectedDivisionId] = useState(accountProfile?.divisionId || '');
+            const [expanded, setExpanded] = useState(false);
+
+            useEffect(() => {
+                const unsub = onSnapshot(collection(db,'usage_stats'), snap => {
+                    const next = [];
+                    snap.forEach(d => next.push({ id:d.id, ...d.data() }));
+                    setRows(next);
+                }, err => {
+                    console.warn('Leaderboard gagal dimuat:', err);
+                    setRows([]);
+                });
+                return () => unsub();
+            }, []);
+
+            const keys = getUsagePeriodKeys();
+
+            const eligibleRows = rows.filter(r =>
+                ['member','division_admin'].includes(r.role) &&
+                String(r.divisionId || '').trim() !== ''
+            );
+
+            const divisionMap = new Map();
+            eligibleRows.forEach(r => {
+                if (!r.divisionId) return;
+                if (!divisionMap.has(r.divisionId)) {
+                    divisionMap.set(r.divisionId, {
+                        id:r.divisionId,
+                        name:r.divisionName || 'Divisi'
+                    });
+                }
+            });
+            if (accountProfile?.divisionId && !divisionMap.has(accountProfile.divisionId)) {
+                divisionMap.set(accountProfile.divisionId, {
+                    id:accountProfile.divisionId,
+                    name:accountProfile?.divisionName || 'Divisi Saya'
+                });
+            }
+            const divisionOptions = Array.from(divisionMap.values()).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+            useEffect(() => {
+                if (scope !== 'division') return;
+                if (selectedDivisionId && divisionMap.has(selectedDivisionId)) return;
+                const fallback = accountProfile?.divisionId || divisionOptions[0]?.id || '';
+                setSelectedDivisionId(fallback);
+            }, [scope, rows.length, accountProfile?.divisionId]);
+
+            const metricFor = (r) => {
+                if (period === 'week') return r.weekKey === keys.weekKey ? Number(r.weeklyMinutes || 0) : 0;
+                if (period === 'month') return r.monthKey === keys.monthKey ? Number(r.monthlyMinutes || 0) : 0;
+                return Number(r.totalActiveMinutes || 0);
+            };
+
+            const scopedRows = eligibleRows.filter(r => scope === 'global' || r.divisionId === selectedDivisionId);
+            const ranking = scopedRows
+                .map(r => ({...r, usageMinutes:metricFor(r)}))
+                .filter(r => r.usageMinutes > 0)
+                .sort((a,b) => b.usageMinutes - a.usageMinutes || (a.name||'').localeCompare(b.name||''));
+
+            const currentIndex = ranking.findIndex(r => r.uid === user?.uid);
+            const currentEntry = currentIndex >= 0 ? {...ranking[currentIndex], rank:currentIndex+1} : null;
+            const visibleRows = expanded ? ranking : ranking.slice(0, compact ? 5 : 7);
+
+            const periodLabel = period === 'week' ? 'Minggu Ini' : period === 'month' ? 'Bulan Ini' : 'Sepanjang Waktu';
+            const selectedDivisionName = divisionOptions.find(d=>d.id===selectedDivisionId)?.name || 'Pilih Divisi';
+
+            const RankBadge = ({rank}) => (
+                <span className={`w-8 h-8 rounded-xl grid place-items-center text-[11px] font-black border ${
+                    rank === 1 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white' :
+                    rank === 2 ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white border-slate-300 dark:border-slate-600' :
+                    rank === 3 ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900' :
+                    'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700'
+                }`}>{String(rank).padStart(2,'0')}</span>
+            );
+
+            return (
+                <section className="relative z-10 w-full rounded-[1.75rem] border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-sm overflow-hidden">
+                    <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 grid place-items-center shrink-0">
+                                <ListIcon size={18}/>
+                            </div>
+                            <div className="min-w-0">
+                                <h2 className="font-black text-slate-900 dark:text-white">Klasemen FOLLUP</h2>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Berdasarkan waktu aktif nyata, bukan sekadar membuka halaman.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                                <button onClick={()=>setScope('global')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='global'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Global</button>
+                                <button onClick={()=>setScope('division')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='division'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Per Divisi</button>
+                            </div>
+                            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                                {[
+                                    ['week','Minggu'],
+                                    ['month','Bulan'],
+                                    ['all','All Time']
+                                ].map(([id,label])=><button key={id} onClick={()=>setPeriod(id)} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${period===id?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>{label}</button>)}
+                            </div>
+                        </div>
+                    </div>
+
+                    {scope === 'division' && (
+                        <div className="px-4 sm:px-5 pt-3">
+                            <select value={selectedDivisionId} onChange={e=>setSelectedDivisionId(e.target.value)} className="w-full sm:w-auto min-w-52 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none border border-transparent focus:border-violet-400">
+                                {divisionOptions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="p-3 sm:p-4">
+                        <div className="hidden sm:grid grid-cols-[56px_minmax(0,1.2fr)_minmax(120px,.8fr)_110px] gap-3 px-3 pb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            <span>Rank</span><span>Pengguna</span><span>Divisi</span><span className="text-right">Aktif</span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            {visibleRows.map((r,index)=>{
+                                const rank = index + 1;
+                                const isMe = r.uid === user?.uid;
+                                return (
+                                    <div key={r.uid} className={`grid grid-cols-[42px_minmax(0,1fr)_auto] sm:grid-cols-[56px_minmax(0,1.2fr)_minmax(120px,.8fr)_110px] gap-3 items-center px-3 py-2.5 rounded-2xl border transition ${isMe?'border-violet-300 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/20':'border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
+                                        <RankBadge rank={rank}/>
+                                        <div className="min-w-0">
+                                            <div className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{r.name || 'User'}{isMe && <span className="ml-2 text-[9px] uppercase tracking-wider text-violet-600 dark:text-violet-300">Kamu</span>}</div>
+                                            <div className="sm:hidden text-[10px] text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
+                                        </div>
+                                        <div className="hidden sm:block min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
+                                        <div className="text-right font-black text-xs sm:text-sm text-slate-800 dark:text-white">{formatUsageMinutes(r.usageMinutes)}</div>
+                                    </div>
+                                );
+                            })}
+
+                            {ranking.length === 0 && (
+                                <div className="py-10 text-center">
+                                    <div className="text-sm font-black text-slate-500 dark:text-slate-300">Belum ada data penggunaan</div>
+                                    <div className="text-[11px] text-slate-400 mt-1">Klasemen mulai terisi setelah pengguna aktif beberapa menit di FOLLUP.</div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="text-[11px] text-slate-500">
+                                {scope === 'global' ? `Global semua divisi • ${periodLabel}` : `${selectedDivisionName} • ${periodLabel}`}
+                                {currentEntry && <span className="ml-2 font-black text-violet-600 dark:text-violet-300">Posisi kamu #{currentEntry.rank} • {formatUsageMinutes(currentEntry.usageMinutes)}</span>}
+                            </div>
+                            {ranking.length > (compact ? 5 : 7) && (
+                                <button onClick={()=>setExpanded(v=>!v)} className="self-start sm:self-auto text-[11px] font-black text-violet-600 dark:text-violet-300 hover:underline">
+                                    {expanded ? 'Tampilkan ringkas' : `Lihat semua ${ranking.length} pengguna`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
         const HomeScreen = ({ onSelectFolder, isDarkMode, setIsDarkMode, user, accountProfile, onLogout }) => {
             // Cache daftar workspace supaya kartu tidak mendadak kosong saat snapshot Firestore
             // sedang membaca cache/offline atau query server belum selesai.
@@ -4199,8 +4501,12 @@
                             </div>
                         </div>
 
+                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 mt-6">
+                            <UsageLeaderboard user={user} accountProfile={accountProfile} />
+                        </div>
+
                         {/* KONTAINER UTAMA: GRID FOLDER (KIRI) & BOARD WEEKEND (KANAN) */}
-                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 pt-10 md:pt-16 pb-24 md:pb-32 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
+                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 pt-8 md:pt-10 pb-24 md:pb-32 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
                             
                             {/* BAGIAN KIRI: GRID FOLDER */}
                             <div className="flex-1 w-full">
@@ -4884,6 +5190,7 @@
             const systemIsSuper = (accountProfile.email || user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL && accountProfile.role === 'super_admin';
             return (
                 <>
+                    <UsageTracker user={user} accountProfile={accountProfile} />
                     <SessionDeviceAgent user={user} accountProfile={accountProfile} />
                     <AnnouncementLayer user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />
                     <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
