@@ -265,8 +265,7 @@ service cloud.firestore {
 
     // Riwayat perubahan room khusus Super Admin.
     match /room_history/{roomId}/versions/{versionId} {
-      allow read, delete: if isSuperAdmin();
-      allow create: if isSuperAdmin() || (isDivisionAdmin() && folderAccessible(roomId));
+      allow read, create, delete: if isSuperAdmin();
       allow update: if false;
     }
 
@@ -308,51 +307,6 @@ service cloud.firestore {
     // =========================================================
     match /custom_icons/{iconId} {
       allow read: if accountActive();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    // =========================================================
-    // V40 AUDIT LOGS - user aktif boleh menulis, hanya Super Admin membaca global.
-    // =========================================================
-    match /audit_logs/{logId} {
-      allow create: if accountActive() && request.resource.data.actorUid == request.auth.uid;
-      allow read, update, delete: if isSuperAdmin();
-    }
-
-    // =========================================================
-    // V40 RESTORE CENTER
-    // Snapshot delete boleh dibuat user aktif. Restore Center hanya Super Admin.
-    // =========================================================
-    match /restore_bin/{restoreId} {
-      allow create: if accountActive() && request.resource.data.deletedBy == request.auth.uid;
-      allow read, update, delete: if isSuperAdmin();
-    }
-
-    // =========================================================
-    // V40 DEVICE SESSIONS
-    // Device menulis/monitor sesi sendiri; Super Admin melihat & revoke semua.
-    // =========================================================
-    match /device_sessions/{sessionId} {
-      allow create: if accountActive() && request.resource.data.uid == request.auth.uid;
-      allow get: if isSuperAdmin() || (accountActive() && resource.data.uid == request.auth.uid);
-      allow list: if isSuperAdmin();
-      allow update: if isSuperAdmin() || (
-        accountActive() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid
-      );
-      allow delete: if isSuperAdmin();
-    }
-
-    // =========================================================
-    // V40 BROADCAST ANNOUNCEMENTS
-    // Pengumuman bersifat internal non-rahasia: akun aktif membaca, Super Admin mengelola.
-    // =========================================================
-    match /announcements/{announcementId} {
-      allow read: if isSuperAdmin() || isLegacyOwner() || (
-        accountActive() && (
-          resource.data.targetType == 'all' ||
-          (('divisionId' in resource.data) && resource.data.divisionId == myDivisionId())
-        )
-      );
       allow create, update, delete: if isSuperAdmin();
     }
 
