@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP</title>
+    <title>WELCOME TO FOLLUP • V40.2</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -73,6 +73,46 @@
 <body>
     <div id="root"></div>
 
+    <script>
+        // V40.2 BOOT GUARD — jangan biarkan error React/Babel tampil sebagai white screen kosong.
+        (() => {
+            let lastBootError = '';
+            const rememberError = (message) => {
+                lastBootError = String(message || 'Unknown runtime error').slice(0, 1200);
+                try { localStorage.setItem('flLastBootErrorV402', lastBootError); } catch {}
+            };
+
+            window.addEventListener('error', (event) => {
+                rememberError(event?.error?.stack || event?.message || 'JavaScript error');
+            });
+
+            window.addEventListener('unhandledrejection', (event) => {
+                rememberError(event?.reason?.stack || event?.reason?.message || event?.reason || 'Unhandled promise rejection');
+            });
+
+            window.setTimeout(() => {
+                const root = document.getElementById('root');
+                if (!root || root.childNodes.length > 0) return;
+
+                let saved = lastBootError;
+                try { saved = saved || localStorage.getItem('flLastBootErrorV402') || ''; } catch {}
+
+                const box = document.createElement('div');
+                box.style.cssText = 'min-height:100vh;background:#0f172a;color:white;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;';
+                box.innerHTML = `
+                    <div style="width:min(620px,100%);background:#111827;border:1px solid #334155;border-radius:24px;padding:28px;box-shadow:0 20px 70px rgba(0,0,0,.35)">
+                        <div style="font-size:14px;font-weight:900;color:#a78bfa;margin-bottom:8px">FOLLOW UP V40.2</div>
+                        <div style="font-size:26px;font-weight:900;margin-bottom:10px">Aplikasi gagal dimuat</div>
+                        <div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:18px">Bukan lagi white screen kosong. Detail error terakhir ditampilkan di bawah agar bug bisa dilacak.</div>
+                        <pre style="white-space:pre-wrap;word-break:break-word;background:#020617;border-radius:14px;padding:14px;color:#fca5a5;font-size:11px;max-height:220px;overflow:auto">${saved || 'Tidak ada detail error. Coba Ctrl+F5 atau cek koneksi CDN.'}</pre>
+                        <button onclick="location.reload()" style="margin-top:16px;border:0;border-radius:12px;padding:12px 16px;background:#7c3aed;color:white;font-weight:800;cursor:pointer">Reload Follow Up</button>
+                    </div>`;
+                document.body.innerHTML = '';
+                document.body.appendChild(box);
+            }, 12000);
+        })();
+    </script>
+
     <script type="text/babel" data-type="module">
         // IMPORT MODULES
         import React, { useState, useEffect, useRef } from "react";
@@ -80,7 +120,7 @@
         import { createPortal } from "react-dom";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, limit, serverTimestamp, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Portal modal ke <body> agar tidak terjebak stacking-context/z-index parent.
         const ModalPortal = ({ children }) => createPortal(children, document.body);
@@ -118,6 +158,51 @@
         const EMPTY_DIVISION_FEATURES = DIVISION_FEATURE_CATALOG.reduce((acc, f) => ({ ...acc, [f.key]: false }), {});
         const ALL_DIVISION_FEATURES = DIVISION_FEATURE_CATALOG.reduce((acc, f) => ({ ...acc, [f.key]: true }), {});
         const normalizeDivisionFeatures = (raw = {}) => DIVISION_FEATURE_CATALOG.reduce((acc, f) => ({ ...acc, [f.key]: raw?.[f.key] === true }), {});
+
+
+        // --- V40 CONTROL LAYER: AUDIT + RESTORE HELPERS ---
+        const sanitizeForFirestore = (value) => {
+            try {
+                return JSON.parse(JSON.stringify(value, (k, v) => v === undefined ? null : v));
+            } catch { return null; }
+        };
+
+        const writeAuditLog = async ({ action, entityType, entityId = '', summary = '', before = null, after = null, meta = {}, actorProfile = null }) => {
+            try {
+                const actor = auth.currentUser;
+                if (!actor) return;
+                await addDoc(collection(db, 'audit_logs'), {
+                    action, entityType, entityId: entityId || '', summary: summary || action,
+                    actorUid: actor.uid,
+                    actorEmail: (actorProfile?.email || actor.email || '').toLowerCase(),
+                    actorName: actorProfile?.name || actor.email || 'User',
+                    actorRole: actorProfile?.role || '',
+                    actorDivisionId: actorProfile?.divisionId || '',
+                    actorDivisionName: actorProfile?.divisionName || '',
+                    before: sanitizeForFirestore(before),
+                    after: sanitizeForFirestore(after),
+                    meta: sanitizeForFirestore(meta || {}),
+                    createdAt: serverTimestamp()
+                });
+            } catch (e) { console.warn('Audit log gagal:', e); }
+        };
+
+        const pushRestoreItem = async ({ type, entityId = '', label = '', payload = null, workspaceId = '', dateKey = '', actorProfile = null, meta = {} }) => {
+            try {
+                const actor = auth.currentUser;
+                if (!actor) return;
+                await addDoc(collection(db, 'restore_bin'), {
+                    type, entityId: entityId || '', label: label || type,
+                    payload: sanitizeForFirestore(payload), workspaceId: workspaceId || '', dateKey: dateKey || '',
+                    meta: sanitizeForFirestore(meta || {}),
+                    deletedBy: actor.uid,
+                    deletedByEmail: (actorProfile?.email || actor.email || '').toLowerCase(),
+                    deletedByName: actorProfile?.name || actor.email || 'User',
+                    deletedAt: serverTimestamp(),
+                    restored: false
+                });
+            } catch (e) { console.warn('Restore snapshot gagal:', e); }
+        };
 
         // --- PENGINGAT ABSEN PULANG / MODE LOKAL ---
         // Tidak memakai Firebase Functions/FCM. Tab Follow Up harus tetap terbuka.
@@ -533,6 +618,14 @@
             const [placedStickers, setPlacedStickers] = useState([]);
             const [customBackground, setCustomBackground] = useState(null); 
             const [columnNames, setColumnNames] = useState({ todo: 'To Do', inProgress: 'In Progress', done: 'Done' });
+
+            const auditBoard = (action, entityType, entityId, summary, before = null, after = null, meta = {}) => writeAuditLog({
+                action, entityType, entityId, summary, before, after,
+                meta: { workspaceId: folderId, workspaceName: folderName, viewDate, ...meta },
+                actorProfile: accountProfile
+            });
+            const stickyAuditTimersRef = useRef({});
+            const stickyAuditBaselineRef = useRef({});
 
 
             // --- SINKRONISASI WORKSPACE V2 (ANTI LIST HILANG / STALE SNAPSHOT) ---
@@ -1001,20 +1094,53 @@
             };
             const handleDragEnd = (e) => { e.target.style.opacity = '1'; setDraggedTaskId(null); };
             const handleDragOver = (e) => e.preventDefault();
-            const handleDrop = (e, status) => { e.preventDefault(); if (draggedTaskId) setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) })); };
+            const handleDrop = (e, status) => {
+                e.preventDefault();
+                if (!draggedTaskId) return;
+                const before = (tasksHistory[viewDate] || []).find(t => t.id === draggedTaskId);
+                setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(task => task.id === draggedTaskId ? { ...task, status } : task) }));
+                if (before && before.status !== status) {
+                    pushRestoreItem({type:'task',entityId:draggedTaskId,label:before.content||'Task',payload:before,workspaceId:folderId,dateKey:viewDate,actorProfile:accountProfile,meta:{workspaceName:folderName,reason:'before_move'}});
+                    auditBoard('task_move','task',draggedTaskId,`Task dipindah ${before.status} → ${status}`,before,{...before,status});
+                }
+            };
             
             const addTask = (e) => { 
                 e.preventDefault(); 
-                if (!newTaskInput.trim()) return; 
-                setTasksHistory(prev => ({ ...prev, [viewDate]: [{ id: Date.now().toString(), content: newTaskInput, status: 'todo', dueDate: '' }, ...(prev[viewDate] || [])] })); 
+                if (!newTaskInput.trim()) return;
+                const task = { id: Date.now().toString(), content: newTaskInput.trim(), status: 'todo', dueDate: '' };
+                setTasksHistory(prev => ({ ...prev, [viewDate]: [task, ...(prev[viewDate] || [])] }));
+                auditBoard('task_create','task',task.id,'Task dibuat',null,task);
                 setNewTaskInput(''); 
             };
-            const deleteTask = (id) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].filter(t => t.id !== id) }));
-            const updateTaskDueDate = (id, newDate) => setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+            const deleteTask = (id) => {
+                const task = (tasksHistory[viewDate] || []).find(t => t.id === id);
+                if (task) {
+                    pushRestoreItem({type:'task',entityId:id,label:task.content||'Task',payload:task,workspaceId:folderId,dateKey:viewDate,actorProfile:accountProfile,meta:{workspaceName:folderName}});
+                    auditBoard('task_delete','task',id,'Task dihapus',task,null);
+                }
+                setTasksHistory(prev => ({ ...prev, [viewDate]: (prev[viewDate] || []).filter(t => t.id !== id) }));
+            };
+            const updateTaskDueDate = (id, newDate) => {
+                const before = (tasksHistory[viewDate] || []).find(t=>t.id===id);
+                setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === id ? { ...t, dueDate: newDate } : t) }));
+                if (before) {
+                    pushRestoreItem({type:'task',entityId:id,label:before.content||'Task',payload:before,workspaceId:folderId,dateKey:viewDate,actorProfile:accountProfile,meta:{workspaceName:folderName,reason:'before_due_update'}});
+                    auditBoard('task_due_update','task',id,'Due date task diubah',before,{...before,dueDate:newDate});
+                }
+            };
             
             const startEditingTask = (task) => { setEditingTaskId(task.id); setEditingTaskContent(task.content); };
             const saveEditingTask = () => {
-                if (editingTaskContent.trim()) { setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content: editingTaskContent.trim() } : t) })); }
+                if (editingTaskContent.trim()) {
+                    const before = (tasksHistory[viewDate] || []).find(t=>t.id===editingTaskId);
+                    const content = editingTaskContent.trim();
+                    setTasksHistory(prev => ({ ...prev, [viewDate]: prev[viewDate].map(t => t.id === editingTaskId ? { ...t, content } : t) }));
+                    if (before && before.content !== content) {
+                        pushRestoreItem({type:'task',entityId:editingTaskId,label:before.content||'Task',payload:before,workspaceId:folderId,dateKey:viewDate,actorProfile:accountProfile,meta:{workspaceName:folderName,reason:'before_edit'}});
+                        auditBoard('task_update','task',editingTaskId,'Isi task diubah',before,{...before,content});
+                    }
+                }
                 setEditingTaskId(null);
             };
 
@@ -1027,12 +1153,37 @@
             const handlePrevDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci > 0) setViewDate(dates[ci - 1]); };
             const handleNextDay = () => { const dates = Object.keys(tasksHistory).sort(); const ci = dates.indexOf(viewDate); if (ci < dates.length - 1) setViewDate(dates[ci + 1]); };
 
-            const updateSticky = (id, title, content) => setStickies(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
-            const archiveSticky = (stickyData) => setArchivedStickies(prev => [stickyData, ...(prev || [])]);
-            const deleteSticky = (id) => setStickies(prev => prev.filter(s => s.id !== id));
+            const updateSticky = (id, title, content) => {
+                const before=(stickies||[]).find(s=>s.id===id);
+                if(before && !stickyAuditBaselineRef.current[id]) stickyAuditBaselineRef.current[id]=sanitizeForFirestore(before);
+                setStickies(prev => prev.map(s => s.id === id ? { ...s, title, content } : s));
+                if(stickyAuditTimersRef.current[id]) clearTimeout(stickyAuditTimersRef.current[id]);
+                stickyAuditTimersRef.current[id]=setTimeout(()=>{
+                    const baseline=stickyAuditBaselineRef.current[id];
+                    if(baseline && (baseline.title!==title || baseline.content!==content)){
+                        pushRestoreItem({type:'sticky',entityId:id,label:baseline.title||'Sticky',payload:baseline,workspaceId:folderId,actorProfile:accountProfile,meta:{workspaceName:folderName,reason:'before_edit'}});
+                        auditBoard('sticky_update','sticky',id,'Sticky diedit',baseline,{...baseline,title,content});
+                    }
+                    delete stickyAuditBaselineRef.current[id]; delete stickyAuditTimersRef.current[id];
+                },1200);
+            };
+            const archiveSticky = (stickyData) => {
+                setArchivedStickies(prev => [stickyData, ...(prev || [])]);
+                auditBoard('sticky_archive','sticky',stickyData?.id || stickyData?.archiveId || '', 'Sticky masuk arsip', stickyData, stickyData);
+            };
+            const deleteSticky = (id) => {
+                const sticky = (stickies || []).find(s=>s.id===id);
+                if (sticky) {
+                    pushRestoreItem({type:'sticky',entityId:id,label:sticky.title||'Sticky',payload:sticky,workspaceId:folderId,actorProfile:accountProfile,meta:{workspaceName:folderName}});
+                    auditBoard('sticky_delete','sticky',id,'Sticky dihapus',sticky,null);
+                }
+                setStickies(prev => prev.filter(s => s.id !== id));
+            };
             const addSticky = () => {
                 const colors = ['bg-yellow-200', 'bg-teal-200', 'bg-rose-200', 'bg-purple-200', 'bg-blue-200', 'bg-orange-200'];
-                setStickies(prev => [...(prev || []), { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' }]);
+                const sticky = { id: Date.now().toString(), color: colors[Math.floor(Math.random() * colors.length)], title: '', content: '' };
+                setStickies(prev => [...(prev || []), sticky]);
+                auditBoard('sticky_create','sticky',sticky.id,'Sticky dibuat',null,sticky);
             };
             const updateArchivedSticky = (archiveId, title, content) => { setArchivedStickies(prev => prev.map(a => (a.archiveId || a.tornAt) === archiveId ? { ...a, title, content } : a)); };
             const deleteArchivedSticky = (archiveId) => { if(window.confirm("Hapus kertas dari arsip selamanya?")) { setArchivedStickies(prev => prev.filter(a => (a.archiveId || a.tornAt) !== archiveId)); } };
@@ -2255,6 +2406,7 @@
                     });
                     setNewDivisionName('');
                     setInfo(`Divisi ${name} dibuat. Sekarang assign workspace dan admin divisinya.`);
+                    writeAuditLog({action:'division_create',entityType:'division',entityId:ref.id,summary:`Divisi ${name} dibuat`,after:{name,active:true},actorProfile:accountProfile});
                     setForm(prev => ({ ...prev, divisionId: ref.id }));
                 } catch (err) { setError(err?.message || 'Gagal membuat divisi.'); }
                 finally { setBusy(false); }
@@ -2309,6 +2461,7 @@
                             ));
                         }
 
+                        writeAuditLog({action:'user_update',entityType:'user',entityId:editingUid,summary:`Akun ${normalizedEmail} diperbarui`,before:target,after:{name:form.name.trim(),email:normalizedEmail,role:roleToSave,divisionId,divisionName:roleToSave==='super_admin'?'Management':(roleToSave==='legacy_owner'?'Data Lama Cipta Digital':(division?.name||'')),active:isSystemSuper?true:!!form.active},actorProfile:accountProfile});
                         setInfo(isSystemLegacy ? 'Cipta Digital berhasil diperbarui.' : 'Pengguna berhasil diperbarui.');
                         resetForm();
                     } else {
@@ -2330,6 +2483,7 @@
                                 createdAt: serverTimestamp(),
                                 createdBy: auth.currentUser?.uid || null
                             });
+                            writeAuditLog({action:'user_create',entityType:'user',entityId:uid,summary:`Akun ${normalizedEmail} dibuat`,after:{name:form.name.trim(),email:normalizedEmail,role:roleToSave,divisionId,divisionName:division?.name||''},actorProfile:accountProfile});
                             setInfo(`Akun ${normalizedEmail} berhasil dibuat di ${division?.name || 'divisi'}.`);
                             resetForm();
                         } finally {
@@ -2358,12 +2512,14 @@
                 }
                 if (!window.confirm(`Hapus akses ${u.name || u.email}?\n\nAkun akan langsung tidak bisa membuka data grup. Histori tetap disimpan.`)) return;
                 try {
+                    await pushRestoreItem({type:'user',entityId:u.uid,label:u.name||u.email,payload:u,actorProfile:accountProfile});
                     await updateDoc(doc(db, 'users', u.uid), {
                         active: false,
                         deleted: true,
                         deletedAt: serverTimestamp(),
                         deletedBy: auth.currentUser?.uid || null
                     });
+                    writeAuditLog({action:'user_disable',entityType:'user',entityId:u.uid,summary:`Akun ${u.email} dinonaktifkan`,before:u,after:{...u,active:false,deleted:true},actorProfile:accountProfile});
                     setInfo(`${u.name || u.email} dihapus dari sistem Follow Up.`);
                     if (editingUid === u.uid) resetForm();
                 } catch (err) { setError(err?.message || 'Gagal menghapus pengguna.'); }
@@ -2381,6 +2537,7 @@
                         restoredAt: serverTimestamp(),
                         restoredBy: auth.currentUser?.uid || null
                     });
+                    writeAuditLog({action:'user_restore',entityType:'user',entityId:u.uid,summary:`Akun ${u.email} dipulihkan`,before:u,after:{...u,active:true,deleted:false},actorProfile:accountProfile});
                     setInfo(`${u.name || u.email} dipulihkan.`);
                 } catch (err) { setError(err?.message || 'Gagal memulihkan pengguna.'); }
             };
@@ -2595,6 +2752,27 @@
             const [roomBackupIndex, setRoomBackupIndex] = useState('');
             const legacyCleanupDoneRef = useRef(false);
 
+            // V40 Super Admin Ultra states
+            const [auditLogs, setAuditLogs] = useState([]);
+            const [restoreItems, setRestoreItems] = useState([]);
+            const [deviceSessions, setDeviceSessions] = useState([]);
+            const [announcements, setAnnouncements] = useState([]);
+            const [workspaceDocs, setWorkspaceDocs] = useState([]);
+            const [historyRoomId, setHistoryRoomId] = useState('');
+            const [roomVersions, setRoomVersions] = useState([]);
+            const [viewAsFullscreen, setViewAsFullscreen] = useState(false);
+            const [bulkSelected, setBulkSelected] = useState([]);
+            const [bulkDivisionId, setBulkDivisionId] = useState('');
+            const [bulkColor, setBulkColor] = useState('#7C3AED');
+            const [bulkUseColor, setBulkUseColor] = useState(false);
+            const [auditFilter, setAuditFilter] = useState('all');
+            const [restoreFilter, setRestoreFilter] = useState('all');
+            const [announcementForm, setAnnouncementForm] = useState({title:'',message:'',targetType:'all',divisionId:'',priority:'normal',startAt:'',endAt:''});
+            const [health, setHealth] = useState({online:navigator.onLine,auth:true,firestore:'checking',latency:null,serviceWorker:'checking',notification:('Notification' in window?Notification.permission:'unsupported'),audio:!!(window.AudioContext||window.webkitAudioContext),storage:true,lastChecked:null});
+            const [aiSummary, setAiSummary] = useState('');
+            const [notificationReadAt, setNotificationReadAt] = useState(()=>Number(localStorage.getItem('flSuperNotificationReadAt')||0));
+
+
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
                 const rows=[]; snap.forEach(d=>rows.push({uid:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||a.email||'').localeCompare(b.name||b.email||'')); setUsers(rows);
@@ -2642,6 +2820,31 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setCustomIcons(rows);
             },()=>setCustomIcons([])),[]);
+            useEffect(()=>onSnapshot(query(collection(db,'audit_logs'),orderBy('createdAt','desc'),limit(300)), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); setAuditLogs(rows);
+            },()=>setAuditLogs([])),[]);
+            useEffect(()=>onSnapshot(query(collection(db,'restore_bin'),orderBy('deletedAt','desc'),limit(300)), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); setRestoreItems(rows);
+            },()=>setRestoreItems([])),[]);
+            useEffect(()=>onSnapshot(collection(db,'device_sessions'), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                rows.sort((a,b)=>(b.lastSeen?.seconds||0)-(a.lastSeen?.seconds||0)); setDeviceSessions(rows);
+            },()=>setDeviceSessions([])),[]);
+            useEffect(()=>onSnapshot(collection(db,'announcements'), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setAnnouncements(rows);
+            },()=>setAnnouncements([])),[]);
+            useEffect(()=>onSnapshot(collection(db,'workspace_data'), snap=>{
+                const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()})); setWorkspaceDocs(rows);
+            },()=>setWorkspaceDocs([])),[]);
+            useEffect(()=>{
+                if(!historyRoomId){setRoomVersions([]);return;}
+                return onSnapshot(collection(db,'room_history',historyRoomId,'versions'), snap=>{
+                    const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
+                    rows.sort((a,b)=>(b.savedAt?.seconds||0)-(a.savedAt?.seconds||0)); setRoomVersions(rows);
+                },()=>setRoomVersions([]));
+            },[historyRoomId]);
+
 
 
             // TRUE LIVE VIEW: baca background akun yang sedang dipantau.
@@ -2747,6 +2950,33 @@
             const selectedFeatures = selectedUserIsLegacy ? ALL_DIVISION_FEATURES : normalizeDivisionFeatures(selectedUserDivision?.features || {});
             const selectedCanSeeWeekend = !!selectedUser && (selectedUserIsLegacy || selectedFeatures.titipanWeekend === true);
 
+            const folderMap = new Map(folders.map(f=>[f.id,f]));
+            const allTaskRows = [];
+            workspaceDocs.forEach(w=>{
+                let history={}; try{history=w.tasksHistory?JSON.parse(w.tasksHistory):{}}catch{history={}}
+                const folder=folderMap.get(w.id)||{id:w.id,name:w.id,divisionId:'',divisionName:'Legacy'};
+                Object.entries(history||{}).forEach(([dateKey,list])=>{
+                    if(!Array.isArray(list))return;
+                    list.forEach(t=>allTaskRows.push({...t,workspaceId:w.id,workspaceName:folder.name||w.id,divisionId:folder.divisionId||'',divisionName:folder.divisionName||'Legacy',dateKey}));
+                });
+            });
+            const analyticsNow=Date.now();
+            const analyticsTotal=allTaskRows.length;
+            const analyticsDone=allTaskRows.filter(t=>t.status==='done').length;
+            const analyticsActive=analyticsTotal-analyticsDone;
+            const analyticsOverdue=allTaskRows.filter(t=>t.status!=='done'&&t.dueDate&&new Date(t.dueDate).getTime()<analyticsNow).length;
+            const analyticsDueSoon=allTaskRows.filter(t=>t.status!=='done'&&t.dueDate&&new Date(t.dueDate).getTime()>=analyticsNow&&new Date(t.dueDate).getTime()-analyticsNow<=2*60*60*1000).length;
+            const analyticsRate=analyticsTotal?Math.round((analyticsDone/analyticsTotal)*100):0;
+            const divisionMetrics=divisions.map(d=>{
+                const rows=allTaskRows.filter(t=>t.divisionId===d.id);
+                const done=rows.filter(t=>t.status==='done').length;
+                const overdue=rows.filter(t=>t.status!=='done'&&t.dueDate&&new Date(t.dueDate).getTime()<analyticsNow).length;
+                return {id:d.id,name:d.name,total:rows.length,done,active:rows.length-done,overdue,rate:rows.length?Math.round(done/rows.length*100):0};
+            }).sort((a,b)=>b.active-a.active);
+            const overdueTasks=allTaskRows.filter(t=>t.status!=='done'&&t.dueDate&&new Date(t.dueDate).getTime()<analyticsNow).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate));
+            const activeAnnouncements=announcements.filter(a=>a.active!==false && (!a.endAt || new Date(a.endAt).getTime()>Date.now()));
+
+
             const filteredUsers = activeUsers.filter(u=>{
                 const matchSearch = !search.trim() || `${u.name||''} ${u.email||''} ${u.divisionName||''} ${u.role||''}`.toLowerCase().includes(search.toLowerCase());
                 const matchFilter = accountFilter==='all' ||
@@ -2774,6 +3004,7 @@
                         ...(role==='division_admin' ? {adminApprovedAt:serverTimestamp(),adminApprovedBy:user.uid} : {})
                     }, {merge:true});
                     await setDoc(doc(db,'access_requests',r.id), {status:'approved', approvedRole:role, divisionId, divisionName:div?.name||'', reviewedAt:serverTimestamp(), reviewedBy:user.uid},{merge:true});
+                    writeAuditLog({action:'access_approve',entityType:'user',entityId:r.uid,summary:`${r.email} di-ACC sebagai ${role}`,after:{role,divisionId,divisionName:div?.name||''},actorProfile:accountProfile});
                     setNotice(`${r.name||r.email} disetujui sebagai ${role==='division_admin'?'Admin Divisi':'Member'} ${div?.name||''}.`);
                 } finally { setBusyAction(''); }
             };
@@ -2785,7 +3016,9 @@
             const deleteAccess = async (u) => {
                 if([SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())) return;
                 if(!confirm(`Hapus akses akun ${u.name||u.email}? Histori tetap dipertahankan.`)) return;
+                await pushRestoreItem({type:'user',entityId:u.uid,label:u.name||u.email,payload:u,actorProfile:accountProfile});
                 await updateDoc(doc(db,'users',u.uid), {active:false,deleted:true,deletedAt:serverTimestamp(),deletedBy:user.uid});
+                writeAuditLog({action:'user_disable',entityType:'user',entityId:u.uid,summary:`Akses ${u.email} dicabut`,before:u,after:{...u,active:false,deleted:true},actorProfile:accountProfile});
             };
             const resolveFeedback = async (f) => updateDoc(doc(db,'feedback',f.id), {status:'resolved',resolvedAt:serverTimestamp(),resolvedBy:user.uid});
             const deleteFeedback = async (f) => { if(confirm('Hapus feedback ini?')) await deleteDoc(doc(db,'feedback',f.id)); };
@@ -2802,6 +3035,7 @@
                         role:'division_admin', divisionId:div.id, divisionName:div.name, active:true, deleted:false,
                         pendingApproval:false, accessDenied:false, adminApprovedAt:serverTimestamp(), adminApprovedBy:user.uid
                     }, {merge:true});
+                    writeAuditLog({action:'admin_grant',entityType:'user',entityId:target.uid,summary:`${target.email} menjadi Admin ${div.name}`,before:target,after:{...target,role:'division_admin',divisionId:div.id,divisionName:div.name},actorProfile:accountProfile});
                     setNotice(`${target.name||target.email} sekarang Admin Divisi ${div.name}.`);
                     setAdminCandidateUid(''); setAdminDivisionId('');
                 } finally { setBusyAction(''); }
@@ -2810,7 +3044,9 @@
             const saveDivisionFeatures = async (division, nextFeatures) => {
                 setBusyAction(`features-${division.id}`);
                 try {
-                    await setDoc(doc(db,'divisions',division.id), {features:normalizeDivisionFeatures(nextFeatures),updatedAt:serverTimestamp(),updatedBy:user.uid},{merge:true});
+                    const before=normalizeDivisionFeatures(division.features||{}); const after=normalizeDivisionFeatures(nextFeatures);
+                    await setDoc(doc(db,'divisions',division.id), {features:after,updatedAt:serverTimestamp(),updatedBy:user.uid},{merge:true});
+                    writeAuditLog({action:'division_features_update',entityType:'division',entityId:division.id,summary:`Feature ${division.name} diperbarui`,before,after,actorProfile:accountProfile});
                 } finally { setBusyAction(''); }
             };
             const toggleDivisionFeature = async (division, key) => {
@@ -2828,6 +3064,7 @@
                         updatedAt: serverTimestamp(),
                         updatedBy: user.uid
                     });
+                    writeAuditLog({action:'cipta_digi_scope',entityType:'division',entityId:division.id,summary:`Scope Cipta Digi ${division.name}: ${next?'ON':'OFF'}`,before:{ciptaDigiAccess:division.ciptaDigiAccess===true},after:{ciptaDigiAccess:next},actorProfile:accountProfile});
                     setNotice(next ? (division.name + ' sekarang masuk akses Cipta Digital.') : (division.name + ' dikeluarkan dari akses Cipta Digital.'));
                 } catch (err) {
                     console.error('Update scope Cipta Digital gagal:', err);
@@ -2869,23 +3106,30 @@
                 const name=newDivisionName.trim(); if(!name)return;
                 setBusyAction('new-division');
                 try {
-                    await addDoc(collection(db,'divisions'), {name,active:true,features:EMPTY_DIVISION_FEATURES,defaultCardColor:'custom:#F59E0B',ciptaDigiAccess:false,createdAt:serverTimestamp(),createdBy:user.uid});
+                    const ref=await addDoc(collection(db,'divisions'), {name,active:true,features:EMPTY_DIVISION_FEATURES,defaultCardColor:'custom:#F59E0B',ciptaDigiAccess:false,createdAt:serverTimestamp(),createdBy:user.uid});
+                    writeAuditLog({action:'division_create',entityType:'division',entityId:ref.id,summary:`Divisi ${name} dibuat`,after:{name,active:true},actorProfile:accountProfile});
                     setNewDivisionName(''); setNotice(`Divisi ${name} dibuat.`);
                 } finally { setBusyAction(''); }
             };
             const toggleDivisionActive = async (division) => {
-                await updateDoc(doc(db,'divisions',division.id), {active:division.active===false,updatedAt:serverTimestamp(),updatedBy:user.uid});
+                const next=division.active===false;
+                await updateDoc(doc(db,'divisions',division.id), {active:next,updatedAt:serverTimestamp(),updatedBy:user.uid});
+                writeAuditLog({action:'division_status',entityType:'division',entityId:division.id,summary:`Divisi ${division.name} ${next?'diaktifkan':'dinonaktifkan'}`,before:{active:division.active!==false},after:{active:next},actorProfile:accountProfile});
             };
             const assignRoomDivision = async (folder, divisionId) => {
                 const div=divisions.find(d=>d.id===divisionId);
+                try{await addDoc(collection(db,'room_history',folder.id,'versions'),{...sanitizeForFirestore(folder),roomId:folder.id,savedAt:serverTimestamp(),savedBy:user.uid,reason:'before_division_move'});}catch{}
+                const after={...folder,divisionId:divisionId||'',divisionName:div?.name||''};
                 await updateDoc(doc(db,'folders',folder.id), {divisionId:divisionId||'',divisionName:div?.name||'',updatedAt:serverTimestamp(),updatedBy:user.uid});
+                writeAuditLog({action:'room_move_division',entityType:'room',entityId:folder.id,summary:`Room ${folder.name} dipindah ke ${div?.name||'tanpa divisi'}`,before:folder,after,actorProfile:accountProfile});
             };
             const createRoomQuick = async () => {
                 const name=newRoomName.trim(); const div=divisions.find(d=>d.id===newRoomDivisionId);
                 if(!name || !div){ alert('Isi nama room dan pilih divisi.'); return; }
                 setBusyAction('new-room');
                 try {
-                    await addDoc(collection(db,'folders'), {name,avatarId:'boy',gradient:(div.defaultCardColor || Gradients[0].classes),pin:'',divisionId:div.id,divisionName:div.name,createdAt:serverTimestamp(),createdBy:user.uid});
+                    const ref=await addDoc(collection(db,'folders'), {name,avatarId:'boy',gradient:(div.defaultCardColor || Gradients[0].classes),pin:'',divisionId:div.id,divisionName:div.name,createdAt:serverTimestamp(),createdBy:user.uid});
+                    writeAuditLog({action:'room_create',entityType:'room',entityId:ref.id,summary:`Room ${name} dibuat untuk ${div.name}`,after:{name,divisionId:div.id,divisionName:div.name},actorProfile:accountProfile});
                     setNewRoomName(''); setNotice(`Room ${name} dibuat untuk ${div.name}.`);
                 } finally { setBusyAction(''); }
             };
@@ -3017,6 +3261,7 @@
                         updatedBy: user.uid,
                         updatedBySuperAdmin: true
                     });
+                    writeAuditLog({action:'room_update',entityType:'room',entityId:roomEditId,summary:`Room ${roomEditName.trim()} diedit Super Admin`,before:currentRoom,after:{name:roomEditName.trim(),avatarId:roomEditAvatar,gradient:gradientValue,pin:roomEditPin||'',divisionId:division.id,divisionName:division.name},actorProfile:accountProfile});
                     setNotice('Room berhasil diperbarui oleh Super Admin.');
                     setRoomEditorOpen(false);
                 } catch (err) {
@@ -3027,12 +3272,151 @@
                 }
             };
 
+
+            const formatMoment = (ts) => {
+                try {
+                    const d=ts?.toDate?ts.toDate():(ts?.seconds?new Date(ts.seconds*1000):new Date(ts));
+                    if(!d||isNaN(d.getTime()))return '-';
+                    return d.toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+                } catch{return '-';}
+            };
+
+            const refreshHealth = async () => {
+                const started=performance.now();
+                let firestore='error', latency=null, sw='unsupported', storage=true;
+                try { await getDoc(doc(db,'users',user.uid)); latency=Math.round(performance.now()-started); firestore='healthy'; } catch { firestore='error'; }
+                try { if('serviceWorker' in navigator){ const reg=await navigator.serviceWorker.getRegistration(); sw=reg?'registered':'not_registered'; } } catch { sw='error'; }
+                try { localStorage.setItem('__flhealth','1');localStorage.removeItem('__flhealth'); } catch { storage=false; }
+                setHealth({online:navigator.onLine,auth:!!auth.currentUser,firestore,latency,serviceWorker:sw,notification:('Notification' in window?Notification.permission:'unsupported'),audio:!!(window.AudioContext||window.webkitAudioContext),storage,lastChecked:Date.now()});
+            };
+            useEffect(()=>{refreshHealth();const t=setInterval(refreshHealth,60000);return()=>clearInterval(t)},[]);
+
+            const restoreDeletedItem = async (item) => {
+                setBusyAction('restore-'+item.id);
+                try {
+                    if(item.type==='room'){
+                        const payload={...(item.payload||{})}; delete payload.id;
+                        await setDoc(doc(db,'folders',item.entityId),{...payload,restoredAt:serverTimestamp(),restoredBy:user.uid},{merge:true});
+                    } else if(item.type==='task'){
+                        const ref=doc(db,'workspace_data',item.workspaceId); const snap=await getDoc(ref); const data=snap.exists()?snap.data():{};
+                        let history={}; try{history=data.tasksHistory?JSON.parse(data.tasksHistory):{}}catch{history={}}
+                        const key=item.dateKey||getTodayKey(); if(!Array.isArray(history[key]))history[key]=[];
+                        const idx=history[key].findIndex(t=>String(t.id)===String(item.entityId));
+                        if(idx>=0) history[key][idx]=item.payload; else history[key].unshift(item.payload);
+                        await setDoc(ref,{tasksHistory:JSON.stringify(history)},{merge:true});
+                    } else if(item.type==='sticky'){
+                        const ref=doc(db,'workspace_data',item.workspaceId); const snap=await getDoc(ref); const data=snap.exists()?snap.data():{};
+                        let sticks=[]; try{sticks=data.stickies?JSON.parse(data.stickies):[]}catch{sticks=[]}
+                        const idx=sticks.findIndex(t=>String(t.id)===String(item.entityId));
+                        if(idx>=0) sticks[idx]=item.payload; else sticks.push(item.payload);
+                        await setDoc(ref,{stickies:JSON.stringify(sticks)},{merge:true});
+                    } else if(item.type==='user'){
+                        await updateDoc(doc(db,'users',item.entityId),{active:true,deleted:false,deletedAt:null,deletedBy:null,restoredAt:serverTimestamp(),restoredBy:user.uid});
+                    }
+                    await updateDoc(doc(db,'restore_bin',item.id),{restored:true,restoredAt:serverTimestamp(),restoredBy:user.uid});
+                    await writeAuditLog({action:'restore',entityType:item.type,entityId:item.entityId,summary:`${item.type} dipulihkan dari Restore Center`,before:null,after:item.payload,actorProfile:accountProfile,meta:{restoreId:item.id}});
+                    setNotice(`${item.label||item.type} berhasil dipulihkan.`);
+                } catch(e){alert(e?.message||'Gagal memulihkan data.')} finally{setBusyAction('')}
+            };
+            const permanentDeleteRestore = async (item) => { if(confirm('Hapus snapshot ini permanen dari Restore Center?')) await deleteDoc(doc(db,'restore_bin',item.id)); };
+
+            const restoreRoomVersion = async (version) => {
+                if(!historyRoomId)return;
+                const current=folders.find(f=>f.id===historyRoomId);
+                if(!current)return;
+                if(!confirm(`Restore ${current.name} ke versi ${formatMoment(version.savedAt)}?`))return;
+                setBusyAction('restore-version');
+                try{
+                    await addDoc(collection(db,'room_history',historyRoomId,'versions'),{...sanitizeForFirestore(current),roomId:historyRoomId,savedAt:serverTimestamp(),savedBy:user.uid,reason:'before_version_restore'});
+                    const payload={name:version.name||current.name,avatarId:version.avatarId||'boy',avatarDataUrl:version.avatarDataUrl||'',gradient:version.gradient||Gradients[0].classes,pin:version.pin||'',divisionId:version.divisionId||'',divisionName:version.divisionName||''};
+                    await updateDoc(doc(db,'folders',historyRoomId),{...payload,updatedAt:serverTimestamp(),updatedBy:user.uid});
+                    await writeAuditLog({action:'room_version_restore',entityType:'room',entityId:historyRoomId,summary:`Room ${current.name} restore versi`,before:current,after:payload,actorProfile:accountProfile});
+                    setNotice('Versi room berhasil dipulihkan.');
+                }catch(e){alert(e?.message||'Gagal restore versi')}finally{setBusyAction('')}
+            };
+
+            const toggleBulkRoom = (id) => setBulkSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+            const applyBulkRooms = async () => {
+                const targets=folders.filter(f=>bulkSelected.includes(f.id)); if(!targets.length){alert('Pilih room terlebih dahulu.');return;}
+                const div=bulkDivisionId?divisions.find(d=>d.id===bulkDivisionId):null;
+                if(!bulkDivisionId && !bulkUseColor){alert('Pilih divisi atau aktifkan perubahan warna.');return;}
+                if(!confirm(`Terapkan perubahan ke ${targets.length} room?`))return;
+                setBusyAction('bulk-rooms');
+                try{
+                    await Promise.all(targets.map(async f=>{
+                        await addDoc(collection(db,'room_history',f.id,'versions'),{...sanitizeForFirestore(f),roomId:f.id,savedAt:serverTimestamp(),savedBy:user.uid,reason:'before_bulk_action'});
+                        const patch={updatedAt:serverTimestamp(),updatedBy:user.uid};
+                        if(div){patch.divisionId=div.id;patch.divisionName=div.name;}
+                        if(bulkUseColor)patch.gradient='custom:'+bulkColor;
+                        await updateDoc(doc(db,'folders',f.id),patch);
+                    }));
+                    await writeAuditLog({action:'bulk_room_update',entityType:'room_bulk',entityId:'multiple',summary:`Bulk update ${targets.length} room`,before:targets,after:{divisionId:div?.id||null,color:bulkUseColor?bulkColor:null},actorProfile:accountProfile,meta:{roomIds:targets.map(x=>x.id)}});
+                    setNotice(`${targets.length} room berhasil diperbarui.`);setBulkSelected([]);
+                }catch(e){alert(e?.message||'Bulk action gagal')}finally{setBusyAction('')}
+            };
+            const bulkDeleteRooms = async () => {
+                const targets=folders.filter(f=>bulkSelected.includes(f.id));if(!targets.length)return;
+                if(!confirm(`Hapus ${targets.length} room? Snapshot akan masuk Restore Center.`))return;
+                setBusyAction('bulk-delete');
+                try{
+                    await Promise.all(targets.map(async f=>{await pushRestoreItem({type:'room',entityId:f.id,label:f.name,payload:f,actorProfile:accountProfile});await deleteDoc(doc(db,'folders',f.id));}));
+                    await writeAuditLog({action:'bulk_room_delete',entityType:'room_bulk',entityId:'multiple',summary:`Bulk delete ${targets.length} room`,before:targets,after:null,actorProfile:accountProfile,meta:{roomIds:targets.map(x=>x.id)}});
+                    setBulkSelected([]);setNotice(`${targets.length} room dipindahkan ke Restore Center.`);
+                }catch(e){alert(e?.message||'Bulk delete gagal')}finally{setBusyAction('')}
+            };
+
+            const revokeSession = async (session) => {
+                if(!confirm(`Logout device ${session.deviceLabel||session.platform||session.id}?`))return;
+                await updateDoc(doc(db,'device_sessions',session.id),{revoked:true,revokedAt:serverTimestamp(),revokedBy:user.uid});
+                await writeAuditLog({action:'session_revoke',entityType:'session',entityId:session.id,summary:`Session ${session.email||session.uid} direvoke`,before:session,after:{...session,revoked:true},actorProfile:accountProfile});
+            };
+
+            const createAnnouncement = async (e) => {
+                e.preventDefault(); if(!announcementForm.title.trim()||!announcementForm.message.trim())return;
+                if(announcementForm.targetType==='division'&&!announcementForm.divisionId){alert('Pilih divisi target.');return;}
+                setBusyAction('announcement');
+                try{
+                    const payload={...announcementForm,title:announcementForm.title.trim(),message:announcementForm.message.trim(),active:true,createdAt:serverTimestamp(),createdBy:user.uid,createdByEmail:user.email||''};
+                    const ref=await addDoc(collection(db,'announcements'),payload);
+                    await writeAuditLog({action:'announcement_create',entityType:'announcement',entityId:ref.id,summary:`Broadcast ${payload.title} dibuat`,after:payload,actorProfile:accountProfile});
+                    setAnnouncementForm({title:'',message:'',targetType:'all',divisionId:'',priority:'normal',startAt:'',endAt:''});setNotice('Broadcast dipublikasikan.');
+                }catch(e){alert(e?.message||'Gagal broadcast')}finally{setBusyAction('')}
+            };
+            const toggleAnnouncement = async a=>updateDoc(doc(db,'announcements',a.id),{active:a.active===false,updatedAt:serverTimestamp(),updatedBy:user.uid});
+            const deleteAnnouncement = async a=>{if(confirm('Hapus broadcast ini?')){await deleteDoc(doc(db,'announcements',a.id));writeAuditLog({action:'announcement_delete',entityType:'announcement',entityId:a.id,summary:`Broadcast ${a.title} dihapus`,before:a,after:null,actorProfile:accountProfile})}};
+
+            const generateDailySummary = () => {
+                const top=divisionMetrics[0];
+                const mostOverdue=[...divisionMetrics].sort((a,b)=>b.overdue-a.overdue)[0];
+                const lines=[`Ringkasan operasional saat ini: ${analyticsTotal} task tercatat, ${analyticsActive} masih aktif, ${analyticsDone} selesai (${analyticsRate}% completion rate).`];
+                if(analyticsOverdue)lines.push(`${analyticsOverdue} task sudah melewati due date dan perlu perhatian.`);else lines.push('Tidak ada task overdue yang terdeteksi.');
+                if(analyticsDueSoon)lines.push(`${analyticsDueSoon} task akan jatuh tempo dalam 2 jam.`);
+                if(top&&top.active)lines.push(`Workload aktif terbesar berada di ${top.name} dengan ${top.active} task aktif.`);
+                if(mostOverdue&&mostOverdue.overdue)lines.push(`${mostOverdue.name} memiliki overdue terbanyak (${mostOverdue.overdue}).`);
+                const recommendations=[];
+                if(analyticsOverdue)recommendations.push('prioritaskan task overdue tertua dan cek PIC-nya');
+                if(analyticsDueSoon)recommendations.push('review task yang due dalam 2 jam');
+                if(top&&top.active>5)recommendations.push(`cek kapasitas ${top.name} karena workload sedang tinggi`);
+                if(!recommendations.length)recommendations.push('operasional terlihat stabil; fokus menjaga completion rate');
+                setAiSummary(lines.join(' ')+'\n\nRecommended actions: '+recommendations.map((x,i)=>`${i+1}. ${x}`).join(' • '));
+            };
+
+            const notificationItems = [
+                ...pending.map(r=>({id:'req-'+r.id,type:'Access',title:`Request akses: ${r.name||r.email}`,time:(r.createdAt?.seconds||0)*1000,severity:'violet'})),
+                ...unresolvedFeedback.map(f=>({id:'fb-'+f.id,type:'Feedback',title:`Feedback: ${f.accountName||f.accountEmail}`,time:(f.createdAt?.seconds||0)*1000,severity:'fuchsia'})),
+                ...overdueTasks.slice(0,25).map(t=>({id:`due-${t.workspaceId}-${t.id}`,type:'Due',title:`Overdue: ${t.content} • ${t.workspaceName}`,time:new Date(t.dueDate).getTime(),severity:'red'})),
+                ...activeAnnouncements.map(a=>({id:'ann-'+a.id,type:'Broadcast',title:a.title,time:(a.createdAt?.seconds||0)*1000,severity:'cyan'})),
+                ...(health.firestore==='error'?[{id:'health-firestore',type:'System',title:'Firestore tidak terhubung',time:Date.now(),severity:'red'}]:[]),
+                ...(health.notification==='denied'?[{id:'health-notif',type:'System',title:'Browser notification diblokir',time:Date.now(),severity:'amber'}]:[])
+            ].sort((a,b)=>b.time-a.time);
+            const unreadNotifications=notificationItems.filter(n=>n.time>notificationReadAt).length;
+            const markNotificationsRead=()=>{const now=Date.now();localStorage.setItem('flSuperNotificationReadAt',String(now));setNotificationReadAt(now)};
             const RoomEditAvatarComp = Avatars[roomEditAvatar] || Avatars.boy;
             const roomEditGradientValue = roomEditGradient.id === 'custom' ? 'custom:' + roomEditCustomColor : (roomEditGradient.classes || Gradients[0].classes);
             const roomEditBg = getFolderBackground(roomEditGradientValue);
 
             const tabItems = [
-                ['overview','Overview','✦'],['monitor','Pantau Akun','👁'],['access','ACC & Admin','✓'],['divisions','Divisi & Fitur','⚙'],['accounts','Semua Akun','👥'],['feedback','Feedback','💬']
+                ['overview','Overview','✦'],['monitor','View As User','👁'],['center','Notification Center','🔔'],['audit','Activity Log','🕵'],['recovery','Restore & Versions','♻'],['power','Bulk & Matrix','⚡'],['analytics','Analytics & AI','📊'],['system','System Health','📡'],['security','Sessions','🔐'],['broadcast','Broadcast','📢'],['access','ACC & Admin','✓'],['divisions','Divisi & Fitur','⚙'],['accounts','Semua Akun','👥'],['feedback','Feedback','💬']
             ];
             const tabButton=(id,label,icon,count)=> <button onClick={()=>setTab(id)} className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl text-sm font-black transition ${tab===id?'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/20':'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><span className="flex items-center gap-3"><span className="text-base">{icon}</span>{label}</span>{count>0&&<span className={`min-w-6 h-6 px-1.5 rounded-full grid place-items-center text-[10px] ${tab===id?'bg-white/20':'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300'}`}>{count}</span>}</button>;
 
@@ -3121,22 +3505,22 @@
                     <div className="relative z-10 max-w-[1600px] mx-auto lg:grid lg:grid-cols-[260px_minmax(0,1fr)] min-h-screen">
                         <aside className="hidden lg:flex sticky top-0 h-screen flex-col p-5 border-r border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl">
                             <div className="flex items-center gap-3 px-2 py-2 mb-6"><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white grid place-items-center font-black shadow-lg shadow-violet-500/20">SA</div><div><div className="font-black text-lg">FOLLUP Admin</div><div className="text-[10px] text-slate-400 truncate max-w-[150px]">{SUPER_ADMIN_EMAIL}</div></div></div>
-                            <nav className="space-y-1.5">{tabItems.map(([id,label,icon])=>tabButton(id,label,icon,id==='access'?pending.length:id==='feedback'?unresolvedFeedback.length:0))}</nav>
+                            <nav className="space-y-1.5 overflow-y-auto hide-scrollbar flex-1 pr-1">{tabItems.map(([id,label,icon])=>tabButton(id,label,icon,id==='access'?pending.length:id==='feedback'?unresolvedFeedback.length:id==='center'?unreadNotifications:0))}</nav>
                             <div className="mt-auto space-y-2"><button onClick={()=>setManagerOpen(true)} className="w-full px-4 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black flex items-center justify-center gap-2"><UsersIcon size={16}/> Buat / Kelola Akun</button><div className="flex gap-2"><button onClick={()=>setIsDarkMode(!isDarkMode)} className="flex-1 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800">{isDarkMode?<Moon size={18}/>:<Sun size={18}/>}</button><button onClick={onLogout} className="flex-1 p-3 rounded-2xl bg-red-50 dark:bg-red-950/30 text-red-600"><LogOutIcon size={18} className="mx-auto"/></button></div></div>
                         </aside>
 
                         <main className="min-w-0 px-4 sm:px-6 lg:px-8 py-5 lg:py-8 pb-28">
-                            <div className="lg:hidden flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-4">{tabItems.map(([id,label,icon])=><button key={id} onClick={()=>setTab(id)} className={`px-3.5 py-2.5 rounded-xl whitespace-nowrap text-xs font-black ${tab===id?'bg-violet-600 text-white':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800'}`}>{icon} {label}{id==='access'&&pending.length?` (${pending.length})`:''}</button>)}</div>
+                            <div className="lg:hidden flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-4">{tabItems.map(([id,label,icon])=><button key={id} onClick={()=>setTab(id)} className={`px-3.5 py-2.5 rounded-xl whitespace-nowrap text-xs font-black ${tab===id?'bg-violet-600 text-white':'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800'}`}>{icon} {label}{id==='access'&&pending.length?` (${pending.length})`:id==='center'&&unreadNotifications?` (${unreadNotifications})`:''}</button>)}</div>
 
                             <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-6">
-                                <div><div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase tracking-[0.18em]">Super Admin Exclusive</div><h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">{tabItems.find(x=>x[0]===tab)?.[1] || 'Control Center'}</h1><p className="text-sm text-slate-500 mt-1 max-w-2xl">Kelola akun, divisi, fitur, approval, room, dan pantauan tanpa berpindah halaman.</p></div>
+                                <div><div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 text-[10px] font-black uppercase tracking-[0.18em]">Super Admin Exclusive</div><h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight">{tabItems.find(x=>x[0]===tab)?.[1] || 'Control Center'}</h1><p className="text-sm text-slate-500 mt-1 max-w-2xl">Command Center penuh: monitoring, audit, recovery, power tools, security, broadcast, analytics, dan kontrol operasional.</p></div>
                                 <div className="flex flex-wrap gap-2"><button onClick={()=>setManagerOpen(true)} className="px-4 py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs font-black shadow-lg shadow-violet-500/20">+ Buat Akun</button><button onClick={()=>setTab('access')} className="px-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-black">ACC Cepat {pending.length>0&&`• ${pending.length}`}</button></div>
                             </div>
 
                             {notice&&<div className="mb-5 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 text-sm font-bold flex justify-between gap-3"><span>{notice}</span><button onClick={()=>setNotice('')}><X size={16}/></button></div>}
 
                             {tab==='overview' && <>
-                                <section className="rounded-[2rem] p-5 sm:p-7 bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-950 text-white shadow-2xl overflow-hidden relative mb-6"><div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-violet-400/20 blur-3xl"></div><div className="relative grid lg:grid-cols-[1.3fr_.7fr] gap-6 items-center"><div><div className="text-xs font-black text-violet-300 uppercase tracking-[0.2em]">Command Center</div><h2 className="mt-2 text-2xl sm:text-3xl font-black">Seluruh FOLLUP dalam satu kontrol.</h2><p className="mt-2 text-sm text-slate-300 max-w-xl">Pantau akun dengan karakter asli room, ACC user, jadikan Admin Divisi, atur fitur per divisi, dan kelola room secara terpusat.</p><div className="flex flex-wrap gap-2 mt-5"><button onClick={()=>setTab('monitor')} className="px-4 py-2.5 rounded-xl bg-white text-slate-950 text-xs font-black">Pantau Akun</button><button onClick={()=>setTab('divisions')} className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-xs font-black">Atur Fitur Divisi</button></div></div><div className="grid grid-cols-2 gap-3">{[[activeUsers.filter(u=>u.active!==false).length,'Akun Aktif'],[folders.length,'Room'],[pending.length,'Menunggu ACC'],[unresolvedFeedback.length,'Feedback Baru']].map(([v,l])=><div key={l} className="rounded-2xl bg-white/10 border border-white/10 p-4"><div className="text-2xl font-black">{v}</div><div className="text-[11px] text-slate-300 mt-1">{l}</div></div>)}</div></div></section>
+                                <section className="rounded-[2rem] p-5 sm:p-7 bg-gradient-to-br from-slate-950 via-violet-950 to-indigo-950 text-white shadow-2xl overflow-hidden relative mb-6"><div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-violet-400/20 blur-3xl"></div><div className="relative grid lg:grid-cols-[1.3fr_.7fr] gap-6 items-center"><div><div className="text-xs font-black text-violet-300 uppercase tracking-[0.2em]">Command Center</div><h2 className="mt-2 text-2xl sm:text-3xl font-black">Seluruh FOLLUP dalam satu kontrol.</h2><p className="mt-2 text-sm text-slate-300 max-w-xl">View As User, audit global, restore, version history, bulk action, session control, broadcast, analytics, dan health monitoring dalam satu panel.</p><div className="flex flex-wrap gap-2 mt-5"><button onClick={()=>setTab('center')} className="px-4 py-2.5 rounded-xl bg-white text-slate-950 text-xs font-black">Notification Center</button><button onClick={()=>setTab('analytics')} className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-xs font-black">Analytics & AI</button><button onClick={()=>setTab('recovery')} className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/15 text-xs font-black">Restore Center</button></div></div><div className="grid grid-cols-2 gap-3">{[[activeUsers.filter(u=>u.active!==false).length,'Akun Aktif'],[folders.length,'Room'],[pending.length,'Menunggu ACC'],[unresolvedFeedback.length,'Feedback Baru']].map(([v,l])=><div key={l} className="rounded-2xl bg-white/10 border border-white/10 p-4"><div className="text-2xl font-black">{v}</div><div className="text-[11px] text-slate-300 mt-1">{l}</div></div>)}</div></div></section>
                                 <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">{[[divisionAdmins.length,'Admin Divisi','🛡️'],[members.length,'Member Aktif','👤'],[divisions.filter(d=>d.active!==false).length,'Divisi Aktif','🏢'],[orphanRooms.length,'Room Belum Grup','⚠️']].map(([v,l,i])=><div key={l} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 shadow-sm"><div className="flex justify-between"><div className="text-2xl font-black">{v}</div><span className="text-xl">{i}</span></div><div className="text-xs text-slate-500 mt-2">{l}</div></div>)}</div>
                                 <div className="grid xl:grid-cols-3 gap-5">
                                     <section className="xl:col-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex items-center justify-between mb-4"><div><h3 className="font-black text-lg">Divisi</h3><p className="text-xs text-slate-500">Ringkasan anggota, admin, room, dan fitur.</p></div><button onClick={()=>setTab('divisions')} className="text-xs font-black text-violet-600">Kelola →</button></div><div className="grid md:grid-cols-2 gap-3">{divisions.map(d=>{const uc=activeUsers.filter(u=>u.divisionId===d.id&&!u.deleted).length;const rc=folders.filter(f=>f.divisionId===d.id).length;const fc=Object.values(normalizeDivisionFeatures(d.features||{})).filter(Boolean).length;return <div key={d.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700"><div className="flex justify-between gap-3"><div><div className="font-black">{d.name}</div><div className="text-[11px] text-slate-500 mt-1">{uc} akun • {rc} room</div></div><span className={`px-2 py-1 h-fit rounded-full text-[10px] font-black ${d.active===false?'bg-red-100 text-red-600':'bg-emerald-100 text-emerald-700'}`}>{d.active===false?'Nonaktif':'Aktif'}</span></div><div className="mt-3 text-[11px] text-violet-600 font-bold">{fc}/{DIVISION_FEATURE_CATALOG.length} fitur aktif</div></div>})}{divisions.length===0&&<div className="text-sm text-slate-400">Belum ada divisi.</div>}</div></section>
@@ -3152,7 +3536,7 @@
                                             <div className="min-w-0"><h2 className="font-black">Pantau sebagai akun</h2><p className="text-[11px] text-slate-500">Live View sekarang meniru beranda akun asli: background, shortcut fitur, karakter room, dan Titipan Weekend.</p></div>
                                             <select value={monitorUid} onChange={e=>setMonitorUid(e.target.value)} className="sm:ml-auto w-full sm:w-[330px] px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 outline-none"><option value="">-- pilih akun --</option>{activeUsers.filter(u=>u.active!==false).map(u=><option key={u.uid} value={u.uid}>{u.name||u.email} • {u.divisionName||u.role}</option>)}</select>
                                         </div>
-                                        {selectedUser&&<div className="flex flex-wrap gap-2 items-center lg:justify-end"><span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">● LIVE VIEW</span><span className="px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{monitoredFolders.length} room</span><span className="px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{selectedUser.divisionName||selectedUser.role}</span></div>}
+                                        {selectedUser&&<div className="flex flex-wrap gap-2 items-center lg:justify-end"><span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">● LIVE VIEW</span><span className="px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{monitoredFolders.length} room</span><span className="px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[10px] font-black">{selectedUser.divisionName||selectedUser.role}</span><button onClick={()=>{setViewAsFullscreen(true);writeAuditLog({action:'view_as_user',entityType:'user',entityId:selectedUser.uid,summary:`View As ${selectedUser.email}`,after:{email:selectedUser.email,division:selectedUser.divisionName},actorProfile:accountProfile})}} className="px-3 py-1.5 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black">FULL VIEW AS</button></div>}
                                     </div>
                                     {selectedUser&&<div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-1.5">{DIVISION_FEATURE_CATALOG.filter(f=>selectedFeatures[f.key]).map(f=><span key={f.key} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">{f.icon} {f.short}</span>)}{!selectedUserIsLegacy&&Object.values(selectedFeatures).every(v=>!v)&&<span className="text-[10px] text-slate-400">Tidak ada fitur tambahan aktif untuk divisi ini.</span>}<span className="ml-auto text-[10px] text-slate-400 font-bold">Isolasi aktif: room divisi lain tidak ditampilkan.</span></div>}
                                 </section>
@@ -3189,9 +3573,42 @@
 
                             {tab==='accounts' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row gap-3 justify-between xl:items-center mb-5"><div><h2 className="font-black text-lg">Semua Akun</h2><p className="text-xs text-slate-500">Cari, filter, edit, reset password, atau cabut akses.</p></div><div className="flex flex-col sm:flex-row gap-2"><select value={accountFilter} onChange={e=>setAccountFilter(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="all">Semua role</option><option value="admins">Admin Divisi</option><option value="members">Member</option><option value="inactive">Nonaktif</option></select><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari akun..." className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none text-sm"/><button onClick={()=>setManagerOpen(true)} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">+ Buat / Edit Akun</button></div></div><div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{filteredUsers.map(u=><div key={u.uid} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{u.name||u.email}</div><div className="text-xs text-slate-500 truncate">{u.email}</div><div className="flex flex-wrap gap-1 mt-2"><span className="px-2 py-1 rounded-full bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[10px] font-black">{u.role}</span>{u.divisionName&&<span className="px-2 py-1 rounded-full bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 text-[10px] font-black">{u.divisionName}</span>}<span className={`px-2 py-1 rounded-full text-[10px] font-black ${u.active===false?'bg-amber-100 text-amber-700':'bg-emerald-100 text-emerald-700'}`}>{u.active===false?'Nonaktif':'Aktif'}</span></div></div>{![SUPER_ADMIN_EMAIL,LEGACY_OWNER_EMAIL].includes((u.email||'').toLowerCase())&&<button onClick={()=>deleteAccess(u)} className="self-center px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button>}</div>)}</div></section>}
 
+
+                            {tab==='center' && <div className="space-y-5">
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h2 className="font-black text-lg">Notification Center</h2><p className="text-xs text-slate-500">Due date, request akses, feedback, broadcast, dan warning sistem dalam satu tempat.</p></div><div className="flex items-center gap-2"><span className="px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-black">{unreadNotifications} unread</span><button onClick={markNotificationsRead} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-black">Mark all read</button></div></div></section>
+                                <div className="grid lg:grid-cols-2 gap-3">{notificationItems.map(n=><div key={n.id} className={`p-4 rounded-2xl border bg-white dark:bg-slate-900 ${n.time>notificationReadAt?'border-violet-300 dark:border-violet-800':'border-slate-200 dark:border-slate-700'}`}><div className="flex justify-between gap-3"><span className="text-[10px] font-black uppercase tracking-wider text-violet-600">{n.type}</span><span className="text-[10px] text-slate-400">{n.time?new Date(n.time).toLocaleString('id-ID'):'-'}</span></div><div className="mt-1 font-black text-sm">{n.title}</div></div>)}{notificationItems.length===0&&<div className="col-span-full py-20 text-center text-slate-400">Tidak ada notifikasi penting.</div>}</div>
+                            </div>}
+
+                            {tab==='audit' && <div className="space-y-5">
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h2 className="font-black text-lg">Activity Log Global</h2><p className="text-xs text-slate-500">Audit siapa melakukan apa, kapan, dan objek yang berubah.</p></div><select value={auditFilter} onChange={e=>setAuditFilter(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm"><option value="all">Semua</option><option value="task">Task</option><option value="sticky">Sticky</option><option value="room">Room</option><option value="user">User</option><option value="division">Divisi</option></select></div></section>
+                                <div className="space-y-2">{auditLogs.filter(a=>auditFilter==='all'||String(a.entityType||'').includes(auditFilter)).slice(0,250).map(a=><article key={a.id} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"><div className="flex flex-col sm:flex-row sm:justify-between gap-2"><div><div className="font-black text-sm">{a.summary||a.action}</div><div className="text-[11px] text-slate-500 mt-1">{a.actorName||a.actorEmail} • {a.actorEmail} • {a.entityType} • {a.entityId||'-'}</div></div><div className="text-[10px] text-slate-400">{formatMoment(a.createdAt)}</div></div>{(a.before||a.after)&&<details className="mt-3"><summary className="cursor-pointer text-[11px] font-black text-violet-600">Lihat perubahan</summary><div className="grid md:grid-cols-2 gap-2 mt-2"><pre className="p-3 rounded-xl bg-red-50 dark:bg-red-950/20 text-[10px] overflow-auto max-h-52">{JSON.stringify(a.before,null,2)}</pre><pre className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 text-[10px] overflow-auto max-h-52">{JSON.stringify(a.after,null,2)}</pre></div></details>}</article>)}{auditLogs.length===0&&<div className="py-20 text-center text-slate-400">Belum ada audit log V40.</div>}</div>
+                            </div>}
+
+                            {tab==='recovery' && <div className="space-y-5">
+                                <section className="grid xl:grid-cols-[1fr_1fr] gap-5"><div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-black text-lg">Restore Center</h2><p className="text-xs text-slate-500">Pulihkan room, task, sticky, atau user yang terhapus.</p></div><select value={restoreFilter} onChange={e=>setRestoreFilter(e.target.value)} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs"><option value="all">Semua</option><option value="room">Room</option><option value="task">Task</option><option value="sticky">Sticky</option><option value="user">User</option></select></div><div className="mt-4 space-y-2 max-h-[620px] overflow-y-auto">{restoreItems.filter(i=>!i.restored&&(restoreFilter==='all'||i.type===restoreFilter)).map(i=><div key={i.id} className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"><div className="flex justify-between gap-3"><div className="min-w-0"><div className="font-black text-sm truncate">{i.label||i.type}</div><div className="text-[10px] text-slate-500">{i.type} • {formatMoment(i.deletedAt)} • {i.deletedByEmail}</div></div><div className="flex gap-1 shrink-0"><button disabled={busyAction==='restore-'+i.id} onClick={()=>restoreDeletedItem(i)} className="px-2.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 text-[10px] font-black">Restore</button><button onClick={()=>permanentDeleteRestore(i)} className="px-2.5 py-2 rounded-xl bg-red-100 text-red-600 text-[10px] font-black">Hapus Snapshot</button></div></div></div>)}{restoreItems.filter(i=>!i.restored).length===0&&<div className="py-12 text-center text-slate-400 text-sm">Restore Bin kosong.</div>}</div></div>
+                                <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><h2 className="font-black text-lg">Room Version History</h2><p className="text-xs text-slate-500 mt-1">Setiap edit penting menyimpan versi sebelumnya.</p><select value={historyRoomId} onChange={e=>setHistoryRoomId(e.target.value)} className="mt-4 w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"><option value="">Pilih room</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name} • {f.divisionName||'Legacy'}</option>)}</select><div className="mt-4 space-y-2 max-h-[560px] overflow-y-auto">{roomVersions.map(v=><div key={v.id} className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"><div className="flex justify-between gap-3"><div><div className="font-black text-sm">{v.name||'Room'}</div><div className="text-[10px] text-slate-500">{formatMoment(v.savedAt)} • {v.reason||'snapshot'} • {v.divisionName||'Legacy'}</div></div><button disabled={busyAction==='restore-version'} onClick={()=>restoreRoomVersion(v)} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/30 text-violet-700 dark:text-violet-300 text-[10px] font-black">Restore</button></div><div className="mt-2 text-[10px] text-slate-500">Avatar: {v.avatarId||'-'} • Warna: {v.gradient||'-'}</div></div>)}{historyRoomId&&roomVersions.length===0&&<div className="py-12 text-center text-slate-400 text-sm">Belum ada version history.</div>}</div></div></section>
+                            </div>}
+
+                            {tab==='power' && <div className="space-y-5">
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4"><div><h2 className="font-black text-lg">Bulk Action Room</h2><p className="text-xs text-slate-500">Pilih banyak room lalu pindah divisi / ubah warna / delete sekaligus. Snapshot dibuat sebelum perubahan.</p></div><div className="flex flex-wrap gap-2"><select value={bulkDivisionId} onChange={e=>setBulkDivisionId(e.target.value)} className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs"><option value="">Divisi tidak diubah</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><label className={`flex items-center gap-2 px-2.5 rounded-xl border ${bulkUseColor?'border-violet-300 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700'}`}><input type="checkbox" checked={bulkUseColor} onChange={e=>setBulkUseColor(e.target.checked)} className="accent-violet-600"/><span className="text-[10px] font-black">Warna</span><input type="color" disabled={!bulkUseColor} value={bulkColor} onChange={e=>setBulkColor(e.target.value)} className="w-8 h-8 rounded-lg disabled:opacity-30"/></label><button disabled={busyAction==='bulk-rooms'} onClick={applyBulkRooms} className="px-4 py-2.5 rounded-xl bg-violet-600 text-white text-xs font-black">Apply ({bulkSelected.length})</button><button disabled={busyAction==='bulk-delete'} onClick={bulkDeleteRooms} className="px-4 py-2.5 rounded-xl bg-red-100 text-red-600 text-xs font-black">Delete</button></div></div><div className="mt-3 flex gap-2"><button onClick={()=>setBulkSelected(folders.map(f=>f.id))} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-[10px] font-black">Pilih Semua</button><button onClick={()=>setBulkSelected([])} className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-[10px] font-black">Kosongkan</button></div><div className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">{folders.map(f=><label key={f.id} className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer ${bulkSelected.includes(f.id)?'border-violet-400 bg-violet-50 dark:bg-violet-950/30':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'}`}><input type="checkbox" checked={bulkSelected.includes(f.id)} onChange={()=>toggleBulkRoom(f.id)} className="accent-violet-600"/><span className="min-w-0"><span className="block font-black text-sm truncate">{f.name}</span><span className="block text-[10px] text-slate-500 truncate">{f.divisionName||'Legacy'}</span></span></label>)}</div></section>
+                                <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 overflow-x-auto"><div className="mb-4"><h2 className="font-black text-lg">Feature Matrix</h2><p className="text-xs text-slate-500">Divisi × fitur. Tinggal ceklis, perubahan langsung berlaku.</p></div><table className="min-w-[760px] w-full text-xs"><thead><tr><th className="text-left p-3 sticky left-0 bg-white dark:bg-slate-900">Feature</th>{divisions.map(d=><th key={d.id} className="p-3 text-center">{d.name}</th>)}</tr></thead><tbody>{DIVISION_FEATURE_CATALOG.map(f=><tr key={f.key} className="border-t border-slate-100 dark:border-slate-800"><td className="p-3 font-black sticky left-0 bg-white dark:bg-slate-900">{f.icon} {f.label}</td>{divisions.map(d=>{const checked=normalizeDivisionFeatures(d.features||{})[f.key];return <td key={d.id} className="p-3 text-center"><input type="checkbox" checked={checked} onChange={()=>toggleDivisionFeature(d,f.key)} className="w-4 h-4 accent-violet-600"/></td>})}</tr>)}</tbody></table></section>
+                            </div>}
+
+                            {tab==='analytics' && <div className="space-y-5">
+                                <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[[analyticsTotal,'Total Task'],[analyticsActive,'Active'],[analyticsDone,'Done'],[analyticsOverdue,'Overdue'],[analyticsRate+'%','Completion']].map(([v,l])=><div key={l} className="p-4 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800"><div className="text-2xl font-black">{v}</div><div className="text-[10px] uppercase tracking-wider text-slate-500 mt-1">{l}</div></div>)}</section>
+                                <section className="grid xl:grid-cols-[1.1fr_.9fr] gap-5"><div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><h2 className="font-black text-lg">Operational Analytics per Divisi</h2><div className="mt-4 space-y-3">{divisionMetrics.map(m=><div key={m.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800"><div className="flex justify-between gap-3"><div className="font-black">{m.name}</div><div className="text-xs font-black text-violet-600">{m.rate}%</div></div><div className="mt-2 grid grid-cols-4 gap-2 text-center text-[10px]"><span>Task<br/><b>{m.total}</b></span><span>Active<br/><b>{m.active}</b></span><span>Done<br/><b>{m.done}</b></span><span className={m.overdue?'text-red-600':''}>Overdue<br/><b>{m.overdue}</b></span></div><div className="mt-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden"><div className="h-full bg-violet-500" style={{width:`${m.rate}%`}}></div></div></div>)}</div></div><div className="rounded-3xl bg-gradient-to-br from-violet-600 to-indigo-700 text-white p-5 shadow-xl"><div className="flex justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.2em] text-violet-200">AI Daily Summary</div><h2 className="text-xl font-black mt-1">Executive Brief</h2></div><button onClick={generateDailySummary} className="h-fit px-3 py-2 rounded-xl bg-white/15 text-xs font-black">Generate</button></div><div className="mt-5 min-h-[220px] whitespace-pre-wrap text-sm leading-relaxed text-violet-50">{aiSummary||'Klik Generate untuk membuat ringkasan otomatis dari kondisi task seluruh divisi.'}</div><div className="mt-4 text-[10px] text-violet-200">Smart local analysis V40 • tidak mengirim data ke layanan AI eksternal.</div></div></section>
+                            </div>}
+
+                            {tab==='system' && <div className="space-y-5"><section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex justify-between gap-3"><div><h2 className="font-black text-lg">System Health</h2><p className="text-xs text-slate-500">Diagnostik koneksi, Firebase, Service Worker, notifikasi, audio, dan storage.</p></div><button onClick={refreshHealth} className="px-3 py-2 rounded-xl bg-violet-100 dark:bg-violet-950/30 text-violet-700 text-xs font-black">Refresh</button></div><div className="mt-5 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{[[health.online?'Healthy':'Offline','Network',health.online],[health.auth?'Authenticated':'No Auth','Firebase Auth',health.auth],[health.firestore==='healthy'?`${health.latency} ms`:'Error','Firestore',health.firestore==='healthy'],[health.serviceWorker,'Service Worker',health.serviceWorker==='registered'],[health.notification,'Notification',health.notification==='granted'],[health.audio?'Ready':'Unsupported','Audio Engine',health.audio],[health.storage?'Ready':'Blocked','Local Storage',health.storage],[users.length,'User Listener',true],[folders.length,'Room Listener',true]].map(([v,l,ok])=><div key={l} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"><div className={`text-[10px] font-black uppercase ${ok?'text-emerald-600':'text-amber-600'}`}>{ok?'● HEALTHY':'● CHECK'}</div><div className="mt-2 font-black">{l}</div><div className="text-xs text-slate-500 mt-1">{String(v)}</div></div>)}</div></section></div>}
+
+                            {tab==='security' && <div className="space-y-5"><section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><h2 className="font-black text-lg">Session & Device Control</h2><p className="text-xs text-slate-500">Lihat device aktif dan revoke sesi. Revoke client berlaku saat device online / reconnect.</p></section><div className="grid lg:grid-cols-2 gap-3">{deviceSessions.map(d=><div key={d.id} className={`p-4 rounded-2xl border ${d.revoked?'border-red-200 bg-red-50/50 dark:bg-red-950/20 dark:border-red-900':'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`}><div className="flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{d.name||d.email||d.uid}</div><div className="text-xs text-slate-500 truncate">{d.email} • {d.deviceLabel||d.platform||'Device'}</div><div className="text-[10px] text-slate-400 mt-1">Last seen: {formatMoment(d.lastSeen)} • {d.userAgent?.slice(0,80)}</div></div>{!d.revoked&&d.uid!==user.uid&&<button onClick={()=>revokeSession(d)} className="h-fit px-3 py-2 rounded-xl bg-red-100 text-red-600 text-xs font-black">Revoke</button>}{d.uid===user.uid&&<span className="h-fit px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black">SUPER ADMIN</span>}</div></div>)}{deviceSessions.length===0&&<div className="col-span-full py-20 text-center text-slate-400">Session akan muncul setelah user login menggunakan V40.</div>}</div></div>}
+
+                            {tab==='broadcast' && <div className="grid xl:grid-cols-[.8fr_1.2fr] gap-5"><form onSubmit={createAnnouncement} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 space-y-3"><h2 className="font-black text-lg">Broadcast Announcement</h2><input value={announcementForm.title} onChange={e=>setAnnouncementForm({...announcementForm,title:e.target.value})} placeholder="Judul pengumuman" className="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"/><textarea value={announcementForm.message} onChange={e=>setAnnouncementForm({...announcementForm,message:e.target.value})} placeholder="Isi pengumuman" className="w-full min-h-32 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 resize-none"/><div className="grid sm:grid-cols-2 gap-2"><select value={announcementForm.targetType} onChange={e=>setAnnouncementForm({...announcementForm,targetType:e.target.value})} className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"><option value="all">Semua akun</option><option value="division">Divisi tertentu</option></select><select disabled={announcementForm.targetType!=='division'} value={announcementForm.divisionId} onChange={e=>setAnnouncementForm({...announcementForm,divisionId:e.target.value})} className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 disabled:opacity-40"><option value="">Pilih divisi</option>{divisions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></div><div className="grid sm:grid-cols-3 gap-2"><select value={announcementForm.priority} onChange={e=>setAnnouncementForm({...announcementForm,priority:e.target.value})} className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"><option value="normal">Normal</option><option value="important">Important</option><option value="critical">Critical</option></select><input type="datetime-local" value={announcementForm.startAt} onChange={e=>setAnnouncementForm({...announcementForm,startAt:e.target.value})} className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"/><input type="datetime-local" value={announcementForm.endAt} onChange={e=>setAnnouncementForm({...announcementForm,endAt:e.target.value})} className="px-3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800"/></div><button disabled={busyAction==='announcement'} className="w-full py-3 rounded-xl bg-violet-600 text-white font-black">Publish Broadcast</button></form><section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><h2 className="font-black text-lg">Pengumuman</h2><div className="mt-4 space-y-2">{announcements.map(a=><div key={a.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"><div className="flex justify-between gap-3"><div><div className="font-black">{a.title}</div><div className="text-[10px] text-slate-500 mt-1">{a.targetType==='division'?(divisions.find(d=>d.id===a.divisionId)?.name||'Divisi'):'Semua'} • {a.priority} • {a.active===false?'Off':'Active'}</div></div><div className="flex gap-1"><button onClick={()=>toggleAnnouncement(a)} className="px-2 py-1.5 rounded-lg bg-cyan-100 text-cyan-700 text-[10px] font-black">{a.active===false?'On':'Off'}</button><button onClick={()=>deleteAnnouncement(a)} className="px-2 py-1.5 rounded-lg bg-red-100 text-red-600 text-[10px] font-black">Hapus</button></div></div><p className="mt-2 text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{a.message}</p></div>)}{announcements.length===0&&<div className="py-16 text-center text-slate-400">Belum ada broadcast.</div>}</div></section></div>}
+
                             {tab==='feedback' && <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5"><div className="flex items-center justify-between mb-5"><div><h2 className="font-black text-lg">Feedback Developer</h2><p className="text-xs text-slate-500">Pesan dari pengguna, termasuk screenshot bila dilampirkan.</p></div><span className="px-3 py-1.5 rounded-full bg-fuchsia-100 text-fuchsia-700 text-xs font-black">{unresolvedFeedback.length} baru</span></div><div className="grid xl:grid-cols-2 gap-4">{feedbacks.map(f=><article key={f.id} className={`p-4 rounded-2xl border ${f.status==='resolved'?'border-emerald-200 dark:border-emerald-900 bg-emerald-50/40 dark:bg-emerald-950/20':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'}`}><div className="flex justify-between gap-3"><div className="min-w-0"><div className="font-black truncate">{f.accountName||f.accountEmail}</div><div className="text-xs text-slate-500 truncate">{f.accountEmail} • {f.divisionName||'-'}</div></div><div className="flex gap-2 shrink-0">{f.status!=='resolved'&&<button onClick={()=>resolveFeedback(f)} className="px-3 py-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 text-xs font-black">Selesai</button>}<button onClick={()=>deleteFeedback(f)} className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-950/30 text-red-600 text-xs font-black">Hapus</button></div></div><p className="mt-3 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">{f.message}</p>{f.imageData&&<a href={f.imageData} target="_blank" rel="noopener noreferrer"><img src={f.imageData} className="mt-3 max-h-64 rounded-2xl object-contain border border-slate-200 dark:border-slate-700"/></a>}</article>)}{feedbacks.length===0&&<div className="col-span-full py-14 text-center text-slate-400">Belum ada feedback.</div>}</div></section>}
                         </main>
                     </div>
+                    {viewAsFullscreen && selectedUser && <ModalPortal><div className="fixed inset-0 z-[115] bg-slate-950 overflow-y-auto"><div className="sticky top-0 z-[120] px-4 py-3 bg-amber-400 text-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xl"><div className="font-black text-sm">👁 VIEW AS {selectedUser.name||selectedUser.email} <span className="font-medium">• simulasi permission, bukan login sebagai user</span></div><button onClick={()=>setViewAsFullscreen(false)} className="px-4 py-2 rounded-xl bg-slate-950 text-white text-xs font-black">EXIT VIEW AS</button></div><div className="p-3 sm:p-5 max-w-[1700px] mx-auto">{renderMonitorLiveView()}</div></div></ModalPortal>}
                     {roomEditorOpen && (
                         <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5">
                             <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={()=>setRoomEditorOpen(false)}></div>
@@ -3587,15 +4004,28 @@
                 const gradientValue = selectedGradient.id === 'custom' ? 'custom:' + customColor : selectedGradient.classes;
                 const payload = { name: newFolderName, avatarId: selectedAvatar, avatarDataUrl: selectedAvatar.startsWith('custom:') ? selectedAvatarData : '', gradient: gradientValue, pin: folderPin, divisionId, divisionName: div?.name || accountProfile?.divisionName || '' };
                 try {
-                    if (editingId) await updateDoc(doc(db, 'folders', editingId), payload);
-                    else await addDoc(collection(db, 'folders'), { ...payload, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || null });
+                    if (editingId) {
+                        const before = folders.find(f=>f.id===editingId) || null;
+                        if (before) {
+                            try { await addDoc(collection(db,'room_history',editingId,'versions'), {...sanitizeForFirestore(before),roomId:editingId,savedAt:serverTimestamp(),savedBy:auth.currentUser?.uid||null,reason:'before_room_edit'}); } catch(e){ console.warn('Room history gagal',e); }
+                        }
+                        await updateDoc(doc(db, 'folders', editingId), payload);
+                        writeAuditLog({action:'room_update',entityType:'room',entityId:editingId,summary:`Room ${payload.name} diperbarui`,before,after:{...(before||{}),...payload},actorProfile:accountProfile});
+                    } else {
+                        const ref = await addDoc(collection(db, 'folders'), { ...payload, createdAt: serverTimestamp(), createdBy: auth.currentUser?.uid || null });
+                        writeAuditLog({action:'room_create',entityType:'room',entityId:ref.id,summary:`Room ${payload.name} dibuat`,after:payload,actorProfile:accountProfile});
+                    }
                     setIsModalOpen(false);
                 } catch (err) { console.error("Gagal simpan folder", err); alert(err?.message || 'Gagal menyimpan workspace.'); }
             };
-            const handleDeleteFolder = async (e, id) => {
+            const handleDeleteFolder = async (e, folder) => {
                 e.stopPropagation();
                 if (window.confirm("Yakin ingin menghapus workspace ini? Data workspace_data lama tidak otomatis dihapus sebagai pengaman.")) {
-                    try { await deleteDoc(doc(db, 'folders', id)); } catch (err) { alert(err?.message || 'Gagal menghapus workspace.'); }
+                    try {
+                        await pushRestoreItem({type:'room',entityId:folder.id,label:folder.name||'Room',payload:folder,actorProfile:accountProfile});
+                        await deleteDoc(doc(db, 'folders', folder.id));
+                        writeAuditLog({action:'room_delete',entityType:'room',entityId:folder.id,summary:`Room ${folder.name||folder.id} dihapus`,before:folder,after:null,actorProfile:accountProfile});
+                    } catch (err) { alert(err?.message || 'Gagal menghapus workspace.'); }
                 }
             };
 
@@ -3778,7 +4208,7 @@
                                                     {canManageWorkspaces && (
                                                         <>
                                                             <button onClick={(e) => openEditModal(e, folder)} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/40 hover:scale-110 z-30" title="Edit Workspace"><EditIcon size={16} /></button>
-                                                            <button onClick={(e) => handleDeleteFolder(e, folder.id)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace"><Trash2 size={16} /></button>
+                                                            <button onClick={(e) => handleDeleteFolder(e, folder)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:scale-110 z-30" title="Hapus Workspace"><Trash2 size={16} /></button>
                                                         </>
                                                     )}
                                                     <h3 className="text-2xl font-black mb-1 truncate drop-shadow-md z-10 relative">{folder.name}</h3>
@@ -3941,6 +4371,94 @@
             );
         };
 
+
+
+        // ==========================================
+        // SESSION / DEVICE AGENT V40
+        // ==========================================
+        const SessionDeviceAgent = ({ user, accountProfile }) => {
+            useEffect(() => {
+                if (!user?.uid || !accountProfile || accountProfile.active === false) return;
+                let disposed = false;
+                let unsub = null;
+                let timer = null;
+                const key = 'flDeviceIdV40';
+                let deviceId = localStorage.getItem(key);
+                if (!deviceId) {
+                    deviceId = (window.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9-]/g,'');
+                    localStorage.setItem(key, deviceId);
+                }
+                const sessionId = `${user.uid}_${deviceId}`;
+                const ref = doc(db,'device_sessions',sessionId);
+                const ua = navigator.userAgent || '';
+                const browser = ua.includes('Edg/') ? 'Edge' : ua.includes('Chrome/') ? 'Chrome' : ua.includes('Firefox/') ? 'Firefox' : ua.includes('Safari/') ? 'Safari' : 'Browser';
+                const platform = navigator.userAgentData?.platform || navigator.platform || 'Unknown OS';
+                const deviceLabel = `${browser} • ${platform}`;
+
+                const boot = async () => {
+                    try {
+                        const existing = await getDoc(ref);
+                        if (existing.exists() && existing.data().revoked === true) {
+                            alert('Sesi device ini telah dicabut oleh Super Admin. Silakan login kembali.');
+                            await signOut(auth); return;
+                        }
+                        await setDoc(ref, {
+                            uid:user.uid, email:(accountProfile.email||user.email||'').toLowerCase(), name:accountProfile.name||user.email||'User',
+                            role:accountProfile.role||'', divisionId:accountProfile.divisionId||'', divisionName:accountProfile.divisionName||'',
+                            deviceId, deviceLabel, platform, browser, userAgent:ua.slice(0,300), active:true, revoked:false,
+                            startedAt: existing.exists() ? (existing.data().startedAt || serverTimestamp()) : serverTimestamp(),
+                            lastSeen:serverTimestamp()
+                        }, {merge:true});
+                        if(disposed)return;
+                        unsub=onSnapshot(ref, async snap=>{
+                            if(snap.exists() && snap.data().revoked===true){
+                                alert('Sesi ini dicabut oleh Super Admin.');
+                                try{await signOut(auth)}catch{}
+                            }
+                        });
+                        timer=setInterval(()=>setDoc(ref,{lastSeen:serverTimestamp(),active:true},{merge:true}).catch(()=>{}),30000);
+                    } catch(e){console.warn('Device session agent gagal',e)}
+                };
+                boot();
+                return()=>{disposed=true;if(unsub)unsub();if(timer)clearInterval(timer)};
+            },[user?.uid,accountProfile?.role,accountProfile?.divisionId,accountProfile?.active]);
+            return null;
+        };
+
+        // ==========================================
+        // BROADCAST ANNOUNCEMENT LAYER V40
+        // ==========================================
+        const AnnouncementLayer = ({ user, accountProfile, isDarkMode }) => {
+            const [items,setItems]=useState([]);
+            const [dismissed,setDismissed]=useState(()=>{try{return JSON.parse(localStorage.getItem(`flAnnouncementDismissed:${user?.uid}`)||'[]')}catch{return[]}});
+            const email=(accountProfile?.email||user?.email||'').toLowerCase();
+            const isSuper=email===SUPER_ADMIN_EMAIL&&accountProfile?.role==='super_admin';
+            const isLegacy=email===LEGACY_OWNER_EMAIL||accountProfile?.role==='legacy_owner';
+            useEffect(()=>{
+                const buckets=new Map(); const unsubs=[];
+                const emit=()=>{const all=[];buckets.forEach(v=>all.push(...v));const uniq=Array.from(new Map(all.map(a=>[a.id,a])).values());uniq.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));setItems(uniq)};
+                const watch=(key,source)=>unsubs.push(onSnapshot(source,snap=>{const rows=[];snap.forEach(d=>rows.push({id:d.id,...d.data()}));buckets.set(key,rows);emit()},()=>{buckets.set(key,[]);emit()}));
+                if(isSuper||isLegacy){watch('all',collection(db,'announcements'));}
+                else{
+                    watch('global',query(collection(db,'announcements'),where('targetType','==','all')));
+                    if(accountProfile?.divisionId)watch('division',query(collection(db,'announcements'),where('divisionId','==',accountProfile.divisionId)));
+                }
+                return()=>unsubs.forEach(u=>{try{u()}catch{}});
+            },[isSuper,isLegacy,accountProfile?.divisionId]);
+            const now=Date.now();
+            const visible=items.filter(a=>{
+                if(a.active===false||dismissed.includes(a.id))return false;
+                if(a.startAt&&new Date(a.startAt).getTime()>now)return false;
+                if(a.endAt&&new Date(a.endAt).getTime()<=now)return false;
+                if(isSuper||isLegacy)return true;
+                return a.targetType!=='division'||a.divisionId===accountProfile?.divisionId;
+            });
+            const current=visible[0];
+            const dismiss=()=>{if(!current)return;const next=[...dismissed,current.id];setDismissed(next);try{localStorage.setItem(`flAnnouncementDismissed:${user?.uid}`,JSON.stringify(next))}catch{}};
+            if(!current)return null;
+            const critical=current.priority==='critical', important=current.priority==='important';
+            return <div className={isDarkMode?'dark':''}><div className={`fixed z-[95] top-3 left-1/2 -translate-x-1/2 w-[calc(100%-1rem)] max-w-3xl rounded-2xl shadow-2xl border backdrop-blur-xl px-4 py-3 ${critical?'bg-red-600/95 border-red-300 text-white':important?'bg-amber-400/95 border-amber-200 text-slate-950':'bg-white/95 dark:bg-slate-900/95 border-violet-200 dark:border-violet-800 text-slate-900 dark:text-white'}`}><div className="flex items-start gap-3"><div className="text-xl">{critical?'🚨':important?'⚠️':'📢'}</div><div className="min-w-0 flex-1"><div className="font-black text-sm">{current.title}</div><div className={`text-xs mt-1 whitespace-pre-wrap ${critical?'text-red-50':important?'text-slate-800':'text-slate-500 dark:text-slate-300'}`}>{current.message}</div></div><button onClick={dismiss} className={`shrink-0 px-3 py-2 rounded-xl text-[10px] font-black ${critical?'bg-white/20':'bg-black/5 dark:bg-white/10'}`}>MENGERTI</button></div></div></div>;
+        };
 
         // ==========================================
         // DUE DATE REMINDER GLOBAL V34
@@ -4275,6 +4793,10 @@
 
             const logout = async () => {
                 setCurrentFolder(null);
+                try {
+                    const deviceId=localStorage.getItem('flDeviceIdV40');
+                    if(user?.uid&&deviceId) await setDoc(doc(db,'device_sessions',`${user.uid}_${deviceId}`),{active:false,lastSeen:serverTimestamp()},{merge:true});
+                } catch {}
                 try { await signOut(auth); } catch (e) { console.error('Logout gagal', e); }
             };
 
@@ -4341,6 +4863,8 @@
             const systemIsSuper = (accountProfile.email || user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL && accountProfile.role === 'super_admin';
             return (
                 <>
+                    <SessionDeviceAgent user={user} accountProfile={accountProfile} />
+                    <AnnouncementLayer user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />
                     <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
                     <DueDateReminder user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />
                     {currentFolder ? (
