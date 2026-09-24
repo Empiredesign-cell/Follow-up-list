@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP • V40.2</title>
+    <title>WELCOME TO FOLLUP • V40.3</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -3415,10 +3415,31 @@
             const roomEditGradientValue = roomEditGradient.id === 'custom' ? 'custom:' + roomEditCustomColor : (roomEditGradient.classes || Gradients[0].classes);
             const roomEditBg = getFolderBackground(roomEditGradientValue);
 
+            const SidebarTabIcon = ({ id, active }) => {
+                const base = active ? 'text-white' : 'text-slate-500 dark:text-slate-400';
+                const iconProps = { size: 16, className: base };
+                const iconMap = {
+                    overview: <HomeIcon {...iconProps} />,
+                    monitor: <UserIcon {...iconProps} />,
+                    center: <BellIcon {...iconProps} />,
+                    audit: <ListIcon {...iconProps} />,
+                    recovery: <RotateCcw {...iconProps} />,
+                    power: <CheckSquare {...iconProps} />,
+                    analytics: <CalculatorIcon {...iconProps} />,
+                    system: <ShieldIcon {...iconProps} />,
+                    security: <LockIcon {...iconProps} />,
+                    broadcast: <SendIcon {...iconProps} />,
+                    access: <CheckCircleIcon {...iconProps} />,
+                    divisions: <PenTool {...iconProps} />,
+                    accounts: <UsersIcon {...iconProps} />,
+                    feedback: <MessageIcon {...iconProps} />
+                };
+                return <span className={`w-8 h-8 rounded-xl grid place-items-center border ${active ? 'border-white/15 bg-white/10' : 'border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60'}`}>{iconMap[id] || <HomeIcon {...iconProps} />}</span>;
+            };
             const tabItems = [
-                ['overview','Overview','✦'],['monitor','View As User','👁'],['center','Notification Center','🔔'],['audit','Activity Log','🕵'],['recovery','Restore & Versions','♻'],['power','Bulk & Matrix','⚡'],['analytics','Analytics & AI','📊'],['system','System Health','📡'],['security','Sessions','🔐'],['broadcast','Broadcast','📢'],['access','ACC & Admin','✓'],['divisions','Divisi & Fitur','⚙'],['accounts','Semua Akun','👥'],['feedback','Feedback','💬']
+                ['overview','Overview'],['monitor','View As User'],['center','Notification Center'],['audit','Activity Log'],['recovery','Restore & Versions'],['power','Bulk & Matrix'],['analytics','Analytics & AI'],['system','System Health'],['security','Sessions'],['broadcast','Broadcast'],['access','ACC & Admin'],['divisions','Divisi & Fitur'],['accounts','Semua Akun'],['feedback','Feedback']
             ];
-            const tabButton=(id,label,icon,count)=> <button onClick={()=>setTab(id)} className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl text-sm font-black transition ${tab===id?'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/20':'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}><span className="flex items-center gap-3"><span className="text-base">{icon}</span>{label}</span>{count>0&&<span className={`min-w-6 h-6 px-1.5 rounded-full grid place-items-center text-[10px] ${tab===id?'bg-white/20':'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300'}`}>{count}</span>}</button>;
+            const tabButton=(id,label,count)=> <button onClick={()=>setTab(id)} className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl text-sm font-black transition-all duration-200 ${tab===id?'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/20':'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'}`}><span className="flex items-center gap-3 min-w-0"><SidebarTabIcon id={id} active={tab===id} /><span className="leading-tight text-left">{label}</span></span>{count>0&&<span className={`min-w-6 h-6 px-1.5 rounded-full grid place-items-center text-[10px] ${tab===id?'bg-white/20 text-white':'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300'}`}>{count}</span>}</button>;
 
             const renderCharacterRoom = (f) => {
                 const AvatarComp=Avatars[f.avatarId||'boy'] || Avatars.boy;
