@@ -322,6 +322,9 @@ service cloud.firestore {
     match /usage_stats/{uid} {
       allow read: if accountActive();
 
+      // Super Admin boleh melakukan one-time historical bootstrap / koreksi metadata klasemen.
+      allow create, update: if isSuperAdmin();
+
       allow create: if accountActive() &&
         request.auth.uid == uid &&
         request.resource.data.uid == uid &&

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP • V41</title>
+    <title>WELCOME TO FOLLUP • V41.1</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -120,7 +120,7 @@
         import { createPortal } from "react-dom";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, limit, serverTimestamp, deleteDoc, getDoc, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection, addDoc, query, where, orderBy, limit, serverTimestamp, deleteDoc, getDoc, getDocs, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Portal modal ke <body> agar tidak terjebak stacking-context/z-index parent.
         const ModalPortal = ({ children }) => createPortal(children, document.body);
@@ -2771,6 +2771,7 @@
             const [health, setHealth] = useState({online:navigator.onLine,auth:true,firestore:'checking',latency:null,serviceWorker:'checking',notification:('Notification' in window?Notification.permission:'unsupported'),audio:!!(window.AudioContext||window.webkitAudioContext),storage:true,lastChecked:null});
             const [aiSummary, setAiSummary] = useState('');
             const [notificationReadAt, setNotificationReadAt] = useState(()=>Number(localStorage.getItem('flSuperNotificationReadAt')||0));
+            const usageHistoricalBootstrapRef = useRef(false);
 
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
@@ -2781,6 +2782,76 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setFolders(rows);
             }),[]);
+
+            // V41.1: bootstrap klasemen dari aktivitas historis yang sudah punya identitas actor.
+            // Satu audit action = satu poin historis. Baseline dibekukan sekali per user.
+            useEffect(() => {
+                if (usageHistoricalBootstrapRef.current || users.length === 0) return;
+                usageHistoricalBootstrapRef.current = true;
+
+                (async () => {
+                    try {
+                        const auditSnap = await getDocs(query(
+                            collection(db,'audit_logs'),
+                            orderBy('createdAt','desc'),
+                            limit(2000)
+                        ));
+                        const logs = [];
+                        auditSnap.forEach(d => logs.push({id:d.id,...d.data()}));
+
+                        const nowKeys = getUsagePeriodKeys();
+                        const eligibleUsers = users.filter(u =>
+                            ['member','division_admin'].includes(u.role) &&
+                            u.active !== false &&
+                            String(u.divisionId || '').trim() !== ''
+                        );
+
+                        let seeded = 0;
+
+                        for (const u of eligibleUsers) {
+                            const statRef = doc(db,'usage_stats',u.uid);
+                            const statSnap = await getDoc(statRef);
+                            const currentStat = statSnap.exists() ? statSnap.data() : {};
+                            if (currentStat.baselineFrozenV411 === true) continue;
+
+                            const userLogs = logs.filter(log => log.actorUid === u.uid);
+                            let weekActions = 0;
+                            let monthActions = 0;
+
+                            userLogs.forEach(log => {
+                                const dt = log.createdAt?.toDate ? log.createdAt.toDate() : null;
+                                if (!dt) return;
+                                const keys = getUsagePeriodKeys(dt);
+                                if (keys.weekKey === nowKeys.weekKey) weekActions += 1;
+                                if (keys.monthKey === nowKeys.monthKey) monthActions += 1;
+                            });
+
+                            await setDoc(statRef, {
+                                uid: u.uid,
+                                name: u.name || u.email || 'User',
+                                divisionId: u.divisionId || '',
+                                divisionName: u.divisionName || '',
+                                role: u.role || 'member',
+                                baselineTotalActions: userLogs.length,
+                                baselineWeeklyActions: weekActions,
+                                baselineMonthlyActions: monthActions,
+                                baselineFrozenV411: true,
+                                baselineCapturedAt: serverTimestamp(),
+                                updatedAt: serverTimestamp()
+                            }, { merge: true });
+
+                            seeded += 1;
+                        }
+
+                        if (seeded > 0) {
+                            setNotice(`Klasemen historis diinisialisasi untuk ${seeded} pengguna dari aktivitas yang sudah tercatat.`);
+                        }
+                    } catch (err) {
+                        console.error('Bootstrap klasemen historis gagal:', err);
+                        usageHistoricalBootstrapRef.current = false;
+                    }
+                })();
+            }, [users]);
 
             // V28 privacy migration: dokumen room lama yang belum punya divisionId dinormalisasi menjadi ''.
             // Ini membuat query legacy owner bisa dibatasi secara aman di Firestore Rules, tanpa membaca room divisi lain.
@@ -3904,17 +3975,37 @@
                 setSelectedDivisionId(fallback);
             }, [scope, rows.length, accountProfile?.divisionId]);
 
-            const metricFor = (r) => {
-                if (period === 'week') return r.weekKey === keys.weekKey ? Number(r.weeklyMinutes || 0) : 0;
-                if (period === 'month') return r.monthKey === keys.monthKey ? Number(r.monthlyMinutes || 0) : 0;
-                return Number(r.totalActiveMinutes || 0);
+            const activityMetricFor = (r) => {
+                let activeMinutes = 0;
+                let historicalActions = 0;
+
+                if (period === 'week') {
+                    activeMinutes = r.weekKey === keys.weekKey ? Number(r.weeklyMinutes || 0) : 0;
+                    historicalActions = Number(r.baselineWeeklyActions || 0);
+                } else if (period === 'month') {
+                    activeMinutes = r.monthKey === keys.monthKey ? Number(r.monthlyMinutes || 0) : 0;
+                    historicalActions = Number(r.baselineMonthlyActions || 0);
+                } else {
+                    activeMinutes = Number(r.totalActiveMinutes || 0);
+                    historicalActions = Number(r.baselineTotalActions || 0);
+                }
+
+                // 1 poin live = setiap 3 menit aktif.
+                // 1 poin historis = 1 aktivitas audit yang sudah tercatat sebelum baseline dibekukan.
+                const livePoints = Math.floor(activeMinutes / 3);
+                return {
+                    activeMinutes,
+                    historicalActions,
+                    livePoints,
+                    activityScore: historicalActions + livePoints
+                };
             };
 
             const scopedRows = eligibleRows.filter(r => scope === 'global' || r.divisionId === selectedDivisionId);
             const ranking = scopedRows
-                .map(r => ({...r, usageMinutes:metricFor(r)}))
-                .filter(r => r.usageMinutes > 0)
-                .sort((a,b) => b.usageMinutes - a.usageMinutes || (a.name||'').localeCompare(b.name||''));
+                .map(r => ({...r, ...activityMetricFor(r)}))
+                .filter(r => r.activityScore > 0)
+                .sort((a,b) => b.activityScore - a.activityScore || b.activeMinutes - a.activeMinutes || (a.name||'').localeCompare(b.name||''));
 
             const currentIndex = ranking.findIndex(r => r.uid === user?.uid);
             const currentEntry = currentIndex >= 0 ? {...ranking[currentIndex], rank:currentIndex+1} : null;
@@ -3941,7 +4032,7 @@
                             </div>
                             <div className="min-w-0">
                                 <h2 className="font-black text-slate-900 dark:text-white">Klasemen FOLLUP</h2>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Berdasarkan waktu aktif nyata, bukan sekadar membuka halaman.</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Memakai aktivitas historis tercatat + waktu aktif nyata mulai sekarang.</p>
                             </div>
                         </div>
 
@@ -3970,7 +4061,7 @@
 
                     <div className="p-3 sm:p-4">
                         <div className="hidden sm:grid grid-cols-[56px_minmax(0,1.2fr)_minmax(120px,.8fr)_110px] gap-3 px-3 pb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                            <span>Rank</span><span>Pengguna</span><span>Divisi</span><span className="text-right">Aktif</span>
+                            <span>Rank</span><span>Pengguna</span><span>Divisi</span><span className="text-right">Skor</span>
                         </div>
 
                         <div className="space-y-1.5">
@@ -3985,7 +4076,10 @@
                                             <div className="sm:hidden text-[10px] text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
                                         </div>
                                         <div className="hidden sm:block min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
-                                        <div className="text-right font-black text-xs sm:text-sm text-slate-800 dark:text-white">{formatUsageMinutes(r.usageMinutes)}</div>
+                                        <div className="text-right">
+                                            <div className="font-black text-xs sm:text-sm text-slate-800 dark:text-white">{r.activityScore} poin</div>
+                                            <div className="text-[9px] text-slate-400">{formatUsageMinutes(r.activeMinutes)} aktif</div>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -3993,7 +4087,7 @@
                             {ranking.length === 0 && (
                                 <div className="py-10 text-center">
                                     <div className="text-sm font-black text-slate-500 dark:text-slate-300">Belum ada data penggunaan</div>
-                                    <div className="text-[11px] text-slate-400 mt-1">Klasemen mulai terisi setelah pengguna aktif beberapa menit di FOLLUP.</div>
+                                    <div className="text-[11px] text-slate-400 mt-1">Belum ada aktivitas historis yang bisa diatribusikan atau aktivitas live.</div>
                                 </div>
                             )}
                         </div>
@@ -4001,13 +4095,16 @@
                         <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                             <div className="text-[11px] text-slate-500">
                                 {scope === 'global' ? `Global semua divisi • ${periodLabel}` : `${selectedDivisionName} • ${periodLabel}`}
-                                {currentEntry && <span className="ml-2 font-black text-violet-600 dark:text-violet-300">Posisi kamu #{currentEntry.rank} • {formatUsageMinutes(currentEntry.usageMinutes)}</span>}
+                                {currentEntry && <span className="ml-2 font-black text-violet-600 dark:text-violet-300">Posisi kamu #{currentEntry.rank} • {currentEntry.activityScore} poin</span>}
                             </div>
-                            {ranking.length > (compact ? 5 : 7) && (
-                                <button onClick={()=>setExpanded(v=>!v)} className="self-start sm:self-auto text-[11px] font-black text-violet-600 dark:text-violet-300 hover:underline">
-                                    {expanded ? 'Tampilkan ringkas' : `Lihat semua ${ranking.length} pengguna`}
-                                </button>
-                            )}
+                            <div className="flex flex-col sm:items-end gap-1">
+                                <span className="text-[9px] text-slate-400">1 poin = 1 aktivitas historis tercatat atau 3 menit aktif.</span>
+                                {ranking.length > (compact ? 5 : 7) && (
+                                    <button onClick={()=>setExpanded(v=>!v)} className="self-start sm:self-auto text-[11px] font-black text-violet-600 dark:text-violet-300 hover:underline">
+                                        {expanded ? 'Tampilkan ringkas' : `Lihat semua ${ranking.length} pengguna`}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -4501,10 +4598,6 @@
                             </div>
                         </div>
 
-                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 mt-6">
-                            <UsageLeaderboard user={user} accountProfile={accountProfile} />
-                        </div>
-
                         {/* KONTAINER UTAMA: GRID FOLDER (KIRI) & BOARD WEEKEND (KANAN) */}
                         <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 pt-8 md:pt-10 pb-24 md:pb-32 flex flex-col xl:flex-row gap-6 md:gap-8 items-start">
                             
@@ -4591,6 +4684,10 @@
                             </div>
                             )}
                             
+                        </div>
+
+                        <div className="relative z-10 w-full max-w-[1500px] mx-auto px-0 sm:px-2 md:px-4 -mt-12 md:-mt-16 mb-24">
+                            <UsageLeaderboard user={user} accountProfile={accountProfile} />
                         </div>
 
                         {isUserManagerOpen && canManageUsers && (
