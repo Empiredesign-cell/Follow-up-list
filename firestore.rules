@@ -312,6 +312,30 @@ service cloud.firestore {
     }
 
 
+
+    // =========================================================
+    // V41.2 REALTIME ROOM LEADERBOARD
+    // =========================================================
+    match /leaderboard_rooms/{roomId} {
+      allow read: if accountActive();
+
+      allow create: if accountActive() &&
+        folderAccessible(roomId) &&
+        request.resource.data.roomId == roomId &&
+        request.resource.data.liveTaskAdds == 1 &&
+        exists(/databases/$(database)/documents/folders/$(roomId)) &&
+        request.resource.data.divisionId == get(/databases/$(database)/documents/folders/$(roomId)).data.divisionId;
+
+      allow update: if accountActive() &&
+        folderAccessible(roomId) &&
+        request.resource.data.roomId == roomId &&
+        request.resource.data.liveTaskAdds == resource.data.liveTaskAdds + 1 &&
+        exists(/databases/$(database)/documents/folders/$(roomId)) &&
+        request.resource.data.divisionId == get(/databases/$(database)/documents/folders/$(roomId)).data.divisionId;
+
+      allow delete: if isSuperAdmin();
+    }
+
     // =========================================================
     // V41 USAGE LEADERBOARD
     // Semua akun aktif dapat membaca klasemen global.

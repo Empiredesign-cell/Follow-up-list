@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP • V41.1</title>
+    <title>WELCOME TO FOLLUP • V41.2</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -602,6 +602,74 @@
         // ==========================================
         // KOMPONEN 1: HALAMAN PAPAN (DALAM FOLDER)
         // ==========================================
+        // =========================================================
+        // V41.2 — MANUAL BASELINE CIPTA DIGI + REALTIME TASK SCORE
+        // =========================================================
+        const CIPTA_DIGI_BASELINE = [
+            { order:1, name:'LYD', tasks:1135, done:400, archived:null, baseScore:1136 },
+            { order:2, name:'Bulaaan ☾', tasks:927, done:143, archived:44, baseScore:971 },
+            { order:3, name:'EL05', tasks:736, done:150, archived:0, baseScore:736 },
+            { order:4, name:'MOE', tasks:567, done:185, archived:33, baseScore:600 },
+            { order:5, name:'Nisa', tasks:144, done:35, archived:0, baseScore:144 },
+            { order:6, name:'imadprakoso', tasks:134, done:3, archived:1, baseScore:135 },
+            { order:7, name:'Daniel', tasks:115, done:54, archived:17, baseScore:132 },
+            { order:8, name:'Annisa', tasks:30, done:4, archived:0, baseScore:30 },
+            { order:9, name:'MightyBigel23', tasks:27, done:3, archived:0, baseScore:27 },
+            { order:10, name:'Pinkan cantik', tasks:26, done:17, archived:0, baseScore:26 },
+            { order:11, name:'Naylongg', tasks:22, done:4, archived:0, baseScore:22 },
+            { order:12, name:'Minions', tasks:17, done:0, archived:0, baseScore:17 },
+            { order:13, name:'Daffalco', tasks:null, done:4, archived:2, baseScore:15 },
+            { order:14, name:'Chika', tasks:0, done:0, archived:1, baseScore:1 },
+            { order:15, name:'alyaaa', tasks:0, done:0, archived:0, baseScore:0 },
+            { order:16, name:'anggayunanda', tasks:0, done:0, archived:0, baseScore:0 },
+            { order:17, name:'OJANturun', tasks:0, done:0, archived:0, baseScore:0 }
+        ];
+
+        const normalizeLeaderboardName = (value = '') => String(value || '')
+            .toLowerCase()
+            .normalize('NFKD')
+            .replace(/[☾★☆]/g,'')
+            .replace(/[^a-z0-9]/g,'');
+
+        const canonicalLeaderboardName = (value = '') => {
+            const key = normalizeLeaderboardName(value);
+            const aliasMap = {
+                bulan:'bulaaan', bulaaan:'bulaaan', bulaaaan:'bulaaan',
+                imadprakoso:'imadprakoso',
+                bigel:'mightybigel23', mightybigel23:'mightybigel23',
+                pinkan:'pinkancantik', pinkancantik:'pinkancantik',
+                nayla:'naylongg', naylongg:'naylongg',
+                daffa:'daffalco', daffalco:'daffalco',
+                alya:'alyaaa', alyaaa:'alyaaa',
+                ojan:'ojanturun', ojanturun:'ojanturun',
+                anggayunanda:'anggayunanda'
+            };
+            return aliasMap[key] || key;
+        };
+
+        const recordLeaderboardTaskCreation = async ({ folderId, folderName, accountProfile }) => {
+            if (!folderId) return;
+            try {
+                const folderSnap = await getDoc(doc(db,'folders',folderId));
+                const folderData = folderSnap.exists() ? folderSnap.data() : {};
+                const divisionId = folderData.divisionId || accountProfile?.divisionId || '';
+                const divisionName = folderData.divisionName || accountProfile?.divisionName || 'Tanpa Divisi';
+                const ref = doc(db,'leaderboard_rooms',folderId);
+                const snap = await getDoc(ref);
+                await setDoc(ref, {
+                    roomId: folderId,
+                    roomName: folderData.name || folderName || 'Workspace',
+                    divisionId,
+                    divisionName,
+                    lastTaskAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                    liveTaskAdds: snap.exists() ? increment(1) : 1
+                }, { merge:true });
+            } catch (err) {
+                console.warn('Leaderboard realtime task gagal:', err);
+            }
+        };
+
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode, accountProfile }) => {
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
@@ -1111,6 +1179,7 @@
                 const task = { id: Date.now().toString(), content: newTaskInput.trim(), status: 'todo', dueDate: '' };
                 setTasksHistory(prev => ({ ...prev, [viewDate]: [task, ...(prev[viewDate] || [])] }));
                 auditBoard('task_create','task',task.id,'Task dibuat',null,task);
+                recordLeaderboardTaskCreation({ folderId, folderName, accountProfile });
                 setNewTaskInput(''); 
             };
             const deleteTask = (id) => {
@@ -2771,7 +2840,6 @@
             const [health, setHealth] = useState({online:navigator.onLine,auth:true,firestore:'checking',latency:null,serviceWorker:'checking',notification:('Notification' in window?Notification.permission:'unsupported'),audio:!!(window.AudioContext||window.webkitAudioContext),storage:true,lastChecked:null});
             const [aiSummary, setAiSummary] = useState('');
             const [notificationReadAt, setNotificationReadAt] = useState(()=>Number(localStorage.getItem('flSuperNotificationReadAt')||0));
-            const usageHistoricalBootstrapRef = useRef(false);
 
 
             useEffect(()=>onSnapshot(collection(db,'users'), snap=>{
@@ -2782,76 +2850,6 @@
                 const rows=[]; snap.forEach(d=>rows.push({id:d.id,...d.data()}));
                 rows.sort((a,b)=>(a.name||'').localeCompare(b.name||'')); setFolders(rows);
             }),[]);
-
-            // V41.1: bootstrap klasemen dari aktivitas historis yang sudah punya identitas actor.
-            // Satu audit action = satu poin historis. Baseline dibekukan sekali per user.
-            useEffect(() => {
-                if (usageHistoricalBootstrapRef.current || users.length === 0) return;
-                usageHistoricalBootstrapRef.current = true;
-
-                (async () => {
-                    try {
-                        const auditSnap = await getDocs(query(
-                            collection(db,'audit_logs'),
-                            orderBy('createdAt','desc'),
-                            limit(2000)
-                        ));
-                        const logs = [];
-                        auditSnap.forEach(d => logs.push({id:d.id,...d.data()}));
-
-                        const nowKeys = getUsagePeriodKeys();
-                        const eligibleUsers = users.filter(u =>
-                            ['member','division_admin'].includes(u.role) &&
-                            u.active !== false &&
-                            String(u.divisionId || '').trim() !== ''
-                        );
-
-                        let seeded = 0;
-
-                        for (const u of eligibleUsers) {
-                            const statRef = doc(db,'usage_stats',u.uid);
-                            const statSnap = await getDoc(statRef);
-                            const currentStat = statSnap.exists() ? statSnap.data() : {};
-                            if (currentStat.baselineFrozenV411 === true) continue;
-
-                            const userLogs = logs.filter(log => log.actorUid === u.uid);
-                            let weekActions = 0;
-                            let monthActions = 0;
-
-                            userLogs.forEach(log => {
-                                const dt = log.createdAt?.toDate ? log.createdAt.toDate() : null;
-                                if (!dt) return;
-                                const keys = getUsagePeriodKeys(dt);
-                                if (keys.weekKey === nowKeys.weekKey) weekActions += 1;
-                                if (keys.monthKey === nowKeys.monthKey) monthActions += 1;
-                            });
-
-                            await setDoc(statRef, {
-                                uid: u.uid,
-                                name: u.name || u.email || 'User',
-                                divisionId: u.divisionId || '',
-                                divisionName: u.divisionName || '',
-                                role: u.role || 'member',
-                                baselineTotalActions: userLogs.length,
-                                baselineWeeklyActions: weekActions,
-                                baselineMonthlyActions: monthActions,
-                                baselineFrozenV411: true,
-                                baselineCapturedAt: serverTimestamp(),
-                                updatedAt: serverTimestamp()
-                            }, { merge: true });
-
-                            seeded += 1;
-                        }
-
-                        if (seeded > 0) {
-                            setNotice(`Klasemen historis diinisialisasi untuk ${seeded} pengguna dari aktivitas yang sudah tercatat.`);
-                        }
-                    } catch (err) {
-                        console.error('Bootstrap klasemen historis gagal:', err);
-                        usageHistoricalBootstrapRef.current = false;
-                    }
-                })();
-            }, [users]);
 
             // V28 privacy migration: dokumen room lama yang belum punya divisionId dinormalisasi menjadi ''.
             // Ini membuat query legacy owner bisa dibatasi secara aman di Firestore Rules, tanpa membaca room divisi lain.
@@ -3786,233 +3784,120 @@
         // ==========================================
 
         // =========================================================
-        // V41 — USAGE LEADERBOARD
-        // Klasemen memakai waktu aktif nyata, bukan sekadar halaman dibuka.
-        // Tab harus visible dan user masih berinteraksi dalam 5 menit terakhir.
+        // V41.2 — KLASemen FOLLUP BERBASIS TASK
         // =========================================================
-        const getUsagePeriodKeys = (date = new Date()) => {
-            const local = new Date(date);
-            const y = local.getFullYear();
-            const m = String(local.getMonth() + 1).padStart(2, '0');
-            const d = String(local.getDate()).padStart(2, '0');
-
-            const monday = new Date(local);
-            monday.setHours(0,0,0,0);
-            const day = monday.getDay();
-            const diff = day === 0 ? -6 : 1 - day;
-            monday.setDate(monday.getDate() + diff);
-            const wy = monday.getFullYear();
-            const wm = String(monday.getMonth() + 1).padStart(2, '0');
-            const wd = String(monday.getDate()).padStart(2, '0');
-
-            return {
-                dateKey: `${y}-${m}-${d}`,
-                weekKey: `${wy}-${wm}-${wd}`,
-                monthKey: `${y}-${m}`
-            };
-        };
-
-        const formatUsageMinutes = (minutes = 0) => {
-            const safe = Math.max(0, Math.floor(Number(minutes) || 0));
-            if (safe < 60) return `${safe} mnt`;
-            const hours = Math.floor(safe / 60);
-            const mins = safe % 60;
-            return mins ? `${hours}j ${mins}m` : `${hours}j`;
-        };
-
-        const UsageTracker = ({ user, accountProfile }) => {
-            const pendingMinutesRef = useRef(0);
-            const lastInteractionRef = useRef(Date.now());
-            const flushBusyRef = useRef(false);
-            const mountedRef = useRef(true);
-
-            const eligible = !!user?.uid &&
-                !!accountProfile?.divisionId &&
-                ['member','division_admin'].includes(accountProfile?.role) &&
-                accountProfile?.active !== false;
-
-            useEffect(() => {
-                mountedRef.current = true;
-                return () => { mountedRef.current = false; };
-            }, []);
-
-            useEffect(() => {
-                if (!eligible) return;
-
-                const statRef = doc(db, 'usage_stats', user.uid);
-                const markActive = () => { lastInteractionRef.current = Date.now(); };
-
-                const activityEvents = ['pointerdown','keydown','touchstart','scroll'];
-                activityEvents.forEach(eventName => {
-                    window.addEventListener(eventName, markActive, { passive: true });
-                });
-
-                const flushUsage = async () => {
-                    if (flushBusyRef.current || pendingMinutesRef.current <= 0) return;
-                    const minutes = Math.min(3, pendingMinutesRef.current);
-                    pendingMinutesRef.current -= minutes;
-                    flushBusyRef.current = true;
-
-                    try {
-                        const snap = await getDoc(statRef);
-                        const previous = snap.exists() ? snap.data() : {};
-                        const keys = getUsagePeriodKeys();
-                        const sameWeek = previous.weekKey === keys.weekKey;
-                        const sameMonth = previous.monthKey === keys.monthKey;
-
-                        const payload = {
-                            uid: user.uid,
-                            name: accountProfile?.name || 'User',
-                            divisionId: accountProfile?.divisionId || '',
-                            divisionName: accountProfile?.divisionName || 'Tanpa Divisi',
-                            role: accountProfile?.role || 'member',
-                            weekKey: keys.weekKey,
-                            monthKey: keys.monthKey,
-                            lastActiveDate: keys.dateKey,
-                            lastSeenAt: serverTimestamp(),
-                            updatedAt: serverTimestamp(),
-                            totalActiveMinutes: snap.exists() ? increment(minutes) : minutes,
-                            weeklyMinutes: snap.exists() && sameWeek ? increment(minutes) : minutes,
-                            monthlyMinutes: snap.exists() && sameMonth ? increment(minutes) : minutes
-                        };
-
-                        await setDoc(statRef, payload, { merge: true });
-                    } catch (err) {
-                        pendingMinutesRef.current += minutes;
-                        console.warn('Usage leaderboard heartbeat gagal:', err);
-                    } finally {
-                        flushBusyRef.current = false;
-                        if (pendingMinutesRef.current >= 3 && mountedRef.current) {
-                            setTimeout(flushUsage, 400);
-                        }
-                    }
-                };
-
-                const tick = setInterval(() => {
-                    const visible = document.visibilityState === 'visible';
-                    const recentlyActive = Date.now() - lastInteractionRef.current <= 5 * 60 * 1000;
-                    if (!visible || !recentlyActive) return;
-
-                    pendingMinutesRef.current += 1;
-                    if (pendingMinutesRef.current >= 3) flushUsage();
-                }, 60 * 1000);
-
-                const handleVisibility = () => {
-                    if (document.visibilityState === 'hidden' && pendingMinutesRef.current > 0) {
-                        flushUsage();
-                    } else if (document.visibilityState === 'visible') {
-                        markActive();
-                    }
-                };
-                document.addEventListener('visibilitychange', handleVisibility);
-
-                return () => {
-                    clearInterval(tick);
-                    document.removeEventListener('visibilitychange', handleVisibility);
-                    activityEvents.forEach(eventName => window.removeEventListener(eventName, markActive));
-                    if (pendingMinutesRef.current > 0) flushUsage();
-                };
-            }, [
-                eligible,
-                user?.uid,
-                accountProfile?.name,
-                accountProfile?.divisionId,
-                accountProfile?.divisionName,
-                accountProfile?.role
-            ]);
-
-            return null;
-        };
-
         const UsageLeaderboard = ({ user, accountProfile, compact = false }) => {
-            const [rows, setRows] = useState([]);
-            const [period, setPeriod] = useState('week');
+            const [liveRows, setLiveRows] = useState([]);
             const [scope, setScope] = useState('global');
-            const [selectedDivisionId, setSelectedDivisionId] = useState(accountProfile?.divisionId || '');
+            const [selectedDivisionKey, setSelectedDivisionKey] = useState('ciptadigi');
             const [expanded, setExpanded] = useState(false);
 
             useEffect(() => {
-                const unsub = onSnapshot(collection(db,'usage_stats'), snap => {
-                    const next = [];
-                    snap.forEach(d => next.push({ id:d.id, ...d.data() }));
-                    setRows(next);
+                const unsub = onSnapshot(collection(db,'leaderboard_rooms'), snap => {
+                    const rows = [];
+                    snap.forEach(d => rows.push({ id:d.id, ...d.data() }));
+                    setLiveRows(rows);
                 }, err => {
-                    console.warn('Leaderboard gagal dimuat:', err);
-                    setRows([]);
+                    console.warn('Leaderboard rooms gagal dimuat:', err);
+                    setLiveRows([]);
                 });
                 return () => unsub();
             }, []);
 
-            const keys = getUsagePeriodKeys();
+            const baselineRows = CIPTA_DIGI_BASELINE.map(seed => ({
+                id:`baseline-${canonicalLeaderboardName(seed.name)}`,
+                canonical:canonicalLeaderboardName(seed.name),
+                name:seed.name,
+                divisionName:'Cipta Digi',
+                divisionKey:'ciptadigi',
+                baseScore:Number(seed.baseScore || 0),
+                baselineTasks:seed.tasks,
+                baselineDone:seed.done,
+                baselineArchived:seed.archived,
+                liveTaskAdds:0,
+                seedOrder:seed.order
+            }));
 
-            const eligibleRows = rows.filter(r =>
-                ['member','division_admin'].includes(r.role) &&
-                String(r.divisionId || '').trim() !== ''
-            );
+            const groupedLive = new Map();
+            liveRows.forEach(row => {
+                const canonical = canonicalLeaderboardName(row.roomName || row.name || '');
+                if (!canonical) return;
+                const current = groupedLive.get(canonical) || {
+                    canonical,
+                    liveTaskAdds:0,
+                    divisionName:row.divisionName || 'Tanpa Divisi',
+                    divisionKey:normalizeLeaderboardName(row.divisionName || 'Tanpa Divisi'),
+                    roomName:row.roomName || row.name || 'Workspace'
+                };
+                current.liveTaskAdds += Number(row.liveTaskAdds || 0);
+                current.divisionName = row.divisionName || current.divisionName;
+                current.divisionKey = normalizeLeaderboardName(current.divisionName || 'Tanpa Divisi');
+                current.roomName = row.roomName || current.roomName;
+                groupedLive.set(canonical,current);
+            });
+
+            const combined = [];
+            const consumed = new Set();
+
+            baselineRows.forEach(base => {
+                const live = groupedLive.get(base.canonical);
+                if (live) consumed.add(base.canonical);
+                combined.push({
+                    ...base,
+                    divisionName: live?.divisionName || base.divisionName,
+                    divisionKey: live?.divisionKey || base.divisionKey,
+                    liveTaskAdds:Number(live?.liveTaskAdds || 0),
+                    score:Number(base.baseScore || 0) + Number(live?.liveTaskAdds || 0)
+                });
+            });
+
+            groupedLive.forEach((live, canonical) => {
+                if (consumed.has(canonical)) return;
+                combined.push({
+                    id:`live-${canonical}`,
+                    canonical,
+                    name:live.roomName || 'Workspace',
+                    divisionName:live.divisionName || 'Tanpa Divisi',
+                    divisionKey:live.divisionKey || normalizeLeaderboardName(live.divisionName || 'Tanpa Divisi'),
+                    baseScore:0,
+                    liveTaskAdds:Number(live.liveTaskAdds || 0),
+                    score:Number(live.liveTaskAdds || 0),
+                    baselineTasks:0,
+                    baselineDone:0,
+                    baselineArchived:0,
+                    seedOrder:9999
+                });
+            });
 
             const divisionMap = new Map();
-            eligibleRows.forEach(r => {
-                if (!r.divisionId) return;
-                if (!divisionMap.has(r.divisionId)) {
-                    divisionMap.set(r.divisionId, {
-                        id:r.divisionId,
-                        name:r.divisionName || 'Divisi'
-                    });
-                }
+            combined.forEach(row => {
+                const key = row.divisionKey || normalizeLeaderboardName(row.divisionName || 'Tanpa Divisi');
+                if (!divisionMap.has(key)) divisionMap.set(key,{ key, name:row.divisionName || 'Tanpa Divisi' });
             });
-            if (accountProfile?.divisionId && !divisionMap.has(accountProfile.divisionId)) {
-                divisionMap.set(accountProfile.divisionId, {
-                    id:accountProfile.divisionId,
-                    name:accountProfile?.divisionName || 'Divisi Saya'
-                });
-            }
-            const divisionOptions = Array.from(divisionMap.values()).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+            const divisionOptions = Array.from(divisionMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
 
             useEffect(() => {
                 if (scope !== 'division') return;
-                if (selectedDivisionId && divisionMap.has(selectedDivisionId)) return;
-                const fallback = accountProfile?.divisionId || divisionOptions[0]?.id || '';
-                setSelectedDivisionId(fallback);
-            }, [scope, rows.length, accountProfile?.divisionId]);
+                if (divisionMap.has(selectedDivisionKey)) return;
+                const ownKey = normalizeLeaderboardName(accountProfile?.divisionName || '');
+                if (divisionMap.has(ownKey)) setSelectedDivisionKey(ownKey);
+                else if (divisionOptions[0]?.key) setSelectedDivisionKey(divisionOptions[0].key);
+            }, [scope, liveRows.length, accountProfile?.divisionName]);
 
-            const activityMetricFor = (r) => {
-                let activeMinutes = 0;
-                let historicalActions = 0;
+            const scoped = combined.filter(row => scope === 'global' || row.divisionKey === selectedDivisionKey);
+            const sorted = scoped.sort((a,b) => b.score - a.score || a.seedOrder - b.seedOrder || a.name.localeCompare(b.name));
 
-                if (period === 'week') {
-                    activeMinutes = r.weekKey === keys.weekKey ? Number(r.weeklyMinutes || 0) : 0;
-                    historicalActions = Number(r.baselineWeeklyActions || 0);
-                } else if (period === 'month') {
-                    activeMinutes = r.monthKey === keys.monthKey ? Number(r.monthlyMinutes || 0) : 0;
-                    historicalActions = Number(r.baselineMonthlyActions || 0);
-                } else {
-                    activeMinutes = Number(r.totalActiveMinutes || 0);
-                    historicalActions = Number(r.baselineTotalActions || 0);
-                }
+            let lastScore = null;
+            let lastRank = 0;
+            const finalRanking = sorted.map((row,index) => {
+                const rank = index === 0 ? 1 : (row.score === lastScore ? lastRank : index + 1);
+                lastScore = row.score;
+                lastRank = rank;
+                return {...row,rank};
+            });
 
-                // 1 poin live = setiap 3 menit aktif.
-                // 1 poin historis = 1 aktivitas audit yang sudah tercatat sebelum baseline dibekukan.
-                const livePoints = Math.floor(activeMinutes / 3);
-                return {
-                    activeMinutes,
-                    historicalActions,
-                    livePoints,
-                    activityScore: historicalActions + livePoints
-                };
-            };
-
-            const scopedRows = eligibleRows.filter(r => scope === 'global' || r.divisionId === selectedDivisionId);
-            const ranking = scopedRows
-                .map(r => ({...r, ...activityMetricFor(r)}))
-                .filter(r => r.activityScore > 0)
-                .sort((a,b) => b.activityScore - a.activityScore || b.activeMinutes - a.activeMinutes || (a.name||'').localeCompare(b.name||''));
-
-            const currentIndex = ranking.findIndex(r => r.uid === user?.uid);
-            const currentEntry = currentIndex >= 0 ? {...ranking[currentIndex], rank:currentIndex+1} : null;
-            const visibleRows = expanded ? ranking : ranking.slice(0, compact ? 5 : 7);
-
-            const periodLabel = period === 'week' ? 'Minggu Ini' : period === 'month' ? 'Bulan Ini' : 'Sepanjang Waktu';
-            const selectedDivisionName = divisionOptions.find(d=>d.id===selectedDivisionId)?.name || 'Pilih Divisi';
+            const visibleRows = expanded ? finalRanking : finalRanking.slice(0, compact ? 5 : 10);
+            const selectedDivisionName = divisionMap.get(selectedDivisionKey)?.name || 'Divisi';
 
             const RankBadge = ({rank}) => (
                 <span className={`w-8 h-8 rounded-xl grid place-items-center text-[11px] font-black border ${
@@ -4025,87 +3910,35 @@
 
             return (
                 <section className="relative z-10 w-full rounded-[1.75rem] border border-slate-200/80 dark:border-slate-700/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl shadow-sm overflow-hidden">
-                    <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                    <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 grid place-items-center shrink-0">
-                                <ListIcon size={18}/>
-                            </div>
+                            <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 grid place-items-center shrink-0"><ListIcon size={18}/></div>
                             <div className="min-w-0">
                                 <h2 className="font-black text-slate-900 dark:text-white">Klasemen FOLLUP</h2>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Memakai aktivitas historis tercatat + waktu aktif nyata mulai sekarang.</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Baseline Cipta Digi + setiap task baru menambah 1 poin secara realtime.</p>
                             </div>
                         </div>
-
-                        <div className="flex flex-wrap gap-2">
-                            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-                                <button onClick={()=>setScope('global')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='global'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Global</button>
-                                <button onClick={()=>setScope('division')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='division'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Per Divisi</button>
-                            </div>
-                            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
-                                {[
-                                    ['week','Minggu'],
-                                    ['month','Bulan'],
-                                    ['all','All Time']
-                                ].map(([id,label])=><button key={id} onClick={()=>setPeriod(id)} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${period===id?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>{label}</button>)}
-                            </div>
+                        <div className="inline-flex self-start lg:self-auto p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                            <button onClick={()=>setScope('global')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='global'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Global</button>
+                            <button onClick={()=>setScope('division')} className={`px-3 py-2 rounded-lg text-[11px] font-black transition ${scope==='division'?'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm':'text-slate-500'}`}>Per Divisi</button>
                         </div>
                     </div>
 
-                    {scope === 'division' && (
-                        <div className="px-4 sm:px-5 pt-3">
-                            <select value={selectedDivisionId} onChange={e=>setSelectedDivisionId(e.target.value)} className="w-full sm:w-auto min-w-52 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none border border-transparent focus:border-violet-400">
-                                {divisionOptions.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                        </div>
-                    )}
+                    {scope === 'division' && <div className="px-4 sm:px-5 pt-3"><select value={selectedDivisionKey} onChange={e=>setSelectedDivisionKey(e.target.value)} className="w-full sm:w-auto min-w-52 px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none">{divisionOptions.map(d=><option key={d.key} value={d.key}>{d.name}</option>)}</select></div>}
 
                     <div className="p-3 sm:p-4">
-                        <div className="hidden sm:grid grid-cols-[56px_minmax(0,1.2fr)_minmax(120px,.8fr)_110px] gap-3 px-3 pb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                            <span>Rank</span><span>Pengguna</span><span>Divisi</span><span className="text-right">Skor</span>
-                        </div>
-
+                        <div className="hidden sm:grid grid-cols-[56px_minmax(0,1.1fr)_minmax(120px,.8fr)_100px_100px] gap-3 px-3 pb-2 text-[10px] font-black uppercase tracking-wider text-slate-400"><span>Rank</span><span>Pengguna</span><span>Divisi</span><span className="text-right">Tambah</span><span className="text-right">Skor</span></div>
                         <div className="space-y-1.5">
-                            {visibleRows.map((r,index)=>{
-                                const rank = index + 1;
-                                const isMe = r.uid === user?.uid;
-                                return (
-                                    <div key={r.uid} className={`grid grid-cols-[42px_minmax(0,1fr)_auto] sm:grid-cols-[56px_minmax(0,1.2fr)_minmax(120px,.8fr)_110px] gap-3 items-center px-3 py-2.5 rounded-2xl border transition ${isMe?'border-violet-300 dark:border-violet-800 bg-violet-50/70 dark:bg-violet-950/20':'border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}>
-                                        <RankBadge rank={rank}/>
-                                        <div className="min-w-0">
-                                            <div className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{r.name || 'User'}{isMe && <span className="ml-2 text-[9px] uppercase tracking-wider text-violet-600 dark:text-violet-300">Kamu</span>}</div>
-                                            <div className="sm:hidden text-[10px] text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
-                                        </div>
-                                        <div className="hidden sm:block min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">{r.divisionName || 'Divisi'}</div>
-                                        <div className="text-right">
-                                            <div className="font-black text-xs sm:text-sm text-slate-800 dark:text-white">{r.activityScore} poin</div>
-                                            <div className="text-[9px] text-slate-400">{formatUsageMinutes(r.activeMinutes)} aktif</div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-
-                            {ranking.length === 0 && (
-                                <div className="py-10 text-center">
-                                    <div className="text-sm font-black text-slate-500 dark:text-slate-300">Belum ada data penggunaan</div>
-                                    <div className="text-[11px] text-slate-400 mt-1">Belum ada aktivitas historis yang bisa diatribusikan atau aktivitas live.</div>
-                                </div>
-                            )}
+                            {visibleRows.map(row => <div key={row.id} className="grid grid-cols-[42px_minmax(0,1fr)_auto] sm:grid-cols-[56px_minmax(0,1.1fr)_minmax(120px,.8fr)_100px_100px] gap-3 items-center px-3 py-2.5 rounded-2xl border border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                                <RankBadge rank={row.rank}/>
+                                <div className="min-w-0"><div className="font-black text-sm text-slate-800 dark:text-slate-100 truncate">{row.name}</div><div className="text-[9px] text-slate-400 sm:hidden truncate">{row.divisionName}</div>{row.baseScore>0&&<div className="text-[9px] text-slate-400 mt-0.5">Baseline {row.baseScore.toLocaleString('id-ID')}</div>}</div>
+                                <div className="hidden sm:block min-w-0 text-xs text-slate-500 dark:text-slate-400 truncate">{row.divisionName}</div>
+                                <div className="hidden sm:block text-right text-xs font-black text-emerald-600 dark:text-emerald-400">+{row.liveTaskAdds}</div>
+                                <div className="text-right"><div className="font-black text-sm text-slate-900 dark:text-white">{row.score.toLocaleString('id-ID')}</div><div className="text-[9px] text-slate-400 sm:hidden">+{row.liveTaskAdds} baru</div></div>
+                            </div>)}
+                            {finalRanking.length===0&&<div className="py-10 text-center"><div className="text-sm font-black text-slate-500 dark:text-slate-300">Belum ada ranking di divisi ini</div><div className="text-[11px] text-slate-400 mt-1">Begitu ada task baru, pengguna/workspace akan otomatis masuk klasemen.</div></div>}
                         </div>
-
-                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <div className="text-[11px] text-slate-500">
-                                {scope === 'global' ? `Global semua divisi • ${periodLabel}` : `${selectedDivisionName} • ${periodLabel}`}
-                                {currentEntry && <span className="ml-2 font-black text-violet-600 dark:text-violet-300">Posisi kamu #{currentEntry.rank} • {currentEntry.activityScore} poin</span>}
-                            </div>
-                            <div className="flex flex-col sm:items-end gap-1">
-                                <span className="text-[9px] text-slate-400">1 poin = 1 aktivitas historis tercatat atau 3 menit aktif.</span>
-                                {ranking.length > (compact ? 5 : 7) && (
-                                    <button onClick={()=>setExpanded(v=>!v)} className="self-start sm:self-auto text-[11px] font-black text-violet-600 dark:text-violet-300 hover:underline">
-                                        {expanded ? 'Tampilkan ringkas' : `Lihat semua ${ranking.length} pengguna`}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"><div className="text-[10px] text-slate-400">{scope==='global'?'Global semua divisi':selectedDivisionName} • Ranking mulai dari baseline sekarang dan terus bertambah dari task baru.</div>{finalRanking.length>(compact?5:10)&&<button onClick={()=>setExpanded(v=>!v)} className="text-[11px] font-black text-violet-600 dark:text-violet-300 hover:underline">{expanded?'Tampilkan ringkas':`Lihat semua ${finalRanking.length}`}</button>}</div>
                     </div>
                 </section>
             );
@@ -5287,7 +5120,6 @@
             const systemIsSuper = (accountProfile.email || user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL && accountProfile.role === 'super_admin';
             return (
                 <>
-                    <UsageTracker user={user} accountProfile={accountProfile} />
                     <SessionDeviceAgent user={user} accountProfile={accountProfile} />
                     <AnnouncementLayer user={user} accountProfile={accountProfile} isDarkMode={isDarkMode} />
                     <AttendanceReminder user={user} isDarkMode={isDarkMode} showLauncher={false} />
