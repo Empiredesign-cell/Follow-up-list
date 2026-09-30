@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#7c3aed">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WELCOME TO FOLLUP • V42</title>
+    <title>WELCOME TO FOLLUP • V42.1</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -670,7 +670,93 @@
             }
         };
 
+
+        // =========================================================
+        // FOLLUP V42.1 ROOM INTELLIGENCE
+        // AI Assistant, Mood Check, Smart Reminder berbasis ROOM.
+        // =========================================================
+
+        const RoomIntelligenceCard = ({ folderId, folderName, accountProfile }) => {
+            const [mood, setMood] = useState(null);
+            const [settings, setSettings] = useState({
+                reminder:true,
+                deadline:true,
+                overdue:true,
+                summary:true
+            });
+
+            const saveMood = async (value) => {
+                setMood(value);
+                try {
+                    await addDoc(collection(db,'room_moods'), {
+                        roomId: folderId,
+                        roomName: folderName || 'Room',
+                        userId: accountProfile?.uid || '',
+                        userName: accountProfile?.name || 'User',
+                        mood:value,
+                        createdAt:serverTimestamp()
+                    });
+                } catch(e) {
+                    console.warn('Mood room gagal disimpan', e);
+                }
+            };
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-5">
+                        <div className="font-black text-slate-900 dark:text-white mb-2">🤖 FOLLUP Assistant</div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Analisa room ini: cek deadline terdekat, task tertunda, dan prioritas pekerjaan.
+                        </p>
+                        <div className="mt-4 text-xs font-bold text-violet-600">
+                            Prioritas akan mengikuti task overdue dan deadline terdekat.
+                        </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-5">
+                        <div className="font-black text-slate-900 dark:text-white mb-3">🌈 Kondisi Room</div>
+                        <div className="flex gap-2 flex-wrap">
+                            {[
+                                ['😀','Lancar'],
+                                ['🙂','Normal'],
+                                ['😴','Lelah'],
+                                ['😵','Overload']
+                            ].map(([icon,label])=>(
+                                <button key={label}
+                                    onClick={()=>saveMood(label)}
+                                    className={`px-3 py-2 rounded-xl text-xs font-black border ${
+                                        mood===label
+                                        ? 'border-violet-400 bg-violet-50 dark:bg-violet-950/30'
+                                        : 'border-slate-200 dark:border-slate-700'
+                                    }`}>
+                                    {icon} {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 p-5">
+                        <div className="font-black text-slate-900 dark:text-white mb-3">🔔 Smart Reminder Room</div>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox"
+                                checked={settings.reminder}
+                                onChange={e=>setSettings({...settings, reminder:e.target.checked})}/>
+                            Reminder aktif
+                        </label>
+                        <label className="flex items-center gap-2 text-sm mt-2">
+                            <input type="checkbox"
+                                checked={settings.overdue}
+                                onChange={e=>setSettings({...settings, overdue:e.target.checked})}/>
+                            Warning overdue
+                        </label>
+                    </div>
+                </div>
+            );
+        };
+
         const BoardScreen = ({ folderId, folderName, onBack, isDarkMode, setIsDarkMode, accountProfile }) => {
+
+            const roomIntelligenceEnabled = true;
             const todayKey = getTodayKey();
             const [isDataReady, setIsDataReady] = useState(false);
             const [currentTime, setCurrentTime] = useState(Date.now());
